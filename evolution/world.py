@@ -1,28 +1,75 @@
 import numpy as np
+from matplotlib import pyplot as plt
 
 from . import algorithms
 from .creature import Creature
 
 
 class World():
-    def __init__(self):
-        self.objects = [Creature() for _ in range(5)]
+    def __init__(self, size):
+        self.objects = [Creature() for _ in range(4)]
+        self.food_grid = np.random.rand((size, size), dtype=np.float32)
 
     def trace_rays(self):
         rays = self.collect_rays()  # [N, R, 3]
-        objects = np.asarray(self.objects) # [N, 4]
-        collisions = np.zeros((rays.shape[0], rays.shape[1], 2), dtype=np.float32)  # [N, R, 2]
-
+        objects = self.collect_object_positions() # [N, 4]
+        collisions = np.zeros((rays.shape[0], rays.shape[1], 1), dtype=np.float32)  # [N, R, 1]
+        print(rays.dtype, rays.shape, objects.dtype, objects.shape, collisions.dtype, collisions.shape)
         algorithms.ray_trace[rays.shape[0], rays.shape[1]](rays, objects, collisions)
-        
-        for i, collide in enumerate(collisions):
-            self.objects[i].collisions = collide
+
+    def visualize_rays(self, rays, objects, collisions):
+        # Colormap for objects and rays
+        colors = ['blue', 'green', 'red', 'cyan', 'magenta', 'yellow']
+        colors = {clr: colors[i] for i, clr in enumerate(set(objects[:,-1].flatten()))}
+        colors[0.0] = 'black'
+        # print(colors, set(collisions.flatten()))
+        # Create a plot
+        fig, ax = plt.subplots()
+
+        # Plot each object and its rays
+        for i, obj in enumerate(objects):
+            x, y, radius, color_idx = obj
+            color = colors[color_idx]
+            
+            # Plot the object (circle)
+            circle = plt.Circle((x, y), radius, color=color, fill=True, alpha=0.5)
+            ax.add_artist(circle)
+            
+            # Plot the rays
+            for j, ray in enumerate(rays[i]):
+                dx, dy, max_length = ray
+                ray_color_idx = collisions[i][j][0]
+                ray_color = colors[ray_color_idx]
+                
+                # Normalize the ray direction to unit vector
+                norm = np.sqrt(dx**2 + dy**2)
+                dx /= norm
+                dy /= norm
+                
+                # Scale the unit vector to the ray length
+                dx *= max_length
+                dy *= max_length
+                
+                # Plot the ray
+                ax.arrow(x, y, dx, dy, head_width=0.1, head_length=0.1, fc=ray_color, ec=ray_color,
+                         alpha=0.2 if ray_color_idx == 0.0 else 1.0)
+
+        # Set limits and aspect
+        # ax.set_xlim(-2, 12)
+        # ax.set_ylim(-2, 12)
+        ax.set_aspect('equal')
+        plt.xlabel('X')
+        plt.ylabel('Y')
+        plt.title('Objects with Rays')
+
+    def collect_object_positions(self):
+        return np.asarray([obj.get_pos() for obj in self.objects]).astype(np.float32)
 
     def collect_rays(self):
         return np.asarray([obj.get_rays() for obj in self.objects])
 
     def collect_stimuli(self):
-        return np.asarray([obj.get_stimulus() for obj in self.objects])
+        return np.asarray([obj.get_stimuli() for obj in self.objects])
     
     def collect_weights(self, layer):
         return np.asarray([obj.get_weights(layer) for obj in self.objects])
@@ -30,7 +77,7 @@ class World():
 
 
 def main():
-    game = World()
+    game = World(100)
 
     while True:
         

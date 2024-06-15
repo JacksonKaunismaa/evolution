@@ -28,6 +28,18 @@ on the square where it was killed (with some added bonuses for the killer).
 
 class Creature():
     def __init__(self):
-        self.position = np.random.rand(2)
-        self.rays = np.random.rand(32, 2)
+        self.position = np.random.rand(2).astype(np.float32)*7
+        self.rays = np.random.normal(0, 1, (8, 2)).astype(np.float32)
         self.rays /= np.linalg.norm(self.rays, axis=1, keepdims=True)
+        self.rays = self.rays.astype(np.float32)
+        self.max_lengths = np.random.rand(8).astype(np.float32) * 3
+        self.rays = np.concatenate([self.rays, self.max_lengths[:, None]], axis=1)
+        self.size = 1.
+        self.color = np.random.randint(10, 200)
+        self.memory = np.random.zeros(4).astype(np.float32)
+
+    def get_pos(self):
+        return [self.position[0], self.position[1], self.size, self.color]
+
+    def get_rays(self):
+        return self.rays
