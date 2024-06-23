@@ -161,18 +161,18 @@ def setup_grid(positions, sizes, cells, cell_counts, cell_size):
     radius = math.sqrt(sizes[creature])
     grid_size = cells.shape[0]
     
-    min_x = max(0, int((x - radius) // cell_size))
-    max_x = min(grid_size - 1, int((x + radius) // cell_size))
-    min_y = max(0, int((y - radius) // cell_size))
-    max_y = min(grid_size - 1, int((y + radius) // cell_size))
+    min_x = max(0, int((x - radius) / cell_size))
+    max_x = min(grid_size - 1, int((x + radius) / cell_size))
+    min_y = max(0, int((y - radius) / cell_size))
+    max_y = min(grid_size - 1, int((y + radius) / cell_size))
     
     for i in range(min_x, max_x + 1):
         for j in range(min_y, max_y + 1):
             old_count = cuda.atomic.add(cell_counts, (j, i), 1)
             # print(f"Thread {creature} adding to cell {j}, {i} with count {old_count}")
             if old_count >= cells.shape[2]:
-                return
-            cells[j, i, old_count] = creature  # no idea why this -1 is necessary, but for some reason atomic add isn't working o.w.
+                return  # do NOT attempt to use NUBA_ENABLE_CUDASIM=1 with this, since it does not work with atomic stuff
+            cells[j, i, old_count] = creature
 
 
 @cuda.jit('void(float32[:, :, :], float32[:, :], float32[:], float32[:, :], int32[:, :, :], int32[:, :], float32, float32[:, :, :])',
@@ -286,6 +286,57 @@ def trace_rays_grid(rays, positions, sizes, colors, cells, cell_counts, cell_siz
             err += dx
             y += sy
 
+@cuda.jit('void(float32[:, :], float32[:], float32[:, :], float32[:, :], int32[:, :, :], int32[:, :], float32, float32[:, :])',
+            fastmath=True)
+def gridded_is_attacking(positions, sizes, colors, head_dirs, cells, cell_counts, cell_size, results):
+    """Positions is [N, 2], where the 2 coordinates are the location.
+     Sizes is [N, 1] where the coordinate is the squared radius.
+    Colors is [N, 3], 3 coordinates for RGB values.
+    Head_dirs is [N, 2], where the two coordinates are the direction of the head (unit vector).
+     
+     cells is [S, S, M], where S is the # cells, and M is the maximum number of creatures in a given cell.
+        cell_counts is [S, S], where the coordinate is the number of creatures in a given cell.
+        Cell_size is the size of the cell in the grid.
+
+    Results is [N, 2], where the 1st coordinate is an integer indicating how many things the
+    organism is attacking, and the 2nd coordinate is a float indicating the amount of damage the organism
+    is taking from other things attacking it."""
+        
+    organism = cuda.grid(1)
+
+    # check that we are in bounds
+    if organism >= positions.shape[0]:
+        return
+    center_x, center_y = positions[organism]
+    size = math.sqrt(sizes[organism])
+    color = colors[organism]
+
+    attacking_x = center_x + head_dirs[organism, 0] * size
+    attacking_y = center_y + head_dirs[organism, 1] * size
+    attacking_i = int(attacking_x // cell_size)
+    attacking_j = int(attacking_y // cell_size)
+    
+    
+    for idx in range(cell_counts[attacking_j, attacking_i]):
+        other = cells[attacking_j, attacking_i, idx]
+        if other == organism:
+            continue
+    
+        other_color = colors[other]
+
+        # species that are close in color to one another can't attack each other
+        color_diff = 0.
+        for c in range(3):
+            color_diff += abs(color[c] - other_color[c])
+        if color_diff <= 3:
+            continue
+        
+        other_center_x, other_center_y = positions[other]
+        dist = (center_x - other_center_x)**2 + (center_y - other_center_y)**2
+
+        if dist < sizes[other] + 0.5:   # +0.5 to give some leeway
+            results[organism, 0] += 1
+            results[other, 1] += sizes[organism]  # damage = size of attacker
 
 
 @cuda.jit('void(float32[:, :], float32[:],  float32[:, :], float32[:, :], float32[:, :])', 

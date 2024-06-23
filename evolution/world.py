@@ -1,6 +1,8 @@
 from collections import defaultdict
 import numpy as np
 from matplotlib import pyplot as plt
+import matplotlib.patches as patches
+import plotly.graph_objects as go
 import torch
 from torch.nn import functional as F
 torch.set_grad_enabled(False)
@@ -57,13 +59,15 @@ class World():
         # print(rays.dtype, posns.dtype, sizes.dtype, colors.dtype, nb_collisions.dtype)
         algorithms.correct_ray_trace[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, collisions)
         return collisions
-    
 
     @cuda_profile
-    def trace_rays_grid(self, max_per_cell=512, cell_size=4.):
-        """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
+    def compute_grid_setup(self, max_per_cell=512, cell_size=4.):
+        """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
+        (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
+        and [G, G] array of the number of objects in each cell. 
+        
+        Used to speed up ray tracing by reducing the number of objects we need to check."""
         rays = self.creatures.rays
-        colors = self.creatures.colors
         posns = self.creatures.positions
         sizes = self.creatures.sizes
 
@@ -71,21 +75,26 @@ class World():
         num_cells = int(self.size // cell_size + 1)
         cells = torch.ones((num_cells, num_cells, max_per_cell), dtype=torch.int32, device='cuda')*10
         cell_counts = torch.zeros((num_cells, num_cells), dtype=torch.int32, device='cuda')
-        # print(cells.shape, cell_counts.shape)
         block_size = 512
         grid_size = rays.shape[0] // block_size + 1
-        # print(grid_size, block_size)
-        # print(posns.shape, sizes.shape, cells.shape, cell_counts.shape, cell_size)
-        # print(posns.dtype, sizes.dtype, cells.dtype, cell_counts.dtype)
+
         algorithms.setup_grid[grid_size, block_size](posns, sizes, cells, cell_counts, cell_size)
-        # print("Pct at max", (cell_counts >= max_per_cell).sum().item() / (num_cells**2))
-        # print(cell_counts)
-        # print(cells[..., :5].permute(2, 0, 1))
-        # return cell_counts, cells
-        # then, traverse the grid and draw lines through it, checking each object that passes through the ray
+        return cells, cell_counts, cell_size  # argument return order should match trace_rays_grid
+    
+
+    @cuda_profile
+    def trace_rays_grid(self, cells, cell_counts, cell_size):
+        """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
+
+        rays = self.creatures.rays
+        colors = self.creatures.colors
+        posns = self.creatures.positions
+        sizes = self.creatures.sizes
+
+        # traverse the grid and draw lines through it, checking each object that passes through the ray
         collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device='cuda')
         algorithms.trace_rays_grid[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, cells, cell_counts, cell_size, collisions)
-        return collisions, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
+        return collisions#, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
     
 
     @cuda_profile
@@ -105,7 +114,7 @@ class World():
         self.creatures.move_creatures(outputs)
 
     @cuda_profile
-    def do_attacks(self):
+    def compute_attacks(self):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
         posns = cuda.as_cuda_array(self.creatures.positions)
@@ -123,7 +132,27 @@ class World():
         # print(posns.shape, sizes.shape, colors.shape, head_dirs.shape, nb_results.shape)
         # print(posns.dtype, sizes.dtype, colors.dtype, head_dirs.dtype, nb_results.dtype)
         algorithms.is_attacking[grid_size, block_size](posns, sizes, colors, head_dirs, nb_results)
+        return tr_results
+    
+    @cuda_profile
+    def compute_gridded_attacks(self, cells, cell_counts, cell_size):
+        """Compute which creatures are attacking which creatures are then based on that, update health 
+        and energy of creatures."""
+        posns = self.creatures.positions
+        sizes = self.creatures.sizes
+        colors = self.creatures.colors
+        head_dirs = self.creatures.head_dirs
 
+        # figure out who is attacking who
+        tr_results = torch.zeros((posns.shape[0], 2), device='cuda')
+        block_size = 512
+        grid_size = posns.shape[0] // block_size + 1
+
+        algorithms.gridded_is_attacking[grid_size, block_size](posns, sizes, colors, head_dirs, cells, cell_counts, cell_size, tr_results)
+        return tr_results
+
+    @cuda_profile
+    def do_attacks(self, tr_results):
         # update health and energy
         self.creatures.do_attacks(tr_results)
         self.creatures.kill_dead(self.food_grid)
@@ -202,50 +231,200 @@ class World():
         plt.show()
 
 
+    def visualize_grid_setup(self, cells, cell_counts, cell_size):
+        """Visualizes the grid setup for ray tracing."""
+        # match the return order from self.compute_grid_setup for ease of use
+        num_objects = self.creatures.positions.shape[0]
+        num_cells = cells.shape[0]
+        width = num_cells * cell_size
+
+        positions = self.creatures.positions.cpu().numpy()
+        sizes = np.sqrt(self.creatures.sizes.cpu().numpy())
+        print(sizes)
+        colors = self.creatures.colors.cpu().numpy()
+        
+        for obj_idx in range(num_objects):
+            fig, ax = plt.subplots(figsize=(10, 10))
+            
+            # Create a heatmap for the current object
+            heatmap = np.ones((num_cells, num_cells, 3), dtype=int)*255
+            
+            for y in range(num_cells):
+                for x in range(num_cells):
+                    for k in range(cell_counts[y, x]):
+                        if cells[y, x, k] == obj_idx:
+                            heatmap[y, x] = colors[obj_idx]
+            
+            cax = ax.imshow(heatmap[::-1], cmap='viridis', extent=[0, width, 0, width])
+            # plt.colorbar(cax, ax=ax)
+            
+            # Plot the circles
+            for i in range(num_objects):
+                x, y = positions[i]
+                radius = sizes[i]
+                color = colors[i] / 255  # Convert to [0, 1] range for Matplotlib
+                circle = patches.Circle(
+                    (x, y),
+                    radius,
+                    linewidth=0.4,
+                    edgecolor='black',
+                    facecolor=color,
+                    alpha=0.5
+                )
+                ax.add_patch(circle)
+            
+            plt.xlabel('Grid X')
+            plt.ylabel('Grid Y')
+            plt.title(f'Grid Setup Visualization for Object {obj_idx}')
+            # show grid lines
+            ax.set_xticks(np.arange(0, width, cell_size))#, minor=True)
+            ax.set_yticks(np.arange(0, width, cell_size))#, minor=True)
+            ax.grid(which='both', color='black', linestyle='-', linewidth=1)
+            plt.gca().invert_yaxis()  # Invert y-axis to match array index representation
+            plt.show()
+
+
+
+    def plotly_visualize_grid_setup(self, cells, cell_counts, cell_size):
+        """Visualizes the grid setup for ray tracing."""
+        # match the return order from self.compute_grid_setup for ease of use
+        num_objects = self.creatures.positions.shape[0]
+        num_cells = cells.shape[0]
+        width = num_cells * cell_size
+
+        positions = self.creatures.positions.cpu().numpy()
+        sizes = np.sqrt(self.creatures.sizes.cpu().numpy())
+        colors = self.creatures.colors.cpu().numpy()
+        
+        for obj_idx in range(num_objects):
+            heatmap = np.ones((num_cells, num_cells, 3), dtype=int) * 255
+
+            for y in range(num_cells):
+                for x in range(num_cells):
+                    for k in range(cell_counts[y, x]):
+                        if cells[y, x, k] == obj_idx:
+                            heatmap[y, x] = colors[obj_idx]
+
+            fig = go.Figure()
+
+            # Create the heatmap for the current object
+            fig.add_trace(go.Image(
+                z=heatmap,
+                opacity=0.5,
+                x0=cell_size/2,
+                dx=cell_size,
+                y0=cell_size/2,
+                dy=cell_size,
+            ))
+
+            # Plot the circles
+            for i in range(num_objects):
+                x, y = positions[i]
+                radius = sizes[i]
+                color = 'rgba({}, {}, {}, 0.5)'.format(*colors[i])
+
+                min_x = x - radius
+                max_x = x + radius
+                min_y = y - radius
+                max_y = y + radius
+
+                fig.add_shape(
+                    type='circle',
+                    xref='x',
+                    yref='y',
+                    x0=min_x,
+                    y0=min_y,
+                    x1=max_x,
+                    y1=max_y,
+                    line=dict(
+                        color='black',
+                        width=1,
+                    ),
+                    fillcolor=color
+                )
+
+            fig.update_layout(
+                title=f'Grid Setup Visualization for Object {obj_idx}',
+                xaxis=dict(
+                    title='Grid X',
+                    tickmode='array',
+                    tickvals=np.arange(0, width, cell_size),
+                    showgrid=True,
+                    gridcolor='black',
+                    gridwidth=None,
+                    range=[0, width]
+                ),
+                yaxis=dict(
+                    title='Grid Y',
+                    tickmode='array',
+                    tickvals=np.arange(0, width, cell_size),
+                    showgrid=True,
+                    gridcolor='black',
+                    gridwidth=None,
+                    scaleanchor=None,
+                    scaleratio=None,
+                    range=[0, width]
+                ),
+                plot_bgcolor='rgba(255,255,255,1)',
+                margin=dict(l=0, r=0, t=35, b=0),  # Reduce margins
+                height=800,  # Set the height of the figure
+            )
+
+            fig.show()
+
+
 def main():
-    results = {}
-    n_trial = 10
-    for max_creat in tqdm([32, 64, 128, 256, 512]):
-        for cell_size in tqdm([0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 8.0]):
-            for j in range(n_trial):
-                times.clear()
-                torch.random.manual_seed(j)
-                game = World(512, 16384, 1000)
-                fps = 30
-                pcts = []
-                for i in range(500):
-                    logging.info(f"{game.creatures.positions.shape[0]} creatures alive.")
-                    logging.info(f"Health:\n {game.creatures.healths}")
-                    logging.info(f"Energy:\n {game.creatures.energies}")
-                    # if i % 100 == 0:
-                    #     print(f"On step{i}, {game.creatures.positions.shape[0]} creatures alive.")
-                    collisions, pct_bad = game.trace_rays_grid()
-                    pcts.append(pct_bad)
-                    # game.visualize(collisions)
-                    # input()
-                    # time.sleep(1/(2*fps))
-                    stimuli = game.collect_stimuli(collisions)
-                    logging.debug(f"Stimuli shape: {stimuli.shape}")
-                    outputs = game.think(stimuli)
-                    logging.debug(f"Outputs shape: {outputs.shape}")
+    # results = {}
+    # n_trial = 10
+    # for max_creat in tqdm([32, 64, 128, 256, 512]):
+    #     for cell_size in tqdm([0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 8.0]):
+    #         for j in range(n_trial):
+    #             torch.random.manual_seed(j)
 
-                    game.move_creatures(outputs)
-                    game.do_attacks()  # update health and energy of creatures, and kill any creatures that are dead
+        times.clear()
+        game = World(512, 16384, 1000)
+        fps = 30
+        pcts = []
+        for i in range(500):
+            logging.info(f"{game.creatures.positions.shape[0]} creatures alive.")
+            logging.info(f"Health:\n {game.creatures.healths}")
+            logging.info(f"Energy:\n {game.creatures.energies}")
+            # if i % 100 == 0:
+            #     print(f"On step{i}, {game.creatures.positions.shape[0]} creatures alive.")
+            # collisions, pct_bad = game.trace_rays_grid()
+            # pcts.append(pct_bad)
+            celled_world = game.compute_grid_setup()
+            collisions = game.trace_rays_grid(*celled_world)
+            # game.visualize(collisions)
+            # input()
+            # time.sleep(1/(2*fps))
+            stimuli = game.collect_stimuli(collisions)
+            logging.debug(f"Stimuli shape: {stimuli.shape}")
+            outputs = game.think(stimuli)
+            logging.debug(f"Outputs shape: {outputs.shape}")
 
-                    game.creatures_eat()   # give energy for being in a square, and then reduce that energy
+            game.move_creatures(outputs)
 
-                    game.creatures_reproduce()    # allow high energy individuals to reproduce
+            celled_world = game.compute_grid_setup()
+            # attacks = game.compute_attacks()
+            attacks2 = game.compute_gridded_attacks(*celled_world)
+        
+            game.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
 
-                    game.energy_grow()   # give food time to grow
-                    # game.visualize(None)
-                    # input()
-                    # time.sleep(1/(2*fps))
-                    # # game.maybe_environmental_change()   # mass extinction time?
-                # return times
-                if (max_creat, cell_size) not in results:
-                    results[(max_creat, cell_size)] = []
-                results[(max_creat, cell_size)].append((sum(times.values()), np.percentile(pcts, 98)))
-    return results
+            game.creatures_eat()   # give energy for being in a square, and then reduce that energy
+
+            game.creatures_reproduce()    # allow high energy individuals to reproduce
+
+            game.energy_grow()   # give food time to grow
+            # game.visualize(None)
+            # input()
+            # time.sleep(1/(2*fps))
+            # # game.maybe_environmental_change()   # mass extinction time?
+        return times
+        # if (max_creat, cell_size) not in results:
+        #     results[(max_creat, cell_size)] = []
+        # results[(max_creat, cell_size)].append((sum(times.values()), np.percentile(pcts, 98)))
+    # return results
 
         
 
