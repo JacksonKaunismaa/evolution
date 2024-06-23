@@ -8,7 +8,7 @@ from numba import cuda
 import time
 from IPython.display import clear_output
 import logging
-from tqdm import trange
+from tqdm import trange, tqdm
 logging.basicConfig(level=logging.ERROR, filename='game.log')
 
 
@@ -60,7 +60,7 @@ class World():
     
 
     @cuda_profile
-    def trace_rays_grid(self, max_per_cell=32, cell_size=1.):
+    def trace_rays_grid(self, max_per_cell=512, cell_size=4.):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
         rays = self.creatures.rays
         colors = self.creatures.colors
@@ -78,13 +78,14 @@ class World():
         # print(posns.shape, sizes.shape, cells.shape, cell_counts.shape, cell_size)
         # print(posns.dtype, sizes.dtype, cells.dtype, cell_counts.dtype)
         algorithms.setup_grid[grid_size, block_size](posns, sizes, cells, cell_counts, cell_size)
+        # print("Pct at max", (cell_counts >= max_per_cell).sum().item() / (num_cells**2))
         # print(cell_counts)
         # print(cells[..., :5].permute(2, 0, 1))
         # return cell_counts, cells
         # then, traverse the grid and draw lines through it, checking each object that passes through the ray
         collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device='cuda')
         algorithms.trace_rays_grid[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, cells, cell_counts, cell_size, collisions)
-        return collisions#, cells, cell_counts
+        return collisions, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
     
 
     @cuda_profile
@@ -202,37 +203,49 @@ class World():
 
 
 def main():
-    times.clear()
-    game = World(512, 16384, 1000)
-    fps = 30
-    for i in range(500):
-        logging.info(f"{game.creatures.positions.shape[0]} creatures alive.")
-        logging.info(f"Health:\n {game.creatures.healths}")
-        logging.info(f"Energy:\n {game.creatures.energies}")
-        if i % 100 == 0:
-            print(f"On step{i}, {game.creatures.positions.shape[0]} creatures alive.")
-        collisions = game.trace_rays_grid()
-        # game.visualize(collisions)
-        # input()
-        # time.sleep(1/(2*fps))
-        stimuli = game.collect_stimuli(collisions)
-        logging.debug(f"Stimuli shape: {stimuli.shape}")
-        outputs = game.think(stimuli)
-        logging.debug(f"Outputs shape: {outputs.shape}")
+    results = {}
+    n_trial = 10
+    for max_creat in tqdm([32, 64, 128, 256, 512]):
+        for cell_size in tqdm([0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 8.0]):
+            for j in range(n_trial):
+                times.clear()
+                torch.random.manual_seed(j)
+                game = World(512, 16384, 1000)
+                fps = 30
+                pcts = []
+                for i in range(500):
+                    logging.info(f"{game.creatures.positions.shape[0]} creatures alive.")
+                    logging.info(f"Health:\n {game.creatures.healths}")
+                    logging.info(f"Energy:\n {game.creatures.energies}")
+                    # if i % 100 == 0:
+                    #     print(f"On step{i}, {game.creatures.positions.shape[0]} creatures alive.")
+                    collisions, pct_bad = game.trace_rays_grid()
+                    pcts.append(pct_bad)
+                    # game.visualize(collisions)
+                    # input()
+                    # time.sleep(1/(2*fps))
+                    stimuli = game.collect_stimuli(collisions)
+                    logging.debug(f"Stimuli shape: {stimuli.shape}")
+                    outputs = game.think(stimuli)
+                    logging.debug(f"Outputs shape: {outputs.shape}")
 
-        game.move_creatures(outputs)
-        game.do_attacks()  # update health and energy of creatures, and kill any creatures that are dead
+                    game.move_creatures(outputs)
+                    game.do_attacks()  # update health and energy of creatures, and kill any creatures that are dead
 
-        game.creatures_eat()   # give energy for being in a square, and then reduce that energy
+                    game.creatures_eat()   # give energy for being in a square, and then reduce that energy
 
-        game.creatures_reproduce()    # allow high energy individuals to reproduce
+                    game.creatures_reproduce()    # allow high energy individuals to reproduce
 
-        game.energy_grow()   # give food time to grow
-        # game.visualize(None)
-        # input()
-        # time.sleep(1/(2*fps))
-        # # game.maybe_environmental_change()   # mass extinction time?
-    return times
+                    game.energy_grow()   # give food time to grow
+                    # game.visualize(None)
+                    # input()
+                    # time.sleep(1/(2*fps))
+                    # # game.maybe_environmental_change()   # mass extinction time?
+                # return times
+                if (max_creat, cell_size) not in results:
+                    results[(max_creat, cell_size)] = []
+                results[(max_creat, cell_size)].append((sum(times.values()), np.percentile(pcts, 98)))
+    return results
 
         
 

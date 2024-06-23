@@ -170,6 +170,8 @@ def setup_grid(positions, sizes, cells, cell_counts, cell_size):
         for j in range(min_y, max_y + 1):
             old_count = cuda.atomic.add(cell_counts, (j, i), 1)
             # print(f"Thread {creature} adding to cell {j}, {i} with count {old_count}")
+            if old_count >= cells.shape[2]:
+                return
             cells[j, i, old_count] = creature  # no idea why this -1 is necessary, but for some reason atomic add isn't working o.w.
 
 
