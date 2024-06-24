@@ -11,6 +11,7 @@ import time
 from IPython.display import clear_output
 import logging
 from tqdm import trange, tqdm
+
 logging.basicConfig(level=logging.ERROR, filename='game.log')
 
 
@@ -32,6 +33,7 @@ def cuda_profile(func):
         times[func.__name__] += start.elapsed_time(end)
         return res
     return wrapper
+    return func
 
 
 class World():
@@ -73,7 +75,7 @@ class World():
 
         # fill in grid cells to vastly reduce the number of objects we need to check
         num_cells = int(self.size // cell_size + 1)
-        cells = torch.ones((num_cells, num_cells, max_per_cell), dtype=torch.int32, device='cuda')*10
+        cells = torch.ones((num_cells, num_cells, max_per_cell), dtype=torch.int32, device='cuda')*-1
         cell_counts = torch.zeros((num_cells, num_cells), dtype=torch.int32, device='cuda')
         block_size = 512
         grid_size = rays.shape[0] // block_size + 1
@@ -117,12 +119,11 @@ class World():
     def compute_attacks(self):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
-        posns = cuda.as_cuda_array(self.creatures.positions)
-        sizes = cuda.as_cuda_array(self.creatures.sizes)
-        colors = cuda.as_cuda_array(self.creatures.colors)
-        head_dirs = cuda.as_cuda_array(self.creatures.head_dirs)
+        posns = self.creatures.positions
+        sizes = self.creatures.sizes
+        colors = self.creatures.colors
+        head_dirs = self.creatures.head_dirs
         tr_results = torch.zeros((posns.shape[0], 2), device='cuda')
-        nb_results = cuda.as_cuda_array(tr_results, sync=True)
 
         # figure out who is attacking who
         block_size = (32, 32)
@@ -131,7 +132,7 @@ class World():
         # print(grid_size, block_size)
         # print(posns.shape, sizes.shape, colors.shape, head_dirs.shape, nb_results.shape)
         # print(posns.dtype, sizes.dtype, colors.dtype, head_dirs.dtype, nb_results.dtype)
-        algorithms.is_attacking[grid_size, block_size](posns, sizes, colors, head_dirs, nb_results)
+        algorithms.is_attacking[grid_size, block_size](posns, sizes, colors, head_dirs, tr_results)
         return tr_results
     
     @cuda_profile
@@ -147,7 +148,8 @@ class World():
         tr_results = torch.zeros((posns.shape[0], 2), device='cuda')
         block_size = 512
         grid_size = posns.shape[0] // block_size + 1
-
+        # print(grid_size, block_size)
+        # print(posns.shape, sizes.shape, colors.shape, head_dirs.shape, cells.shape, cell_counts.shape, cell_size, tr_results.shape)
         algorithms.gridded_is_attacking[grid_size, block_size](posns, sizes, colors, head_dirs, cells, cell_counts, cell_size, tr_results)
         return tr_results
 
@@ -159,7 +161,7 @@ class World():
 
     @cuda_profile
     def creatures_eat(self):
-        self.creatures.eat(self.food_grid, 0.1)
+        self.creatures.eat(self.food_grid, 0.2)
 
     @cuda_profile
     def creatures_reproduce(self):
@@ -167,10 +169,25 @@ class World():
 
     @cuda_profile
     def energy_grow(self):
+        # don't grow on squares that are occupied by creatures
+        posns = self.creatures.positions.long()
+        self.food_grid[posns[:, 1], posns[:, 0]] -= 0.1
         self.food_grid[1:-1, 1:-1] += 0.1
 
+    def write_checkpoint(self, path):
+        torch.save({'food_grid': self.food_grid, 
+                    'creatures': self.creatures, 
+                    'size': self.size, 
+                    }, path)
+        
+    def load_checkpoint(self, path):
+        checkpoint = torch.load(path)
+        self.food_grid = checkpoint['food_grid']
+        self.creatures = checkpoint['creatures']
+        self.size = checkpoint['size']
 
-    def visualize(self, collisions):
+
+    def visualize(self, collisions, show_rays=True):
         clear_output(wait=True)
 
         fig, ax = plt.subplots(figsize=(10, 10))
@@ -191,7 +208,7 @@ class World():
 
         for i in range(len(positions_cpu)):
             pos = positions_cpu[i]
-            size = np.sqrt(sizes_cpu[i])
+            size = sizes_cpu[i]
             color = colors_cpu[i] / 255  # Convert to 0-1 range for matplotlib
             head_dir = head_dirs_cpu[i]
             head_pos = pos + head_dir * size
@@ -203,31 +220,32 @@ class World():
             # Plot the head direction
             ax.plot([pos[0], head_pos[0]], [pos[1], head_pos[1]], color='black')
             
-            # Plot the rays
-            if collisions is not None:
-                collisions_cpu = collisions.cpu().numpy()
-                for j in range(len(rays_cpu[i])):
-                    ray_dir = rays_cpu[i][j][:2]
-                    ray_len = np.sqrt(rays_cpu[i][j][2])
-                    ray_end = pos + ray_dir * ray_len
-                    collision_info = collisions_cpu[i][j]
-                    if np.any(collision_info[:3] != 0):  # If any component is not zero, ray is active
-                        ray_color = collision_info / 255  # Convert to 0-1 range for matplotlib
-                        ax.plot([pos[0], ray_end[0]], [pos[1], ray_end[1]], color=ray_color)
-                    else:
+            if show_rays:
+                # Plot the rays
+                if collisions is not None:
+                    collisions_cpu = collisions.cpu().numpy()
+                    for j in range(len(rays_cpu[i])):
+                        ray_dir = rays_cpu[i][j][:2]
+                        ray_len = rays_cpu[i][j][2]
+                        ray_end = pos + ray_dir * ray_len
+                        collision_info = collisions_cpu[i][j]
+                        if np.any(collision_info[:3] != 0):  # If any component is not zero, ray is active
+                            ray_color = collision_info / 255  # Convert to 0-1 range for matplotlib
+                            ax.plot([pos[0], ray_end[0]], [pos[1], ray_end[1]], color=ray_color)
+                        else:
+                            ax.plot([pos[0], ray_end[0]], [pos[1], ray_end[1]], color='gray', alpha=0.3)
+                else:
+                    for j in range(len(rays_cpu[i])):
+                        ray_dir = rays_cpu[i][j][:2]
+                        ray_len = rays_cpu[i][j][2]
+                        ray_end = pos + ray_dir * ray_len
                         ax.plot([pos[0], ray_end[0]], [pos[1], ray_end[1]], color='gray', alpha=0.3)
-            else:
-                for j in range(len(rays_cpu[i])):
-                    ray_dir = rays_cpu[i][j][:2]
-                    ray_len = np.sqrt(rays_cpu[i][j][2])
-                    ray_end = pos + ray_dir * ray_len
-                    ax.plot([pos[0], ray_end[0]], [pos[1], ray_end[1]], color='gray', alpha=0.3)
         
         ax.set_xlim([0, food_grid_cpu.shape[1]])
         ax.set_ylim([0, food_grid_cpu.shape[0]])
         ax.set_aspect('equal')
         plt.legend()
-        plt.gca().invert_yaxis()
+        # plt.gca().invert_yaxis()
         plt.show()
 
 
@@ -239,8 +257,8 @@ class World():
         width = num_cells * cell_size
 
         positions = self.creatures.positions.cpu().numpy()
-        sizes = np.sqrt(self.creatures.sizes.cpu().numpy())
-        print(sizes)
+        sizes = self.creatures.sizes.cpu().numpy()
+        # print(sizes)
         colors = self.creatures.colors.cpu().numpy()
         
         for obj_idx in range(num_objects):
@@ -293,7 +311,7 @@ class World():
         width = num_cells * cell_size
 
         positions = self.creatures.positions.cpu().numpy()
-        sizes = np.sqrt(self.creatures.sizes.cpu().numpy())
+        sizes = self.creatures.sizes.cpu().numpy()
         colors = self.creatures.colors.cpu().numpy()
         
         for obj_idx in range(num_objects):
@@ -382,10 +400,11 @@ def main():
     #             torch.random.manual_seed(j)
 
         times.clear()
-        game = World(512, 16384, 1000)
+        game = World(16, 32, 15)
         fps = 30
         pcts = []
-        for i in range(500):
+        for i in range(99999):
+            # print(i)
             logging.info(f"{game.creatures.positions.shape[0]} creatures alive.")
             logging.info(f"Health:\n {game.creatures.healths}")
             logging.info(f"Energy:\n {game.creatures.energies}")
@@ -395,10 +414,12 @@ def main():
             # pcts.append(pct_bad)
             celled_world = game.compute_grid_setup()
             collisions = game.trace_rays_grid(*celled_world)
-            # game.visualize(collisions)
+            if i % 10 == 0:
+                game.visualize(None, show_rays=False) 
+                time.sleep(1/(2*fps))
             # input()
-            # time.sleep(1/(2*fps))
             stimuli = game.collect_stimuli(collisions)
+            # print(stimuli.shape)
             logging.debug(f"Stimuli shape: {stimuli.shape}")
             outputs = game.think(stimuli)
             logging.debug(f"Outputs shape: {outputs.shape}")
@@ -406,6 +427,8 @@ def main():
             game.move_creatures(outputs)
 
             celled_world = game.compute_grid_setup()
+            # if i == 23:
+            #     return celled_world, game
             # attacks = game.compute_attacks()
             attacks2 = game.compute_gridded_attacks(*celled_world)
         

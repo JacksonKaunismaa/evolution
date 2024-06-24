@@ -35,7 +35,7 @@ class CreatureArray():
 
         self.rays = torch.randn(num_starting, num_rays, 3, device=self.dev)
         self.rays[..., :2] /= torch.norm(self.rays[..., :2], dim=2, keepdim=True)
-        self.rays[..., 2] = self.rays[..., 2]**2
+        self.rays[..., 2] = torch.abs(self.rays[..., 2])  # make sure its positive
 
         self.head_dirs = torch.randn(num_starting, 2, device=self.dev)
         self.head_dirs /= torch.norm(self.head_dirs, dim=1, keepdim=True)
@@ -64,7 +64,8 @@ class CreatureArray():
         for w, b in zip(self.weights, self.biases):
             # print(inputs.shape, '@', w.shape, '+', b.shape)
             inputs = torch.tanh(inputs @ w + b)
-        return inputs.squeeze()
+        # print('out' ,inputs.shape)
+        return inputs.squeeze(dim=1)
     
     def kill_dead(self, food_grid):
         dead = (self.healths <= 0) | (self.energies <= 0)
@@ -79,7 +80,7 @@ class CreatureArray():
         # print(self.sizes[dead].shape)
         dead_posns = self.positions[dead].long()
         logging.info(f"{dead_posns.shape[0]} creatures have died.")
-        food_grid[dead_posns[..., 0], dead_posns[..., 1]] += self.sizes[dead]**2 + 10
+        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.sizes[dead]**2 + 10
 
         self.positions = self.positions[~dead]
         self.memories = self.memories[~dead]
@@ -99,9 +100,10 @@ class CreatureArray():
     def eat(self, food_grid, pct):
         """Eat the food in the creatures' vicinity."""
         pos = self.positions.long()
-        food = food_grid[pos[..., 0], pos[..., 1]] * pct
-        self.energies += food
-        food_grid[pos[..., 0], pos[..., 1]] -= food
+        food = food_grid[pos[..., 1], pos[..., 0]] * pct
+        # food_grid.shape[0] ** 2 * 0.1  <- total amount of food that gets added each step
+        self.energies += food - (food_grid.shape[0] ** 2) * 0.1 / self.max_creatures  # lose energy for staying alive
+        food_grid[pos[..., 1], pos[..., 0]] -= food
         self.ages += 1  # if they've eaten, then they've made it to the next step
 
 
@@ -109,7 +111,7 @@ class CreatureArray():
         """Indices is [N, 2] indices into food_grid.
         Food grid is [S, S], where S is the width of the world."""
         windows = indices.unsqueeze(1) + self.offsets  # [N, 1, 2] + [1, 9, 2] = [N, 9, 2]
-        return food_grid[windows[..., 0], windows[..., 1]]
+        return food_grid[windows[..., 1], windows[..., 0]]
         
 
     def collect_stimuli(self, collisions, food_grid):
@@ -142,14 +144,15 @@ class CreatureArray():
         # rotation => need to rotate the rays and the object's direction
         # print('outputs', outputs[:,1])
         # print('sqrt sizes', torch.sqrt(self.sizes))
-        rotate = outputs[:,1]*torch.pi / 20*(1 + torch.sqrt(self.sizes))
+        # print('outputs', outputs.shape, 'sizes', self.sizes.shape)
+        rotate = outputs[:,1]*torch.pi / 20*(1 + self.sizes)
         # print('sizes', self.sizes)
         rotate_energy = 1 - torch.exp(self.sizes * torch.abs(rotate))   # energy cost of rotation
         # print('rot_nrg', rotate_energy)
         # print('rot', rotate)
         self.energies -= rotate_energy
         
-        rotation_matrix = torch.empty((outputs.shape[0], 2, 2), device=self.dev)
+        rotation_matrix = torch.empty((outputs.shape[0], 2, 2), device=self.dev)  # [N, 2, 2]
         cos_rotate = torch.cos(rotate)
         sin_rotate = torch.sin(rotate)
         rotation_matrix[:,0,0] = cos_rotate
@@ -158,8 +161,8 @@ class CreatureArray():
         rotation_matrix[:,1,1] = cos_rotate
 
         # rotate the rays and head directions
-        self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix
-        self.head_dirs = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze()
+        self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
+        self.head_dirs = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
 
 
     def move_creatures(self, outputs):
@@ -236,7 +239,7 @@ class CreatureArray():
         new_mutation_rates = mut + mut_rate_perturb
 
         new_memories = torch.zeros_like(self.memories[reproducers])
-        new_energy = new_sizes
+        new_energy = new_sizes/10
         new_health = new_sizes**2
         new_ages = torch.zeros_like(self.ages[reproducers])
         
@@ -244,9 +247,10 @@ class CreatureArray():
         new_head_dirs /= torch.norm(new_head_dirs, dim=1, keepdim=True)
         
         new_rays = self.rays[reproducers] + ray_perturb
-        new_rays[...,:2] /= torch.norm(new_rays[...,:2], dim=2, keepdim=True)
+        new_rays[..., :2] /= torch.norm(new_rays[...,:2], dim=2, keepdim=True)
+        new_rays[..., 2] = torch.clamp_min(new_rays[...,2], 0.1) 
 
-        pos_perturb = torch.randn_like(self.positions[reproducers]) * torch.sqrt(new_sizes.unsqueeze(1))*2
+        pos_perturb = torch.randn_like(self.positions[reproducers]) * new_sizes.unsqueeze(1) * 3
         new_positions = torch.clamp(self.positions[reproducers] + pos_perturb, 1, self.grid_size-2)
 
         self.positions = torch.cat([self.positions, new_positions], dim=0)

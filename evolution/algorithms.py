@@ -13,7 +13,7 @@ def ray_trace(rays, positions, sizes, colors, results):
     is the max length of the ray.
     
     Positions are [N, 2] where the 2 coordinates are the location.
-    Sizes is [N, 1] where the coordinate is the squared radius.
+    Sizes is [N, 1] where the coordinate is the radius.
     Colors is 3 coordinates for RGB values.
     
     Results are [N, R, 3], where the coordinates correspond to RGB colors of the think the ray hits
@@ -33,7 +33,7 @@ def ray_trace(rays, positions, sizes, colors, results):
         return
     
     ray_dir = rays[organism, ray, :2]
-    ray_len = math.sqrt(rays[organism, ray, 2])
+    ray_len = rays[organism, ray, 2]
     our_loc = positions[organism]
 
     best_t = 0.
@@ -51,11 +51,11 @@ def ray_trace(rays, positions, sizes, colors, results):
         
         opt_t = min(max(opt_t, 0), ray_len)  # clamp to the ray length 
 
-        closest_dist = 0.0
+        sq_closest_dist = 0.0
         for d in range(2):
-            closest_dist += (our_loc[d] + opt_t * ray_dir[d] - other_loc[d]) ** 2
+            sq_closest_dist += (our_loc[d] + opt_t * ray_dir[d] - other_loc[d]) ** 2
 
-        if closest_dist > other_rad:
+        if sq_closest_dist > other_rad*other_rad:
             continue
 
         # if its 0 then its the first object. Else, it needs to be closer than the previous object
@@ -71,10 +71,10 @@ def ray_trace(rays, positions, sizes, colors, results):
 def correct_ray_trace(rays, positions, sizes, colors, results):
     """Rays are [N, R, 3], where N = organisms, R = rays per organism, and the
     the first two coordinates are the direction (unit vector), and the last coordinate
-    is the max squared length of the ray.
+    is the max length of the ray.
     
     Positions are [N, 2] where the 2 coordinates are the location.
-    Sizes is [N, 1] where the coordinate is the squared radius.
+    Sizes is [N, 1] where the coordinate is the radius.
     Colors is 3 coordinates for RGB values.
     
     Results are [N, R, 3], where the coordinates correspond to RGB colors of the think the ray hits
@@ -94,7 +94,7 @@ def correct_ray_trace(rays, positions, sizes, colors, results):
         return
     
     ray_dir = rays[organism, ray, :2]
-    ray_len = math.sqrt(rays[organism, ray, 2])
+    ray_len = rays[organism, ray, 2]
     our_loc = positions[organism]
 
     best_t = 0.
@@ -104,20 +104,19 @@ def correct_ray_trace(rays, positions, sizes, colors, results):
             continue
         other_loc = positions[other]
         other_rad = sizes[other]
+        sq_other_rad = other_rad*other_rad
 
-        center_dist = 0.0
+        sq_center_dist = 0.0
         for d in range(2):
-            center_dist += (other_loc[d] - our_loc[d])**2
+            sq_center_dist += (other_loc[d] - our_loc[d])**2
 
-        if center_dist < other_rad:    # then we are inside, then the ray definitely hits it
+        if sq_center_dist < sq_other_rad:    # then we are inside, then the ray definitely hits it
             for c in range(3):
                 results[organism, ray, c] = colors[other, c]
             return
     
-        # we have sqrt(center_dist) - sqrt(other_rad) > sqrt(ray_len)  => too far
-        # square both sides: center_dist - 2*sqrt(center_dist*other_rad) + other_rad > ray_len
-        # use upper bound on sqrt: center_dist*other_rad + 0. 25 >= sqrt(center_dist*other_rad)
-        if center_dist - 2*other_rad*center_dist + other_rad + 0.25 > rays[organism, ray, 2]:
+        # we have sqrt(sq_center_dist) - other_rad > ray_len  => too far
+        if math.sqrt(sq_center_dist) - other_rad > ray_len:
             continue
 
         # calculate t value of the closest point on the ray to the center of the circle
@@ -128,7 +127,7 @@ def correct_ray_trace(rays, positions, sizes, colors, results):
         if opt_t < 0:  # if negative it can't possible intersect it (since we aren't inside)
             continue
         
-        discriminant = opt_t**2 + other_rad - center_dist
+        discriminant = opt_t**2 + sq_other_rad - sq_center_dist
         if discriminant < 0:  # no intersection
             continue
         
@@ -147,7 +146,7 @@ def correct_ray_trace(rays, positions, sizes, colors, results):
           fastmath=True)
 def setup_grid(positions, sizes, cells, cell_counts, cell_size):
     """Positions is [N, 2], where the 2 coordinates are the location.
-     Sizes is [N, 1] where the coordinate is the squared radius.
+     Sizes is [N, 1] where the coordinate is the radius.
      
      cells is [S, S, M], where S is the # cells, and M is the maximum number of creatures in a given cell.
      cell_counts is [S, S], where the coordinate is the number of creatures in a given cell.
@@ -158,7 +157,7 @@ def setup_grid(positions, sizes, cells, cell_counts, cell_size):
         return
     
     x, y = positions[creature]
-    radius = math.sqrt(sizes[creature])
+    radius = sizes[creature]
     grid_size = cells.shape[0]
     
     min_x = max(0, int((x - radius) / cell_size))
@@ -179,9 +178,9 @@ def setup_grid(positions, sizes, cells, cell_counts, cell_size):
             fastmath=True)
 def trace_rays_grid(rays, positions, sizes, colors, cells, cell_counts, cell_size, results):
     """Positions is [N, 2], where the 2 coordinates are the location.
-     Sizes is [N, 1] where the coordinate is the squared radius.
+     Sizes is [N, 1] where the coordinate is the radius.
      Rays is [N, R, 3], where N = organisms, R = rays per organism, and the first two coordinates are the direction (unit vector),
-       and the last coordinate is the max squared length of the ray.
+       and the last coordinate is the max length of the ray.
     
     Cells is [S, S, M], where S is the # cells, and M is the maximum number of creatures in a given cell.
     cell_counts is [S, S], where the coordinate is the number of creatures in a given cell.
@@ -197,7 +196,7 @@ def trace_rays_grid(rays, positions, sizes, colors, cells, cell_counts, cell_siz
     
     # extract information about the ray
     ray_x, ray_y = rays[organism, ray, :2]
-    ray_len = math.sqrt(rays[organism, ray, 2])
+    ray_len = rays[organism, ray, 2]
     our_x, our_y = positions[organism]
 
     # set up cache for checking (so we don't double check objects)
@@ -244,13 +243,13 @@ def trace_rays_grid(rays, positions, sizes, colors, cells, cell_counts, cell_siz
             # extract info about the other organism
             other_x, other_y = positions[other_organism]
             other_rad = sizes[other_organism]
+            sq_other_rad = other_rad*other_rad
             
             # calculate distance from our center to their center
-            center_dist = 0.0
-            center_dist = (other_x - our_x)**2 + (other_y - our_y)**2
+            sq_center_dist = (other_x - our_x)**2 + (other_y - our_y)**2
 
             # if we are inside, then we can quit immedieately
-            if center_dist < other_rad:
+            if sq_center_dist < sq_other_rad:
                 for c in range(3):
                     results[organism, ray, c] = colors[other_organism, c]
                 return
@@ -261,7 +260,7 @@ def trace_rays_grid(rays, positions, sizes, colors, cells, cell_counts, cell_siz
             if opt_t < 0:  # if negative it can't possible intersect it (since we aren't inside)
                 continue   # since the ray points in the opposite direction of the line connecting the 2 centers
 
-            discriminant = opt_t**2 + other_rad - center_dist
+            discriminant = opt_t**2 + sq_other_rad - sq_center_dist
             if discriminant < 0:  # no intersection
                 continue
             
@@ -290,7 +289,7 @@ def trace_rays_grid(rays, positions, sizes, colors, cells, cell_counts, cell_siz
             fastmath=True)
 def gridded_is_attacking(positions, sizes, colors, head_dirs, cells, cell_counts, cell_size, results):
     """Positions is [N, 2], where the 2 coordinates are the location.
-     Sizes is [N, 1] where the coordinate is the squared radius.
+     Sizes is [N, 1] where the coordinate is the radius.
     Colors is [N, 3], 3 coordinates for RGB values.
     Head_dirs is [N, 2], where the two coordinates are the direction of the head (unit vector).
      
@@ -308,13 +307,17 @@ def gridded_is_attacking(positions, sizes, colors, head_dirs, cells, cell_counts
     if organism >= positions.shape[0]:
         return
     center_x, center_y = positions[organism]
-    size = math.sqrt(sizes[organism])
+    size = sizes[organism]
     color = colors[organism]
 
     attacking_x = center_x + head_dirs[organism, 0] * size
     attacking_y = center_y + head_dirs[organism, 1] * size
     attacking_i = int(attacking_x // cell_size)
     attacking_j = int(attacking_y // cell_size)
+
+    # clamp to the grid
+    attacking_i = max(0, min(cells.shape[1] - 1, attacking_i))
+    attacking_j = max(0, min(cells.shape[0] - 1, attacking_j))
     
     
     for idx in range(cell_counts[attacking_j, attacking_i]):
@@ -322,6 +325,8 @@ def gridded_is_attacking(positions, sizes, colors, head_dirs, cells, cell_counts
         if other == organism:
             continue
     
+        if other >= positions.shape[0]:
+            continue
         other_color = colors[other]
 
         # species that are close in color to one another can't attack each other
@@ -332,18 +337,19 @@ def gridded_is_attacking(positions, sizes, colors, head_dirs, cells, cell_counts
             continue
         
         other_center_x, other_center_y = positions[other]
-        dist = (center_x - other_center_x)**2 + (center_y - other_center_y)**2
+        sq_dist = (attacking_x - other_center_x)**2 + (attacking_y - other_center_y)**2
+        other_size = sizes[other]
 
-        if dist < sizes[other] + 0.5:   # +0.5 to give some leeway
+        if sq_dist < other_size*other_size + 0.5:   # +0.5 to give some leeway
             results[organism, 0] += 1
-            results[other, 1] += sizes[organism]  # damage = size of attacker
+            results[other, 1] += size  # damage = size of attacker
 
 
 @cuda.jit('void(float32[:, :], float32[:],  float32[:, :], float32[:, :], float32[:, :])', 
           fastmath=True)
 def is_attacking(positions, sizes, colors, head_dirs, results):
     """Positions is [N, 2], where the 2 coordinates are the location.
-     Sizes is [N, 1] where the coordinate is the squared radius.
+     Sizes is [N, 1] where the coordinate is the radius.
     Colors is 3 coordinates for RGB values.
 
     Head_dirs is [N, 2], where the two coordinates are the direction of the head (unit vector).
@@ -371,13 +377,14 @@ def is_attacking(positions, sizes, colors, head_dirs, results):
     if color_diff <= 3:
         return
     
-    actual_len = math.sqrt(sizes[org_attacking])
+    attack_size = sizes[org_attacking]
+    vuln_size = sizes[org_vulnerable]
     vulnerable_loc = positions[org_vulnerable]
-    dist = 0.0
+    sq_dist = 0.0
     for d in range(2):
-        dist += (positions[org_attacking, d]+head_dirs[org_attacking, d]*actual_len - \
+        sq_dist += (positions[org_attacking, d]+head_dirs[org_attacking, d]*attack_size - \
                     vulnerable_loc[d]) ** 2
 
-    if dist < sizes[org_vulnerable] + 1:   # +1 to give some leeway
+    if sq_dist < vuln_size*vuln_size + 1:   # +1 to give some leeway
         results[org_attacking, 0] += 1
-        results[org_vulnerable, 1] += sizes[org_attacking]  # damage = size of attacker
+        results[org_vulnerable, 1] += attack_size  # damage = size of attacker
