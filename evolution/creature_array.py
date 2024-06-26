@@ -4,7 +4,7 @@ import torch.nn as nn
 torch.set_grad_enabled(False)
 from numba import cuda
 import logging
-# logging.basicConfig(level=logging.INFO, filename='game.log')
+logging.basicConfig(level=logging.INFO, filename='game.log')
 
 from . import algorithms
 
@@ -22,6 +22,10 @@ class CreatureArray():
         self.max_creatures = max_creatures
         self.grid_size = grid_size
         self.dev = torch.device('cuda')
+
+        def get_offsets(width):
+            return torch.tensor([[i, j] for i in range(-width, width+1) for j in range(-width, width+1)], device=self.dev)
+
         self.offsets = torch.tensor([[-1, -1], [-1, 0], [-1, 1],
                                      [ 0, -1], [ 0, 0], [ 0, 1],
                                      [ 1, -1], [ 1, 0], [ 1, 1]], device=self.dev).unsqueeze(0)
@@ -47,7 +51,7 @@ class CreatureArray():
 
         # inputs: rays (x num_rays*3 colors), memory (x mem_size), food (3x3 = 9), health, energy
         # outputs: move forward/back, rotate, memory (x mem_size)
-        self.layer_sizes = [num_rays*3 + mem_size + 9 + 2, *hidden_sizes, mem_size + 2]
+        self.layer_sizes = [num_rays*3 + mem_size + self.offsets.numel() + 2, *hidden_sizes, mem_size + 2]
 
 
         """weights are each [N, in, out]"""
@@ -71,6 +75,8 @@ class CreatureArray():
         dead = (self.healths <= 0) | (self.energies <= 0)
 
         if not torch.any(dead):
+            logging.info(f"{(self.healths <= 0).sum()} creatures died from health.")
+            logging.info(f"{(self.energies <= 0).sum()} creatures died from energy.")
             return
 
         # the dead drop their food on their ground
@@ -80,7 +86,7 @@ class CreatureArray():
         # print(self.sizes[dead].shape)
         dead_posns = self.positions[dead].long()
         logging.info(f"{dead_posns.shape[0]} creatures have died.")
-        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.sizes[dead]**2 + 10
+        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.sizes[dead]
 
         self.positions = self.positions[~dead]
         self.memories = self.memories[~dead]
@@ -102,7 +108,8 @@ class CreatureArray():
         pos = self.positions.long()
         food = food_grid[pos[..., 1], pos[..., 0]] * pct
         # food_grid.shape[0] ** 2 * 0.1  <- total amount of food that gets added each step
-        self.energies += food - (food_grid.shape[0] ** 2) * 0.1 / self.max_creatures  # lose energy for staying alive
+        # logging.info(f"Food: {food - (self.sizes**2)/15}")
+        self.energies += food - (self.sizes**2)/10  # lose energy for staying alive
         food_grid[pos[..., 1], pos[..., 0]] -= food
         self.ages += 1  # if they've eaten, then they've made it to the next step
 
@@ -188,7 +195,7 @@ class CreatureArray():
         """For sufficiently high energy creatures, create a new creature with mutated genes."""
         # print(self.energies)
         # print(self.sizes)
-        reproducers = self.energies >= (self.sizes**2 * 10)
+        reproducers = self.energies >= (self.sizes**2 * 10) + 1
         # print(reproducers)
         if not torch.any(reproducers):
             return
@@ -200,17 +207,12 @@ class CreatureArray():
             return 
         
         if num_reproducers > max_reproducers:
-            num_reproducers = min(num_reproducers, max_reproducers)
+            num_reproducers = max_reproducers
             non_reproducers = torch.nonzero(reproducers)[num_reproducers:]
-
-            # if you get unlucky to not reproduce, you get to go to max health at least, but take an energy
-            # hit as a result
-            self.healths[non_reproducers] = self.sizes[non_reproducers]**2
-            self.energies[non_reproducers] /= 3.
-
             reproducers[non_reproducers] = False
 
-        self.energies[reproducers] /= 10  # they lose a bunch of energy if they reproduce
+        self.energies[reproducers] -= self.sizes  # subtract off the energy that you've put into the world
+        self.energies[reproducers] /= 15  # then lose a bit extra because this process is lossy
             
         mut = self.mutation_rates[reproducers]
         logging.info(f"Reproducers:\n{reproducers}")

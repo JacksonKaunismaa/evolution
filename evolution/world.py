@@ -12,7 +12,7 @@ from IPython.display import clear_output
 import logging
 from tqdm import trange, tqdm
 
-logging.basicConfig(level=logging.ERROR, filename='game.log')
+logging.basicConfig(level=logging.INFO, filename='game.log')
 
 
 
@@ -33,13 +33,12 @@ def cuda_profile(func):
         times[func.__name__] += start.elapsed_time(end)
         return res
     return wrapper
-    return func
 
 
 class World():
     def __init__(self, start_creatures, max_creatures, size):
         self.size = size
-        self.food_grid = torch.rand((size, size), device='cuda') * 5
+        self.food_grid = torch.rand((size, size), device='cuda') * 1
         # pad with -inf on all sides
         self.food_grid = F.pad(self.food_grid, (1, 1, 1, 1), mode='constant', value=0)
         self.creatures = CreatureArray(start_creatures, max_creatures, size)
@@ -168,11 +167,21 @@ class World():
         self.creatures.reproduce()
 
     @cuda_profile
-    def energy_grow(self):
+    def grow_food(self, max_food=10.):
+        """The higher step_size is, the faster food grows (and the faster corpses decay)."""
         # don't grow on squares that are occupied by creatures
+
+        # maximum growth in a single step is step_size*max_food roughly (ignoring negatives, which are rare)
+        # creatures lose (self.sizes**2)/10 energy per step at least. Thus, the energy leaving the system is sum(size**2)/10
+        # energy entering is step_size*max_food*(grid_size**2), so we should set step size to sum(size**2)/max_food/(grid_size**2)/10
+    
+        step_size = torch.sum(self.creatures.sizes**2)/max_food/(self.size**2)/10
+
         posns = self.creatures.positions.long()
-        self.food_grid[posns[:, 1], posns[:, 0]] -= 0.1
-        self.food_grid[1:-1, 1:-1] += 0.1
+        self.food_grid[posns[:, 1], posns[:, 0]] -= 0.3  # technically this allows negative food. We can think of this as "overfeeding" -> toxicity.
+        # grow food and decay dead corpses slowly
+        growing = self.food_grid[1:-1, 1:-1]   # *0.1 on the decay side to make corpses decay slow but food grow fast
+        torch.where(growing < max_food, growing-step_size*(growing-max_food), growing-step_size*(growing-max_food)*0.1, out=growing)
 
     def write_checkpoint(self, path):
         torch.save({'food_grid': self.food_grid, 
@@ -244,7 +253,9 @@ class World():
         ax.set_xlim([0, food_grid_cpu.shape[1]])
         ax.set_ylim([0, food_grid_cpu.shape[0]])
         ax.set_aspect('equal')
-        plt.legend()
+        plt.xticks([])
+        plt.yticks([])
+        # plt.legend()
         # plt.gca().invert_yaxis()
         plt.show()
 
@@ -400,7 +411,7 @@ def main():
     #             torch.random.manual_seed(j)
 
         times.clear()
-        game = World(16, 32, 15)
+        game = World(16, 64, 50)
         fps = 30
         pcts = []
         for i in range(99999):
@@ -414,9 +425,9 @@ def main():
             # pcts.append(pct_bad)
             celled_world = game.compute_grid_setup()
             collisions = game.trace_rays_grid(*celled_world)
-            if i % 10 == 0:
+            if i % 20 == 0:
                 game.visualize(None, show_rays=False) 
-                time.sleep(1/(2*fps))
+                # time.sleep(1/(2*fps))
             # input()
             stimuli = game.collect_stimuli(collisions)
             # print(stimuli.shape)
@@ -433,17 +444,20 @@ def main():
             attacks2 = game.compute_gridded_attacks(*celled_world)
         
             game.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
+            if game.creatures.positions.shape[0] == 0:
+                logging.info("Mass extinction!")
+                break
 
             game.creatures_eat()   # give energy for being in a square, and then reduce that energy
 
             game.creatures_reproduce()    # allow high energy individuals to reproduce
 
-            game.energy_grow()   # give food time to grow
+            game.grow_food()   # give food time to grow
             # game.visualize(None)
             # input()
             # time.sleep(1/(2*fps))
             # # game.maybe_environmental_change()   # mass extinction time?
-        return times
+        return times, game
         # if (max_creat, cell_size) not in results:
         #     results[(max_creat, cell_size)] = []
         # results[(max_creat, cell_size)].append((sum(times.values()), np.percentile(pcts, 98)))
