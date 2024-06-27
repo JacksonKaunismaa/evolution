@@ -18,13 +18,15 @@ class CreatureArray():
     def __init__(self, cfg: Config):
         self.cfg = cfg
 
-        self.pad = self.cfg.food_sight
-        self.offsets = torch.tensor([[i, j] for i in range(-self.pad, self.pad+1) 
-                                     for j in range(-self.pad, self.pad+1)], device='cuda').unsqueeze(0)
+        pad = self.cfg.food_sight
+        self.posn_bounds = (pad, cfg.size+pad-1)
+        self.offsets = torch.tensor([[i, j] for i in range(-pad, pad+1) 
+                                     for j in range(-pad, pad+1)], device='cuda').unsqueeze(0)
 
         # objects need to stay within [width, size-width]
-        self.positions = torch.empty(cfg.start_creatures, 2, device='cuda').uniform_(self.pad, cfg.size-self.pad)
+        self.positions = torch.empty(cfg.start_creatures, 2, device='cuda').uniform_(*self.posn_bounds)
         self.sizes = torch.empty(cfg.start_creatures, device='cuda').uniform_(*cfg.init_size_range)
+        logging.info(f"Initial sizes: {self.sizes}")
         self.memories = torch.zeros(cfg.start_creatures, cfg.mem_size, device='cuda')
         self.energies = cfg.init_energy(self.sizes)
         self.healths = cfg.init_health(self.sizes)
@@ -56,21 +58,29 @@ class CreatureArray():
         
 
     def forward(self, inputs):
-        """Inputs: [N, 1, num_rays + mem_size + 9 + 2]"""
+        """Inputs: [N, 1, F] tensor"""
         # print([w.shape for w in self.weights], [b.shape for b in self.biases])
         for w, b in zip(self.weights, self.biases):
             # print(inputs.shape, '@', w.shape, '+', b.shape)
             inputs = torch.tanh(inputs @ w + b)
         # print('out' ,inputs.shape)
-        return inputs.squeeze(dim=1)
+        outputs = inputs.squeeze(dim=1)  # [N, O]
+        self.memories = outputs[:, 2:]  # only 2 outputs actually do something, so the rest are memory
+        return outputs
     
     def kill_dead(self, food_grid):
-        dead = (self.healths <= 0) | (self.energies <= 0)
+        health_deaths = (self.healths <= 0)
+        energy_deaths = (self.energies <= 0)
+        dead = health_deaths | energy_deaths
 
         if not torch.any(dead):
-            logging.info(f"{(self.healths <= 0).sum()} creatures died from health.")
-            logging.info(f"{(self.energies <= 0).sum()} creatures died from energy.")
             return
+
+        logging.info(f"{health_deaths.sum()} creatures died from health.")
+        logging.info(f"{energy_deaths.sum()} creatures died from energy.")
+
+        logging.info(f"Dead from health: {self.sizes[health_deaths]}")
+        logging.info(f"Dead from energy: {self.sizes[energy_deaths]}")
 
         # the dead drop their food on their ground
         # print(self.positions[dead].long().shape)
@@ -79,7 +89,7 @@ class CreatureArray():
         # print(self.sizes[dead].shape)
         dead_posns = self.positions[dead].long()
         logging.info(f"{dead_posns.shape[0]} creatures have died.")
-        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.sizes[dead]
+        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[dead])
 
         self.positions = self.positions[~dead]
         self.memories = self.memories[~dead]
@@ -101,7 +111,10 @@ class CreatureArray():
         pos = self.positions.long()
         food = food_grid[pos[..., 1], pos[..., 0]] * self.cfg.eat_pct
         # gain food for eating and lose food for staying alive
-        self.energies += food - self.cfg.alive_cost(self.sizes)
+        alive_cost =  self.cfg.alive_cost(self.sizes)
+        logging.info(f"Food: {food}")
+        logging.info(f"Alive cost: {alive_cost}")
+        self.energies += food - alive_cost
         food_grid[pos[..., 1], pos[..., 0]] -= food
         self.ages += 1  # if they've eaten, then they've made it to the next step
 
@@ -118,12 +131,6 @@ class CreatureArray():
         # get the food in the creature's vicinity
         food = self.extract_food_windows(self.positions.long(), food_grid)  # [N, 9]
         rays_results = collisions.view(self.positions.shape[0], -1)  # [N, 3*num_rays]
-
-        # print(rays_results.shape, rays_results.dtype, rays_results.device,
-        #       food.shape, food.dtype, food.device,
-        #       self.memories.shape, self.memories.dtype, self.memories.device,
-        #       self.healths.unsqueeze(1).shape, self.healths.unsqueeze(1).dtype, self.healths.unsqueeze(1).device,
-        #       self.energies.unsqueeze(1).shape, self.energies.unsqueeze(1).dtype, self.energies.unsqueeze(1).device)
 
         return torch.cat([rays_results, 
                           self.memories, 
@@ -145,6 +152,8 @@ class CreatureArray():
         rotate = self.cfg.rotate_amt(outputs[:,1], self.sizes)
         rotate_energy = self.cfg.rotate_cost(rotate, self.sizes)
         
+        logging.info(f"Rotate amt: {rotate}")
+        logging.info(f"Rotate cost: {rotate_energy}")
         self.energies -= rotate_energy
         
         rotation_matrix = torch.empty((outputs.shape[0], 2, 2), device='cuda')  # [N, 2, 2]
@@ -165,9 +174,11 @@ class CreatureArray():
         # maybe add some acceleration/velocity thing instead
         move = self.cfg.move_amt(outputs[:,0], self.sizes)
         move_cost = self.cfg.move_cost(move, self.sizes)
+        logging.info(f"Move amt: {move}")
+        logging.info(f"Move cost: {move_cost}")
         self.energies -= move_cost
         self.positions += self.head_dirs * move.unsqueeze(1)   # move the object's to new position
-        self.positions = torch.clamp(self.positions, self.pad, self.cfg.size-self.pad)  # don't let it go off the edge
+        self.positions = torch.clamp(self.positions, *self.posn_bounds)  # don't let it go off the edge
 
     def do_attacks(self, attacks):
         """Attacks is [N, 2], where the 1st coordinate is an integer indicating how many things the 
@@ -175,9 +186,11 @@ class CreatureArray():
         organism is taking from other things attacking it"""
 
         # print('nrg_before', self.energies)
-        logging.info(f'Attacks:\n{attacks}')
+        # logging.info(f'Attacks:\n{attacks}')
         # self.energies -= attacks[:,0] * self.sizes * 0.1  # takes 0.1 * size to do an attack
-        self.energies -= self.cfg.attack_cost(attacks[:,0], self.sizes)
+        attack_cost = self.cfg.attack_cost(attacks[:,0], self.sizes)
+        self.energies -= attack_cost
+        logging.info(f"Attack energy: {attack_cost}")
         self.healths -= attacks[:,1]
 
 
@@ -200,16 +213,17 @@ class CreatureArray():
             non_reproducers = torch.nonzero(reproducers)[num_reproducers:]
             reproducers[non_reproducers] = False
 
-        self.energies[reproducers] -= self.sizes  # subtract off the energy that you've put into the world
+        self.energies[reproducers] -= self.sizes[reproducers]  # subtract off the energy that you've put into the world
         self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
+        logging.info(f"Energy after reproduce: {self.energies[reproducers]}")
             
         mut = self.mutation_rates[reproducers]
-        logging.info(f"Reproducers:\n{reproducers}")
-        logging.info(f"Mut: {mut}")
-        logging.info(f"self.sizes[reproducers]: {self.sizes[reproducers], self.sizes[reproducers].shape}")
-        logging.info(f"self.colors[reproducers]: {self.colors[reproducers], self.colors[reproducers].shape}")
-        logging.info(f"mut[:,0]: {mut[:,0], mut[:,0].shape}")
-        logging.info(f"mut[:,1]: {mut[:,1], mut[:,1].shape}")
+        logging.info(f"Num reproducers:{reproducers.sum()}")
+        # logging.info(f"Mut: {mut}")
+        logging.info(f"Reproducers sizes: {self.sizes[reproducers]}")
+        logging.info(f"Reproducers colors: {self.colors[reproducers]}")
+        # logging.info(f"mut[:,0]: {mut[:,0], mut[:,0].shape}")
+        # logging.info(f"mut[:,1]: {mut[:,1], mut[:,1].shape}")
         size_perturb = torch.randn_like(self.sizes[reproducers]) * mut[:,0]
         color_perturb = torch.randn_like(self.colors[reproducers]) * mut[:, 1, None]
         ray_perturb = torch.randn_like(self.rays[reproducers]) * mut[:, 2, None, None]
@@ -222,11 +236,11 @@ class CreatureArray():
         new_sizes = torch.clamp_min(self.sizes[reproducers] + size_perturb, self.cfg.size_min)
         new_colors = torch.clamp(self.colors[reproducers] + color_perturb, 1, 255)
         new_weights = [w[reproducers] + wp for w, wp in zip(self.weights, weight_perturbs)]
-        logging.info(f"existing bias shapes: {[b[reproducers].shape for b in self.biases]}")
-        logging.info(f"perturb bias shapse: {[bp.shape for bp in bias_perturbs]}")
-        logging.info(f"bias mut shape: {mut[:, 4, None].shape}")
+        # logging.info(f"existing bias shapes: {[b[reproducers].shape for b in self.biases]}")
+        # logging.info(f"perturb bias shapse: {[bp.shape for bp in bias_perturbs]}")
+        # logging.info(f"bias mut shape: {mut[:, 4, None].shape}")
         new_biases = [b[reproducers] + bp for b, bp in zip(self.biases, bias_perturbs)]
-        logging.info(f"Bias sahpes: {[b.shape for b in new_biases]}")
+        # logging.info(f"Bias sahpes: {[b.shape for b in new_biases]}")
         new_mutation_rates = mut + mut_rate_perturb
 
         new_memories = torch.zeros_like(self.memories[reproducers])
@@ -242,7 +256,7 @@ class CreatureArray():
         new_rays[..., 2] = torch.clamp_min(new_rays[...,2], self.cfg.min_ray_dist) 
 
         pos_perturb = torch.randn_like(self.positions[reproducers]) * new_sizes.unsqueeze(1) * self.cfg.reproduce_dist
-        new_positions = torch.clamp(self.positions[reproducers] + pos_perturb, self.pad, self.cfg.size-self.pad)
+        new_positions = torch.clamp(self.positions[reproducers] + pos_perturb, *self.posn_bounds)
 
         self.positions = torch.cat([self.positions, new_positions], dim=0)
         self.sizes = torch.cat([self.sizes, new_sizes], dim=0)

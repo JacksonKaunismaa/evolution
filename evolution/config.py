@@ -1,6 +1,7 @@
 import dataclasses
 from typing import Tuple
 import torch
+torch.set_grad_enabled(False)
 from numba import cuda
 
 
@@ -28,7 +29,7 @@ class ConfigFunction:
     
     @staticmethod
     def abs_exp(x, y):
-        return 1 - torch.exp(x * torch.abs(y))
+        return 1 - torch.exp(-torch.abs(x) * y)
 
     def __call__(self, *args):
         return self.func(*args) * self.mul
@@ -85,18 +86,18 @@ class Config:
         cache_size (int): Number of creatures to cache for gridded/celled ray tracing (must be a power of 2).
     """
     ### World
-    size: int = 100  # width of the world in units
-    start_creatures: int = 32 # number of creatures at the beginning
-    max_creatures: int = 100 # maximum number of creatures
+    size: int = 125  # width of the world in units
+    start_creatures: int = 64 # number of creatures at the beginning
+    max_creatures: int = 256 # maximum number of creatures
 
 
     ### Food
-    init_food_scale: float = 3.0    # food will be initialized uniformly to be in [0, init_food_scale]
-    eat_pct: float = 0.2       # what percentage of food in a given cell that creatures can eat in a turn
-    max_food: float = 10.     # maximum amount of food in a cell (decays past this value)
-    food_cover_decr: float = 0.3  # if a creature occupies a cell, the food in that cell be decreased by this amount each step
-    food_decay_rate: float = 0.01 # how fast food decays (when over max_food)
-    food_growth_rate: float = 0.1  # scale to apply to food growth rate
+    init_food_scale: float = 8.0    # food will be initialized uniformly to be in [0, init_food_scale]
+    eat_pct: float = 0.1       # what percentage of food in a given cell that creatures can eat in a turn
+    max_food: float = 15.     # maximum amount of food in a cell (decays past this value)
+    food_cover_decr: float = 0.2  # if a creature occupies a cell, the food in that cell be decreased by this amount each step
+    food_decay_rate: float = 0.05 # how fast food decays (when over max_food)
+    food_growth_rate: float = 10.0  # scale to apply to food growth rate
 
 
     ### Creatures
@@ -105,44 +106,45 @@ class Config:
     mem_size: int = 10 # how many output values/input values can be used for memory
 
     # vision
-    food_sight: int = 1 # how many squares (grid) away creatures can see food (1 => a 3x3 window centered on them)
+    food_sight: int = 2 # how many squares (grid) away creatures can see food (1 => a 3x3 window centered on them)
     num_rays: int = 32 # number of rays creatures can see with
     min_ray_dist: float = 0.1 # minimum distance of rays
 
     # vitality
-    init_size_range: Tuple[float, float] = (0.5, 1.5)  # (min, max) size of creatures at the beginning
+    init_size_range: Tuple[float, float] = (0.5, 4.5)  # (min, max) size of creatures at the beginning
     # func(size)*scale to determine initial energy
-    init_energy: ConfigFunction = ConfigFunction('linear', 0.1) 
+    init_energy: ConfigFunction = ConfigFunction('linear', 1.0) 
     # func(size)*scale to determine initial energy
     init_health: ConfigFunction = ConfigFunction('square', 1.0)   
     size_min: float = 0.1  # minimum size of creatures (after mutating)
 
     # mutation
-    init_mut_rate_range: Tuple[float, float] = (0.01, 0.02)  # (min, max) mutation rate at the beginning
+    init_mut_rate_range: Tuple[float, float] = (0.01, 0.04)  # (min, max) mutation rate at the beginning
 
 
 
     ### Energy/Movement costs
     # func(size) that determines the cost of being alive at each step
-    alive_cost: ConfigFunction = ConfigFunction('square', 0.1)  
+    alive_cost: ConfigFunction = ConfigFunction('linear', 0.03)  
     # func(out, size) that determines the amt to rotate
-    rotate_amt: ConfigFunction = ConfigFunction('linear_frac', torch.pi/20)  
+    rotate_amt: ConfigFunction = ConfigFunction('linear_frac', torch.pi/10)  
     # func(rotate_amt, size) to determine rotation cost
-    rotate_cost: ConfigFunction = ConfigFunction('abs_exp', 1.)  
+    rotate_cost: ConfigFunction = ConfigFunction('abs_exp', 0.2)  
     # func(output, size) to determine movement amount
-    move_amt: ConfigFunction = ConfigFunction('linear_frac', 0.1)
+    move_amt: ConfigFunction = ConfigFunction('linear_frac', 0.13)
     # func(move_amt, size) to determine movement cost  
-    move_cost: ConfigFunction = ConfigFunction('abs_exp', 2.)  
+    move_cost: ConfigFunction = ConfigFunction('abs_exp', 0.2)  
     
 
 
     ### Attack
     # func(num_attacks, size) to determine attack cost
-    attack_cost: ConfigFunction = ConfigFunction('bilinear', 0.1)  
+    attack_cost: ConfigFunction = ConfigFunction('bilinear', 0.05)  
     # func(size) to determine the amount of damage done in an attack
-    attack_dmg: ConfigFunction = ConfigFunction('linear', 1.0) 
+    attack_dmg: ConfigFunction = ConfigFunction('square', 1.5) 
     attack_ignore_color_dist: float = 3.0 # if sum(abs(color1-color2)) < this, they don't hurt each other
     attack_dist_bonus: float = 0.5  # if creatures are within the dist_bonus, they can attack each other
+    dead_drop_food: ConfigFunction = ConfigFunction('linear', 1.)  # func(size) to determine how much food a creature drops when it dies
 
 
 

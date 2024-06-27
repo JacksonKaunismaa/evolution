@@ -17,11 +17,9 @@ from typing import Callable
 
 logging.basicConfig(level=logging.INFO, filename='game.log')
 
-
-
 from . import algorithms
 from .creature_array import CreatureArray
-from .config import Config
+from .config import Config, ConfigFunction
 
 start = torch.cuda.Event(enable_timing=True)
 end = torch.cuda.Event(enable_timing=True)
@@ -48,8 +46,9 @@ class World():
         # pad with -inf on all sides
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
         self.creatures: CreatureArray = CreatureArray(cfg)
+        self.time = 0
 
-    @cuda_profile
+    #@cuda_profile
     def trace_rays(self):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
         rays = self.creatures.rays
@@ -62,7 +61,7 @@ class World():
         algorithms.correct_ray_trace[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, collisions)
         return collisions
 
-    @cuda_profile
+    #@cuda_profile
     def compute_grid_setup(self):
         """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
         (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
@@ -78,13 +77,13 @@ class World():
         cells = torch.full((num_cells, num_cells, self.cfg.max_per_cell), -1, dtype=torch.int32, device='cuda')
         cell_counts = torch.zeros((num_cells, num_cells), dtype=torch.int32, device='cuda')
         block_size = 512
-        grid_size = rays.shape[0] // block_size + 1
+        grid_size = self.population // block_size + 1
 
         algorithms.setup_grid[grid_size, block_size](posns, sizes, cells, cell_counts, self.cfg.cell_size)
         return cells, cell_counts  # argument return order should match trace_rays_grid
     
 
-    @cuda_profile
+    #@cuda_profile
     def trace_rays_grid(self, cells, cell_counts):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
 
@@ -101,23 +100,23 @@ class World():
         return collisions#, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
     
 
-    @cuda_profile
+    #@cuda_profile
     def collect_stimuli(self, collisions):
         """Returns [N, F] array for all creature stimuli."""
         return self.creatures.collect_stimuli(collisions, self.food_grid)
     
-    @cuda_profile
+    #@cuda_profile
     def think(self, stimuli):
         """Return [N, O] array of outputs of the creatures' neural networks.."""
         return self.creatures.forward(stimuli.unsqueeze(1))
     
-    @cuda_profile
+    #@cuda_profile
     def move_creatures(self, outputs):
         """Rotate and move all creatures"""
         self.creatures.rotate_creatures(outputs)
         self.creatures.move_creatures(outputs)
 
-    @cuda_profile
+    #@cuda_profile
     def compute_attacks(self):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
@@ -125,11 +124,11 @@ class World():
         sizes = self.creatures.sizes
         colors = self.creatures.colors
         head_dirs = self.creatures.head_dirs
-        tr_results = torch.zeros((posns.shape[0], 2), device='cuda')
+        tr_results = torch.zeros((self.population, 2), device='cuda')
 
         # figure out who is attacking who
         block_size = (32, 32)
-        grid_size = (posns.shape[0]//block_size[0] + 1, posns.shape[0]//block_size[0] + 1)
+        grid_size = (self.population//block_size[0] + 1, self.population//block_size[0] + 1)
         # blocks_per_grid (N/32, N/32), threads_per_block (32, 32)
         # print(grid_size, block_size)
         # print(posns.shape, sizes.shape, colors.shape, head_dirs.shape, nb_results.shape)
@@ -138,7 +137,7 @@ class World():
                                                                  head_dirs, tr_results)
         return tr_results
     
-    @cuda_profile
+    #@cuda_profile
     def compute_gridded_attacks(self, cells, cell_counts):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
@@ -148,38 +147,39 @@ class World():
         head_dirs = self.creatures.head_dirs
 
         # figure out who is attacking who
-        tr_results = torch.zeros((posns.shape[0], 2), device='cuda')
+        tr_results = torch.zeros((self.population, 2), device='cuda')
         block_size = 512
-        grid_size = posns.shape[0] // block_size + 1
+        grid_size = self.population // block_size + 1
         algorithms.gridded_is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, head_dirs, 
                                                                          cells, cell_counts, 
                                                                          self.cfg.cell_size, tr_results)
         return tr_results
 
-    @cuda_profile
+    #@cuda_profile
     def do_attacks(self, tr_results):
         # update health and energy
         self.creatures.do_attacks(tr_results)
         self.creatures.kill_dead(self.food_grid)
 
-    @cuda_profile
+    #@cuda_profile
     def creatures_eat(self):
         self.creatures.eat(self.food_grid)
 
-    @cuda_profile
+    #@cuda_profile
     def creatures_reproduce(self):
         self.creatures.reproduce()
 
-    @cuda_profile
+    #@cuda_profile
     def grow_food(self):
         """The higher step_size is, the faster food grows (and the faster corpses decay)."""
         # don't grow on squares that are occupied by creatures
 
         # maximum growth in a single step is step_size*max_food roughly (ignoring negatives, which are rare)
-        # creatures lose (self.sizes**2)/10 energy per step at least. Thus, the energy leaving the system is sum(size**2)/10
+        # creatures lose alive_cost energy per step at least. so the energy leaving the system is the sum of this amount
         # energy entering is step_size*max_food*(grid_size**2), so we should set step size to sum(size**2)/max_food/(grid_size**2)/10
     
-        step_size = torch.sum(self.creatures.sizes**2)/self.cfg.max_food/(self.cfg.size**2)
+        step_size = torch.sum(self.cfg.alive_cost(self.creatures.sizes))/self.cfg.max_food/(self.cfg.size**2)
+        logging.info(f"Food growth step size: {step_size}")
 
         posns = self.creatures.positions.long()
         # this allows negative food. We can think of this as "overfeeding" -> toxicity.
@@ -193,6 +193,11 @@ class World():
                     growing - step_size*(growing-self.cfg.max_food)*self.cfg.food_growth_rate, 
                     growing - step_size*(growing-self.cfg.max_food)*self.cfg.food_decay_rate, 
                     out=growing)
+        
+    
+    @property
+    def population(self):
+        return self.creatures.positions.shape[0]
 
     def write_checkpoint(self, path):
         torch.save({'food_grid': self.food_grid, 
@@ -206,16 +211,15 @@ class World():
         self.creatures = checkpoint['creatures']
         self.cfg = checkpoint['cfg']
 
-    def step(self, i, visualize=True) -> bool:
-        logging.info(f"{self.creatures.positions.shape[0]} creatures alive.")
+    def step(self, visualize=True) -> bool:
+        logging.info(f"{self.population} creatures alive.")
         logging.info(f"Health:\n {self.creatures.healths}")
         logging.info(f"Energy:\n {self.creatures.energies}")
 
         celled_world = self.compute_grid_setup()
-        if i == 24:
-            return celled_world
         collisions = self.trace_rays_grid(*celled_world)
-        if i % 20 == 0 and visualize:
+        if self.time % 60 == 0 and visualize:
+            self.write_checkpoint('game.ckpt')
             self.visualize(None, show_rays=False) 
 
         stimuli = self.collect_stimuli(collisions)
@@ -228,16 +232,15 @@ class World():
         attacks2 = self.compute_gridded_attacks(*celled_world)
     
         self.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
-        if self.creatures.positions.shape[0] == 0:
+        if self.population == 0:
             logging.info("Mass extinction!")
             return False
 
-        self.creatures_eat()   # give energy for being in a square, and then reduce that energy
         self.creatures_reproduce()    # allow high energy individuals to reproduce
+        self.creatures_eat()   # give energy for being in a square, and then reduce that energy
         self.grow_food()   # give food time to grow
-
+        self.time += 1
         return True
-
 
     def visualize(self, collisions, show_rays=True):
         clear_output(wait=True)
@@ -300,6 +303,7 @@ class World():
         plt.yticks([])
         # plt.legend()
         # plt.gca().invert_yaxis()
+        plt.title(f'Step {self.time} - Population {self.population}')
         plt.show()
 
 
@@ -451,13 +455,14 @@ def benchmark():
     times.clear()
 
     torch.manual_seed(1)
-    cfg = Config(size=10, start_creatures=5, max_creatures=10, mem_size=4)
+    cfg = Config(size=10, start_creatures=5, max_creatures=10, mem_size=4, init_food_scale=5.0, food_cover_decr=0.0,
+                 alive_cost=ConfigFunction('linear', 0.0))
     game = World(cfg)
 
     pr = cProfile.Profile()
     pr.enable()
     for i in range(512):
-        if not game.step(i, visualize=False):   # we did mass extinction before finishing
+        if not game.step(visualize=False):   # we did mass extinction before finishing
             return game
 
     pr.disable()
@@ -466,25 +471,15 @@ def benchmark():
     ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
     ps.print_stats()
     print(s.getvalue())
-
-# @functools.lru_cache(maxsize=None)
-# def runner(cfg):
-#     time.sleep(5)
-#     return cfg.size
+    return times
 
 
-# def test_cache():
-#     c = Config()
-#     print(runner(c))
-#     print(runner(c))
-
-
-
-def main():
+def main(cfg):
     times.clear()
-    game = World(Config())
-    for i in range(99999):
-        game.step(i)
+    game = World(cfg)
+    for _ in range(99999):
+        if not game.step():
+            break
     return times, game
 
         
