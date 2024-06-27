@@ -3,7 +3,38 @@ from numba import cuda
 from numba import jit
 import numba as nb
 import math
+from functools import partial, wraps
+import functools
+from typing import Callable, Dict, Tuple
 
+
+from . import config
+
+
+# This approach fundamentally won't work, because you can't do stuff like cfg.attack_dist_bonus inside of a cuda.jit.
+# We could do this if something like writing to locals() was a good idea, but it's not apparently.
+
+# annotations = {}
+# def annotate_cuda(*jit_args, **jit_kwargs):
+#     """Given a Config object, we want to change what our compiled functions are. Therefore, something
+#     that is able to substitute non-numerical arguments into the cuda functions *before* they are compiled
+#     is necessary. This is a decorator that does that. Functions would be called like
+#     `algorithms.setup_grid(cfg)[blocks, threads](*args, **kwargs)`."""
+#     def decorator(func):
+#         @wraps(func)
+#         def wrapper(cfg, needed_locals: list):
+#             key = (func.__name__, str(cfg))
+            
+#             if key not in annotations:
+#                 def partial_func(*args, **kwargs):
+#                     return partial(func, cfg=cfg)(*args, **kwargs)
+#                 # partial_func = partial(func, cfg=cfg)
+#                 # partial_func.__defaults__ = func.__defaults__
+#                 annotations[key] = cuda.jit(*jit_args, **jit_kwargs)(partial_func)
+#             return annotations[key]
+#         return wrapper
+#     return decorator
+    
 
 @cuda.jit('void(float32[:, :, :], float32[:, :], float32[:], float32[:, :], float32[:, :, :])', 
           fastmath=True)
@@ -174,182 +205,195 @@ def setup_grid(positions, sizes, cells, cell_counts, cell_size):
             cells[j, i, old_count] = creature
 
 
-@cuda.jit('void(float32[:, :, :], float32[:, :], float32[:], float32[:, :], int32[:, :, :], int32[:, :], float32, float32[:, :, :])',
-            fastmath=True)
-def trace_rays_grid(rays, positions, sizes, colors, cells, cell_counts, cell_size, results):
+@functools.lru_cache(maxsize=None)
+def trace_rays_grid(cfg: config.Config):
     """Positions is [N, 2], where the 2 coordinates are the location.
-     Sizes is [N, 1] where the coordinate is the radius.
-     Rays is [N, R, 3], where N = organisms, R = rays per organism, and the first two coordinates are the direction (unit vector),
-       and the last coordinate is the max length of the ray.
+    Sizes is [N, 1] where the coordinate is the radius.
+    Rays is [N, R, 3], where N = organisms, R = rays per organism, and the first two coordinates are the direction (unit vector),
+    and the last coordinate is the max length of the ray.
     
     Cells is [S, S, M], where S is the # cells, and M is the maximum number of creatures in a given cell.
     cell_counts is [S, S], where the coordinate is the number of creatures in a given cell.
     Cell_size is the size of the cell in the partioned world.
 
     Results is [N, R, 3], where the 3 coordinates are the color of the creature that the ray intersects with (0 if nothing)."""
-    # one thread per ray
-    organism = cuda.blockIdx.x
-    ray = cuda.threadIdx.x
 
-    if organism >= rays.shape[0] or ray >= rays.shape[1]:  # check that we are in bounds
-        return
-    
-    # extract information about the ray
-    ray_x, ray_y = rays[organism, ray, :2]
-    ray_len = rays[organism, ray, 2]
-    our_x, our_y = positions[organism]
+    cache_size = cfg.cache_size
 
-    # set up cache for checking (so we don't double check objects)
-    cache_size = 32   # needs to be a power of 2, defines the number of low-order bits we check
-    check_array = cuda.local.array(cache_size, nb.int64)
-    for i in range(cache_size):
-        check_array[i] = -1
-    mask = cache_size - 1
-    
-    # getting our starting and ending grid coordinates
-    x = int(our_x // cell_size)
-    y = int(our_y // cell_size)
-    end_x = int((our_x + ray_len * ray_x) // cell_size)
-    end_y = int((our_y + ray_len * ray_y) // cell_size)
 
-    # Bresenham's line algorithm initialization
-    dx = abs(end_x - x)
-    dy = abs(end_y - y)
-    sx = 1 if x < end_x else -1
-    sy = 1 if y < end_y else -1
-    err = dx - dy
-    min_t = 0.
+    @cuda.jit('void(float32[:, :, :], float32[:, :], float32[:], float32[:, :], int32[:, :, :], int32[:, :], float32, float32[:, :, :])',
+                fastmath=True)
+    def _trace_rays_grid(rays, positions, sizes, colors, cells, cell_counts, cell_size, results):
+        # one thread per ray
+        organism = cuda.blockIdx.x
+        ray = cuda.threadIdx.x
 
-    grid_size = cells.shape[0]
-    
-    while True:
-        # if outside the grid
-        if x < 0 or x >= grid_size or y < 0 or y >= grid_size:
-            break
-
-        # how many objects in this cell?
-        cell_count = cell_counts[y, x]
+        if organism >= rays.shape[0] or ray >= rays.shape[1]:  # check that we are in bounds
+            return
         
-        for i in range(cell_count): # for each object that is in this cell, do the distance check
-            other_organism = cells[y, x, i]
-            if other_organism == organism:  # don't check ourselves
-                continue
+        # extract information about the ray
+        ray_x, ray_y = rays[organism, ray, :2]
+        ray_len = rays[organism, ray, 2]
+        our_x, our_y = positions[organism]
 
-            # check if we have already checked this organism
-            cache_idx = other_organism & mask  # could get some issues with "dueling" cache entries
-            if check_array[cache_idx] == other_organism:
-                continue
+        # set up cache for checking (so we don't double check objects)
+        # cache_size = 32   # needs to be a power of 2, defines the number of low-order bits we check
+        check_array = cuda.local.array(cache_size, nb.int64)
+        for i in range(cache_size):
+            check_array[i] = -1
+        mask = cache_size - 1
+        
+        # getting our starting and ending grid coordinates
+        x = int(our_x // cell_size)
+        y = int(our_y // cell_size)
+        end_x = int((our_x + ray_len * ray_x) // cell_size)
+        end_y = int((our_y + ray_len * ray_y) // cell_size)
 
-            # extract info about the other organism
-            other_x, other_y = positions[other_organism]
-            other_rad = sizes[other_organism]
-            sq_other_rad = other_rad*other_rad
+        # Bresenham's line algorithm initialization
+        dx = abs(end_x - x)
+        dy = abs(end_y - y)
+        sx = 1 if x < end_x else -1
+        sy = 1 if y < end_y else -1
+        err = dx - dy
+        min_t = 0.
+
+        grid_size = cells.shape[0]
+        
+        while True:
+            # if outside the grid
+            if x < 0 or x >= grid_size or y < 0 or y >= grid_size:
+                break
+
+            # how many objects in this cell?
+            cell_count = cell_counts[y, x]
             
-            # calculate distance from our center to their center
-            sq_center_dist = (other_x - our_x)**2 + (other_y - our_y)**2
+            for i in range(cell_count): # for each object that is in this cell, do the distance check
+                other_organism = cells[y, x, i]
+                if other_organism == organism:  # don't check ourselves
+                    continue
 
-            # if we are inside, then we can quit immedieately
-            if sq_center_dist < sq_other_rad:
-                for c in range(3):
-                    results[organism, ray, c] = colors[other_organism, c]
-                return
+                # check if we have already checked this organism
+                cache_idx = other_organism & mask  # could get some issues with "dueling" cache entries
+                if check_array[cache_idx] == other_organism:
+                    continue
 
-            # calculate t value of the closest point on the ray to the center of the circle
-            opt_t = (other_x - our_x) * ray_x + (other_y - our_y) * ray_y
+                # extract info about the other organism
+                other_x, other_y = positions[other_organism]
+                other_rad = sizes[other_organism]
+                sq_other_rad = other_rad*other_rad
+                
+                # calculate distance from our center to their center
+                sq_center_dist = (other_x - our_x)**2 + (other_y - our_y)**2
 
-            if opt_t < 0:  # if negative it can't possible intersect it (since we aren't inside)
-                continue   # since the ray points in the opposite direction of the line connecting the 2 centers
+                # if we are inside, then we can quit immedieately
+                if sq_center_dist < sq_other_rad:
+                    for c in range(3):
+                        results[organism, ray, c] = colors[other_organism, c]
+                    return
 
-            discriminant = opt_t**2 + sq_other_rad - sq_center_dist
-            if discriminant < 0:  # no intersection
-                continue
-            
-            t_intersect = opt_t - math.sqrt(discriminant)  # compute actual intersection
-            if t_intersect > ray_len:  # too far away
-                continue
+                # calculate t value of the closest point on the ray to the center of the circle
+                opt_t = (other_x - our_x) * ray_x + (other_y - our_y) * ray_y
 
-            # if its 0 then its the first object. Else, it needs to be closer than the previous object
-            if results[organism, ray, 0] == 0 or opt_t < min_t:
-                for c in range(3):  # copy in the color
-                    results[organism, ray, c] = colors[other_organism, c]
-                min_t = opt_t
-            
-        # do Bresenhem line steps
-        if x == end_x and y == end_y:
-            break
-        e2 = 2 * err
-        if e2 > -dy:
-            err -= dy
-            x += sx
-        if e2 < dx:
-            err += dx
-            y += sy
+                if opt_t < 0:  # if negative it can't possible intersect it (since we aren't inside)
+                    continue   # since the ray points in the opposite direction of the line connecting the 2 centers
 
-@cuda.jit('void(float32[:, :], float32[:], float32[:, :], float32[:, :], int32[:, :, :], int32[:, :], float32, float32[:, :])',
-            fastmath=True)
-def gridded_is_attacking(positions, sizes, colors, head_dirs, cells, cell_counts, cell_size, results):
+                discriminant = opt_t**2 + sq_other_rad - sq_center_dist
+                if discriminant < 0:  # no intersection
+                    continue
+                
+                t_intersect = opt_t - math.sqrt(discriminant)  # compute actual intersection
+                if t_intersect > ray_len:  # too far away
+                    continue
+
+                # if its 0 then its the first object. Else, it needs to be closer than the previous object
+                if results[organism, ray, 0] == 0 or opt_t < min_t:
+                    for c in range(3):  # copy in the color
+                        results[organism, ray, c] = colors[other_organism, c]
+                    min_t = opt_t
+                
+            # do Bresenhem line steps
+            if x == end_x and y == end_y:
+                break
+            e2 = 2 * err
+            if e2 > -dy:
+                err -= dy
+                x += sx
+            if e2 < dx:
+                err += dx
+                y += sy
+    return _trace_rays_grid
+
+@functools.lru_cache(maxsize=None)
+def gridded_is_attacking(cfg: config.Config):
     """Positions is [N, 2], where the 2 coordinates are the location.
-     Sizes is [N, 1] where the coordinate is the radius.
+    Sizes is [N, 1] where the coordinate is the radius.
     Colors is [N, 3], 3 coordinates for RGB values.
     Head_dirs is [N, 2], where the two coordinates are the direction of the head (unit vector).
-     
-     cells is [S, S, M], where S is the # cells, and M is the maximum number of creatures in a given cell.
+    
+    cells is [S, S, M], where S is the # cells, and M is the maximum number of creatures in a given cell.
         cell_counts is [S, S], where the coordinate is the number of creatures in a given cell.
         Cell_size is the size of the cell in the grid.
 
     Results is [N, 2], where the 1st coordinate is an integer indicating how many things the
     organism is attacking, and the 2nd coordinate is a float indicating the amount of damage the organism
     is taking from other things attacking it."""
+    attack_ignore_color_dist = cfg.attack_ignore_color_dist
+    attack_dist_bonus = cfg.attack_dist_bonus
+    attack_dmg = cuda.jit(device=True)(cfg.attack_dmg.func)
+    attack_dmg_scale = cfg.attack_dmg.mul
+
+    @cuda.jit('void(float32[:, :], float32[:], float32[:, :], float32[:, :], int32[:, :, :], int32[:, :], float32, float32[:, :])',
+                fastmath=True)
+    def _gridded_is_attacking(positions, sizes, colors, head_dirs, cells, cell_counts, cell_size, results):
+        organism = cuda.grid(1)
+
+        # check that we are in bounds
+        if organism >= positions.shape[0]:
+            return
+        center_x, center_y = positions[organism]
+        size = sizes[organism]
+        color = colors[organism]
+
+        attacking_x = center_x + head_dirs[organism, 0] * size
+        attacking_y = center_y + head_dirs[organism, 1] * size
+        attacking_i = int(attacking_x // cell_size)
+        attacking_j = int(attacking_y // cell_size)
+
+        # clamp to the grid
+        attacking_i = max(0, min(cells.shape[1] - 1, attacking_i))
+        attacking_j = max(0, min(cells.shape[0] - 1, attacking_j))
         
-    organism = cuda.grid(1)
-
-    # check that we are in bounds
-    if organism >= positions.shape[0]:
-        return
-    center_x, center_y = positions[organism]
-    size = sizes[organism]
-    color = colors[organism]
-
-    attacking_x = center_x + head_dirs[organism, 0] * size
-    attacking_y = center_y + head_dirs[organism, 1] * size
-    attacking_i = int(attacking_x // cell_size)
-    attacking_j = int(attacking_y // cell_size)
-
-    # clamp to the grid
-    attacking_i = max(0, min(cells.shape[1] - 1, attacking_i))
-    attacking_j = max(0, min(cells.shape[0] - 1, attacking_j))
-    
-    
-    for idx in range(cell_counts[attacking_j, attacking_i]):
-        other = cells[attacking_j, attacking_i, idx]
-        if other == organism:
-            continue
-    
-        if other >= positions.shape[0]:
-            continue
-        other_color = colors[other]
-
-        # species that are close in color to one another can't attack each other
-        color_diff = 0.
-        for c in range(3):
-            color_diff += abs(color[c] - other_color[c])
-        if color_diff <= 3:
-            continue
         
-        other_center_x, other_center_y = positions[other]
-        sq_dist = (attacking_x - other_center_x)**2 + (attacking_y - other_center_y)**2
-        other_size = sizes[other]
+        for idx in range(cell_counts[attacking_j, attacking_i]):
+            other = cells[attacking_j, attacking_i, idx]
+            if other == organism:
+                continue
+        
+            if other >= positions.shape[0]:
+                continue
+            other_color = colors[other]
 
-        if sq_dist < other_size*other_size + 0.5:   # +0.5 to give some leeway
-            results[organism, 0] += 1
-            results[other, 1] += size  # damage = size of attacker
+            # species that are close in color to one another can't attack each other
+            color_diff = 0.
+            for c in range(3):
+                color_diff += abs(color[c] - other_color[c])
+            if color_diff <= attack_ignore_color_dist:
+                continue
+            
+            other_center_x, other_center_y = positions[other]
+            sq_dist = (attacking_x - other_center_x)**2 + (attacking_y - other_center_y)**2
+            other_size = sizes[other]
+
+            if sq_dist < other_size*other_size + attack_dist_bonus:   # +attack_dist_bonus to give some leeway
+                results[organism, 0] += 1
+                results[other, 1] += attack_dmg(size) * attack_dmg_scale # damage = size of attacker
+    return _gridded_is_attacking
 
 
-@cuda.jit('void(float32[:, :], float32[:],  float32[:, :], float32[:, :], float32[:, :])', 
-          fastmath=True)
-def is_attacking(positions, sizes, colors, head_dirs, results):
+@functools.lru_cache(maxsize=None)
+def is_attacking(cfg: config.Config):
     """Positions is [N, 2], where the 2 coordinates are the location.
-     Sizes is [N, 1] where the coordinate is the radius.
+    Sizes is [N, 1] where the coordinate is the radius.
     Colors is 3 coordinates for RGB values.
 
     Head_dirs is [N, 2], where the two coordinates are the direction of the head (unit vector).
@@ -357,34 +401,43 @@ def is_attacking(positions, sizes, colors, head_dirs, results):
     Results is [N, 2], where the 1st coordinate is an integer indicating how many things the 
     organism is attacking, and the 2nd coordinate is a float indicating the amount of damage the organism
     is taking from other things attacking it."""
-    
-    org_attacking, org_vulnerable = cuda.grid(2)
+    attack_ignore_color_dist = cfg.attack_ignore_color_dist
+    attack_dist_bonus = cfg.attack_dist_bonus
+    attack_dmg = cuda.jit(device=True)(cfg.attack_dmg.func)
+    attack_dmg_scale = cfg.attack_dmg.mul
 
-    # check that we are in bounds
-    if org_attacking >= positions.shape[0] or org_vulnerable >= positions.shape[0]:
-        return
-    
-    if org_attacking == org_vulnerable:
-        return
-    
-    org_attacking_color = colors[org_attacking]
-    org_vulnerable_color = colors[org_vulnerable]
+    @cuda.jit('void(float32[:, :], float32[:],  float32[:, :], float32[:, :], float32[:, :])', 
+        fastmath=True)
+    def _is_attacking( positions, sizes, colors, head_dirs, results):
+        org_attacking, org_vulnerable = cuda.grid(2)
 
-    # species that are close in color to one another can't attack each other
-    color_diff = 0.
-    for c in range(3):
-        color_diff += abs(org_attacking_color[c] - org_vulnerable_color[c])
-    if color_diff <= 3:
-        return
-    
-    attack_size = sizes[org_attacking]
-    vuln_size = sizes[org_vulnerable]
-    vulnerable_loc = positions[org_vulnerable]
-    sq_dist = 0.0
-    for d in range(2):
-        sq_dist += (positions[org_attacking, d]+head_dirs[org_attacking, d]*attack_size - \
-                    vulnerable_loc[d]) ** 2
+        # check that we are in bounds
+        if org_attacking >= positions.shape[0] or org_vulnerable >= positions.shape[0]:
+            return
+        
+        if org_attacking == org_vulnerable:
+            return
+        
+        org_attacking_color = colors[org_attacking]
+        org_vulnerable_color = colors[org_vulnerable]
 
-    if sq_dist < vuln_size*vuln_size + 1:   # +1 to give some leeway
-        results[org_attacking, 0] += 1
-        results[org_vulnerable, 1] += attack_size  # damage = size of attacker
+        # species that are close in color to one another can't attack each other
+        color_diff = 0.
+        for c in range(3):
+            color_diff += abs(org_attacking_color[c] - org_vulnerable_color[c])
+        if color_diff <= attack_ignore_color_dist:
+            return
+        
+        attack_size = sizes[org_attacking]
+        vuln_size = sizes[org_vulnerable]
+        vulnerable_loc = positions[org_vulnerable]
+        sq_dist = 0.0
+        for d in range(2):
+            sq_dist += (positions[org_attacking, d]+head_dirs[org_attacking, d]*attack_size - \
+                        vulnerable_loc[d]) ** 2
+
+        if sq_dist < vuln_size*vuln_size + attack_dist_bonus:   # +1 to give some leeway
+            results[org_attacking, 0] += 1
+            results[org_vulnerable, 1] += attack_dmg(attack_size) * attack_dmg_scale
+
+    return _is_attacking

@@ -6,7 +6,7 @@ from numba import cuda
 import logging
 logging.basicConfig(level=logging.INFO, filename='game.log')
 
-from . import algorithms
+from .config import Config
 
 
 """Store all relevant creature attributes in CUDA objects to ensure minimal
@@ -15,50 +15,43 @@ can add a new set of creatures by appending a new set of entries to the array.""
 
 
 class CreatureArray():
-    def __init__(self, num_starting, max_creatures, grid_size, mem_size=4, num_rays=32, hidden_sizes=None):
-        if hidden_sizes is None:
-            hidden_sizes = [30, 40]
-        
-        self.max_creatures = max_creatures
-        self.grid_size = grid_size
-        self.dev = torch.device('cuda')
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
 
-        def get_offsets(width):
-            return torch.tensor([[i, j] for i in range(-width, width+1) for j in range(-width, width+1)], device=self.dev)
+        self.pad = self.cfg.food_sight
+        self.offsets = torch.tensor([[i, j] for i in range(-self.pad, self.pad+1) 
+                                     for j in range(-self.pad, self.pad+1)], device='cuda').unsqueeze(0)
 
-        self.offsets = torch.tensor([[-1, -1], [-1, 0], [-1, 1],
-                                     [ 0, -1], [ 0, 0], [ 0, 1],
-                                     [ 1, -1], [ 1, 0], [ 1, 1]], device=self.dev).unsqueeze(0)
+        # objects need to stay within [width, size-width]
+        self.positions = torch.empty(cfg.start_creatures, 2, device='cuda').uniform_(self.pad, cfg.size-self.pad)
+        self.sizes = torch.empty(cfg.start_creatures, device='cuda').uniform_(*cfg.init_size_range)
+        self.memories = torch.zeros(cfg.start_creatures, cfg.mem_size, device='cuda')
+        self.energies = cfg.init_energy(self.sizes)
+        self.healths = cfg.init_health(self.sizes)
+        self.ages = torch.zeros(cfg.start_creatures, device='cuda')
 
-        self.positions = torch.clamp(torch.rand(num_starting, 2, device=self.dev) * (grid_size-3) + 1, 1, grid_size-2)
-        self.sizes = torch.rand(num_starting, device=self.dev) * 1 + 0.5
-        self.memories = torch.zeros(num_starting, mem_size, device=self.dev)
-        self.energies = self.sizes
-        self.healths = self.sizes**2
-        self.ages = torch.zeros(num_starting, device=self.dev)
-
-        self.rays = torch.randn(num_starting, num_rays, 3, device=self.dev)
+        self.rays = torch.randn(cfg.start_creatures, cfg.num_rays, 3, device='cuda')
         self.rays[..., :2] /= torch.norm(self.rays[..., :2], dim=2, keepdim=True)
-        self.rays[..., 2] = torch.abs(self.rays[..., 2])  # make sure its positive
+        self.rays[..., 2] = torch.clamp_min(torch.abs(self.rays[..., 2]), cfg.min_ray_dist)
 
-        self.head_dirs = torch.randn(num_starting, 2, device=self.dev)
+        self.head_dirs = torch.randn(cfg.start_creatures, 2, device='cuda')
         self.head_dirs /= torch.norm(self.head_dirs, dim=1, keepdim=True)
 
-        self.colors = torch.rand(num_starting, 3, device=self.dev) * 254 + 1
+        self.colors = torch.empty(cfg.start_creatures, 3, device='cuda').uniform_(1, 255)
 
         # we have mutation rate for rays, sizes, colors, weights/biases, and mutation rate itself
-        self.mutation_rates = torch.rand(num_starting, 6, device=self.dev) * 0.1 + 0.1
+        self.mutation_rates = torch.empty(cfg.start_creatures, 6, device='cuda').uniform_(*cfg.init_mut_rate_range)
 
         # inputs: rays (x num_rays*3 colors), memory (x mem_size), food (3x3 = 9), health, energy
         # outputs: move forward/back, rotate, memory (x mem_size)
-        self.layer_sizes = [num_rays*3 + mem_size + self.offsets.numel() + 2, *hidden_sizes, mem_size + 2]
+        self.layer_sizes = [cfg.num_rays*3 + cfg.mem_size + self.offsets.numel()//2 + 2, *cfg.brain_size, cfg.mem_size + 2]
 
 
         """weights are each [N, in, out]"""
-        self.weights = [(torch.rand(num_starting, prev_layer, next_layer, device=self.dev)-0.5) / (np.sqrt(15.0 / prev_layer))
+        self.weights = [(torch.rand(cfg.start_creatures, prev_layer, next_layer, device='cuda')-0.5) / (np.sqrt(15.0 / prev_layer))
                         for prev_layer, next_layer in zip(self.layer_sizes[:-1], self.layer_sizes[1:])]
         
-        self.biases = [(torch.rand(num_starting, 1, next_layer, device=self.dev)-0.5) / np.sqrt(next_layer)
+        self.biases = [(torch.rand(cfg.start_creatures, 1, next_layer, device='cuda')-0.5) / np.sqrt(next_layer)
                        for next_layer in self.layer_sizes[1:]]
         
 
@@ -103,13 +96,12 @@ class CreatureArray():
         self.biases = [b[~dead] for b in self.biases]
 
 
-    def eat(self, food_grid, pct):
+    def eat(self, food_grid):
         """Eat the food in the creatures' vicinity."""
         pos = self.positions.long()
-        food = food_grid[pos[..., 1], pos[..., 0]] * pct
-        # food_grid.shape[0] ** 2 * 0.1  <- total amount of food that gets added each step
-        # logging.info(f"Food: {food - (self.sizes**2)/15}")
-        self.energies += food - (self.sizes**2)/10  # lose energy for staying alive
+        food = food_grid[pos[..., 1], pos[..., 0]] * self.cfg.eat_pct
+        # gain food for eating and lose food for staying alive
+        self.energies += food - self.cfg.alive_cost(self.sizes)
         food_grid[pos[..., 1], pos[..., 0]] -= food
         self.ages += 1  # if they've eaten, then they've made it to the next step
 
@@ -149,17 +141,13 @@ class CreatureArray():
         -1 and 1, which is multiplied by the object's rotation speed to determine how far to rotate. 
         Negative rotation is clockwise, positive is counter-clockwise. """
         # rotation => need to rotate the rays and the object's direction
-        # print('outputs', outputs[:,1])
-        # print('sqrt sizes', torch.sqrt(self.sizes))
-        # print('outputs', outputs.shape, 'sizes', self.sizes.shape)
-        rotate = outputs[:,1]*torch.pi / 20*(1 + self.sizes)
-        # print('sizes', self.sizes)
-        rotate_energy = 1 - torch.exp(self.sizes * torch.abs(rotate))   # energy cost of rotation
-        # print('rot_nrg', rotate_energy)
-        # print('rot', rotate)
+        # rotate amount
+        rotate = self.cfg.rotate_amt(outputs[:,1], self.sizes)
+        rotate_energy = self.cfg.rotate_cost(rotate, self.sizes)
+        
         self.energies -= rotate_energy
         
-        rotation_matrix = torch.empty((outputs.shape[0], 2, 2), device=self.dev)  # [N, 2, 2]
+        rotation_matrix = torch.empty((outputs.shape[0], 2, 2), device='cuda')  # [N, 2, 2]
         cos_rotate = torch.cos(rotate)
         sin_rotate = torch.sin(rotate)
         rotation_matrix[:,0,0] = cos_rotate
@@ -174,10 +162,12 @@ class CreatureArray():
 
     def move_creatures(self, outputs):
         # move => need to move the object's position
-        move = outputs[:,0]/10.   # maybe add some acceleration/velocity thing instead
-        # print(self.head_dirs.shape, move.shape, self.positions.shape)
+        # maybe add some acceleration/velocity thing instead
+        move = self.cfg.move_amt(outputs[:,0], self.sizes)
+        move_cost = self.cfg.move_cost(move, self.sizes)
+        self.energies -= move_cost
         self.positions += self.head_dirs * move.unsqueeze(1)   # move the object's to new position
-        self.positions = torch.clamp(self.positions, 1, self.grid_size-2)  # don't let it go off the edge
+        self.positions = torch.clamp(self.positions, self.pad, self.cfg.size-self.pad)  # don't let it go off the edge
 
     def do_attacks(self, attacks):
         """Attacks is [N, 2], where the 1st coordinate is an integer indicating how many things the 
@@ -186,23 +176,22 @@ class CreatureArray():
 
         # print('nrg_before', self.energies)
         logging.info(f'Attacks:\n{attacks}')
-        self.energies -= attacks[:,0] * self.sizes * 0.1  # takes 0.1 * size to do an attack
-        # print('nrg_after', self.energies)
+        # self.energies -= attacks[:,0] * self.sizes * 0.1  # takes 0.1 * size to do an attack
+        self.energies -= self.cfg.attack_cost(attacks[:,0], self.sizes)
         self.healths -= attacks[:,1]
 
 
     def reproduce(self):
         """For sufficiently high energy creatures, create a new creature with mutated genes."""
-        # print(self.energies)
-        # print(self.sizes)
-        reproducers = self.energies >= (self.sizes**2 * 10) + 1
+        # 1 + so that really small creatures don't get unfairly benefitted
+        reproducers = self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes)
         # print(reproducers)
         if not torch.any(reproducers):
             return
         
         # limit reproducers so we don't exceed max size
         num_reproducers = torch.sum(reproducers)
-        max_reproducers = self.max_creatures - self.positions.shape[0]
+        max_reproducers = self.cfg.max_creatures - self.positions.shape[0]
         if max_reproducers <= 0:
             return 
         
@@ -212,7 +201,7 @@ class CreatureArray():
             reproducers[non_reproducers] = False
 
         self.energies[reproducers] -= self.sizes  # subtract off the energy that you've put into the world
-        self.energies[reproducers] /= 15  # then lose a bit extra because this process is lossy
+        self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
             
         mut = self.mutation_rates[reproducers]
         logging.info(f"Reproducers:\n{reproducers}")
@@ -230,7 +219,7 @@ class CreatureArray():
                          for b in self.biases]
         mut_rate_perturb = torch.randn_like(mut) * mut[:, 5, None]
 
-        new_sizes = torch.clamp_min(self.sizes[reproducers] + size_perturb, 0.1)
+        new_sizes = torch.clamp_min(self.sizes[reproducers] + size_perturb, self.cfg.size_min)
         new_colors = torch.clamp(self.colors[reproducers] + color_perturb, 1, 255)
         new_weights = [w[reproducers] + wp for w, wp in zip(self.weights, weight_perturbs)]
         logging.info(f"existing bias shapes: {[b[reproducers].shape for b in self.biases]}")
@@ -241,8 +230,8 @@ class CreatureArray():
         new_mutation_rates = mut + mut_rate_perturb
 
         new_memories = torch.zeros_like(self.memories[reproducers])
-        new_energy = new_sizes/10
-        new_health = new_sizes**2
+        new_energy = self.cfg.init_energy(new_sizes)
+        new_health = self.cfg.init_health(new_sizes)
         new_ages = torch.zeros_like(self.ages[reproducers])
         
         new_head_dirs = torch.randn_like(self.head_dirs[reproducers])
@@ -250,10 +239,10 @@ class CreatureArray():
         
         new_rays = self.rays[reproducers] + ray_perturb
         new_rays[..., :2] /= torch.norm(new_rays[...,:2], dim=2, keepdim=True)
-        new_rays[..., 2] = torch.clamp_min(new_rays[...,2], 0.1) 
+        new_rays[..., 2] = torch.clamp_min(new_rays[...,2], self.cfg.min_ray_dist) 
 
-        pos_perturb = torch.randn_like(self.positions[reproducers]) * new_sizes.unsqueeze(1) * 3
-        new_positions = torch.clamp(self.positions[reproducers] + pos_perturb, 1, self.grid_size-2)
+        pos_perturb = torch.randn_like(self.positions[reproducers]) * new_sizes.unsqueeze(1) * self.cfg.reproduce_dist
+        new_positions = torch.clamp(self.positions[reproducers] + pos_perturb, self.pad, self.cfg.size-self.pad)
 
         self.positions = torch.cat([self.positions, new_positions], dim=0)
         self.sizes = torch.cat([self.sizes, new_sizes], dim=0)

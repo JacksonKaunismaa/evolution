@@ -11,6 +11,9 @@ import time
 from IPython.display import clear_output
 import logging
 from tqdm import trange, tqdm
+from functools import partial, wraps
+import functools
+from typing import Callable
 
 logging.basicConfig(level=logging.INFO, filename='game.log')
 
@@ -18,12 +21,14 @@ logging.basicConfig(level=logging.INFO, filename='game.log')
 
 from . import algorithms
 from .creature_array import CreatureArray
+from .config import Config
 
 start = torch.cuda.Event(enable_timing=True)
 end = torch.cuda.Event(enable_timing=True)
 times = defaultdict(float)
 
 def cuda_profile(func):
+    @wraps(func)
     def wrapper(*args, **kwargs):
         start.record()
         res = func(*args, **kwargs)
@@ -35,13 +40,14 @@ def cuda_profile(func):
     return wrapper
 
 
+
 class World():
-    def __init__(self, start_creatures, max_creatures, size):
-        self.size = size
-        self.food_grid = torch.rand((size, size), device='cuda') * 1
+    def __init__(self, cfg: Config):
+        self.cfg = cfg
+        self.food_grid = torch.rand((cfg.size, cfg.size), device='cuda') * cfg.init_food_scale
         # pad with -inf on all sides
-        self.food_grid = F.pad(self.food_grid, (1, 1, 1, 1), mode='constant', value=0)
-        self.creatures = CreatureArray(start_creatures, max_creatures, size)
+        self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
+        self.creatures: CreatureArray = CreatureArray(cfg)
 
     @cuda_profile
     def trace_rays(self):
@@ -51,18 +57,13 @@ class World():
         sizes = self.creatures.sizes
         colors = self.creatures.colors
 
-        collisions = torch.zeros((rays.shape[0], rays.shape[1], 3), device='cuda')  # [N, R, 1]
-        # nb_collisions = cuda.as_cuda_array(tr_collisions, sync=True)
+        collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device='cuda')  # [N, R, C]
 
-        # blocks_per_grid (N), threads_per_block (R)
-        # print out all shapes and dtypes
-        # print(rays.shape, posns.shape, sizes.shape, colors.shape, nb_collisions.shape)
-        # print(rays.dtype, posns.dtype, sizes.dtype, colors.dtype, nb_collisions.dtype)
         algorithms.correct_ray_trace[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, collisions)
         return collisions
 
     @cuda_profile
-    def compute_grid_setup(self, max_per_cell=512, cell_size=4.):
+    def compute_grid_setup(self):
         """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
         (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
         and [G, G] array of the number of objects in each cell. 
@@ -73,18 +74,18 @@ class World():
         sizes = self.creatures.sizes
 
         # fill in grid cells to vastly reduce the number of objects we need to check
-        num_cells = int(self.size // cell_size + 1)
-        cells = torch.ones((num_cells, num_cells, max_per_cell), dtype=torch.int32, device='cuda')*-1
+        num_cells = int(self.cfg.size // self.cfg.cell_size + 1)
+        cells = torch.full((num_cells, num_cells, self.cfg.max_per_cell), -1, dtype=torch.int32, device='cuda')
         cell_counts = torch.zeros((num_cells, num_cells), dtype=torch.int32, device='cuda')
         block_size = 512
         grid_size = rays.shape[0] // block_size + 1
 
-        algorithms.setup_grid[grid_size, block_size](posns, sizes, cells, cell_counts, cell_size)
-        return cells, cell_counts, cell_size  # argument return order should match trace_rays_grid
+        algorithms.setup_grid[grid_size, block_size](posns, sizes, cells, cell_counts, self.cfg.cell_size)
+        return cells, cell_counts  # argument return order should match trace_rays_grid
     
 
     @cuda_profile
-    def trace_rays_grid(self, cells, cell_counts, cell_size):
+    def trace_rays_grid(self, cells, cell_counts):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
 
         rays = self.creatures.rays
@@ -94,7 +95,9 @@ class World():
 
         # traverse the grid and draw lines through it, checking each object that passes through the ray
         collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device='cuda')
-        algorithms.trace_rays_grid[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, cells, cell_counts, cell_size, collisions)
+        algorithms.trace_rays_grid(self.cfg)[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, 
+                                                                           cells, cell_counts, 
+                                                                           self.cfg.cell_size, collisions)
         return collisions#, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
     
 
@@ -131,11 +134,12 @@ class World():
         # print(grid_size, block_size)
         # print(posns.shape, sizes.shape, colors.shape, head_dirs.shape, nb_results.shape)
         # print(posns.dtype, sizes.dtype, colors.dtype, head_dirs.dtype, nb_results.dtype)
-        algorithms.is_attacking[grid_size, block_size](posns, sizes, colors, head_dirs, tr_results)
+        algorithms.is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, 
+                                                                 head_dirs, tr_results)
         return tr_results
     
     @cuda_profile
-    def compute_gridded_attacks(self, cells, cell_counts, cell_size):
+    def compute_gridded_attacks(self, cells, cell_counts):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
         posns = self.creatures.positions
@@ -147,9 +151,9 @@ class World():
         tr_results = torch.zeros((posns.shape[0], 2), device='cuda')
         block_size = 512
         grid_size = posns.shape[0] // block_size + 1
-        # print(grid_size, block_size)
-        # print(posns.shape, sizes.shape, colors.shape, head_dirs.shape, cells.shape, cell_counts.shape, cell_size, tr_results.shape)
-        algorithms.gridded_is_attacking[grid_size, block_size](posns, sizes, colors, head_dirs, cells, cell_counts, cell_size, tr_results)
+        algorithms.gridded_is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, head_dirs, 
+                                                                         cells, cell_counts, 
+                                                                         self.cfg.cell_size, tr_results)
         return tr_results
 
     @cuda_profile
@@ -160,14 +164,14 @@ class World():
 
     @cuda_profile
     def creatures_eat(self):
-        self.creatures.eat(self.food_grid, 0.2)
+        self.creatures.eat(self.food_grid)
 
     @cuda_profile
     def creatures_reproduce(self):
         self.creatures.reproduce()
 
     @cuda_profile
-    def grow_food(self, max_food=10.):
+    def grow_food(self):
         """The higher step_size is, the faster food grows (and the faster corpses decay)."""
         # don't grow on squares that are occupied by creatures
 
@@ -175,25 +179,64 @@ class World():
         # creatures lose (self.sizes**2)/10 energy per step at least. Thus, the energy leaving the system is sum(size**2)/10
         # energy entering is step_size*max_food*(grid_size**2), so we should set step size to sum(size**2)/max_food/(grid_size**2)/10
     
-        step_size = torch.sum(self.creatures.sizes**2)/max_food/(self.size**2)/10
+        step_size = torch.sum(self.creatures.sizes**2)/self.cfg.max_food/(self.cfg.size**2)
 
         posns = self.creatures.positions.long()
-        self.food_grid[posns[:, 1], posns[:, 0]] -= 0.3  # technically this allows negative food. We can think of this as "overfeeding" -> toxicity.
+        # this allows negative food. We can think of this as "overfeeding" -> toxicity.
+        self.food_grid[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
+
+        # don't bother growing food in the padding/inaccesible area
+        pad = self.cfg.food_sight
+        growing = self.food_grid[pad:-pad, pad:-pad]
         # grow food and decay dead corpses slowly
-        growing = self.food_grid[1:-1, 1:-1]   # *0.1 on the decay side to make corpses decay slow but food grow fast
-        torch.where(growing < max_food, growing-step_size*(growing-max_food), growing-step_size*(growing-max_food)*0.1, out=growing)
+        torch.where(growing < self.cfg.max_food, 
+                    growing - step_size*(growing-self.cfg.max_food)*self.cfg.food_growth_rate, 
+                    growing - step_size*(growing-self.cfg.max_food)*self.cfg.food_decay_rate, 
+                    out=growing)
 
     def write_checkpoint(self, path):
         torch.save({'food_grid': self.food_grid, 
                     'creatures': self.creatures, 
-                    'size': self.size, 
+                    'cfg': self.cfg,
                     }, path)
         
     def load_checkpoint(self, path):
         checkpoint = torch.load(path)
         self.food_grid = checkpoint['food_grid']
         self.creatures = checkpoint['creatures']
-        self.size = checkpoint['size']
+        self.cfg = checkpoint['cfg']
+
+    def step(self, i, visualize=True) -> bool:
+        logging.info(f"{self.creatures.positions.shape[0]} creatures alive.")
+        logging.info(f"Health:\n {self.creatures.healths}")
+        logging.info(f"Energy:\n {self.creatures.energies}")
+
+        celled_world = self.compute_grid_setup()
+        if i == 24:
+            return celled_world
+        collisions = self.trace_rays_grid(*celled_world)
+        if i % 20 == 0 and visualize:
+            self.visualize(None, show_rays=False) 
+
+        stimuli = self.collect_stimuli(collisions)
+        outputs = self.think(stimuli)
+
+        self.move_creatures(outputs)
+
+        celled_world = self.compute_grid_setup()
+
+        attacks2 = self.compute_gridded_attacks(*celled_world)
+    
+        self.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
+        if self.creatures.positions.shape[0] == 0:
+            logging.info("Mass extinction!")
+            return False
+
+        self.creatures_eat()   # give energy for being in a square, and then reduce that energy
+        self.creatures_reproduce()    # allow high energy individuals to reproduce
+        self.grow_food()   # give food time to grow
+
+        return True
 
 
     def visualize(self, collisions, show_rays=True):
@@ -313,8 +356,7 @@ class World():
             plt.show()
 
 
-
-    def plotly_visualize_grid_setup(self, cells, cell_counts, cell_size):
+    def plotly_visualize_grid_setup(self, cells, cell_counts, cell_size):        
         """Visualizes the grid setup for ray tracing."""
         # match the return order from self.compute_grid_setup for ease of use
         num_objects = self.creatures.positions.shape[0]
@@ -402,66 +444,48 @@ class World():
             fig.show()
 
 
+def benchmark():
+    import cProfile
+    from pstats import SortKey
+    import io, pstats
+    times.clear()
+
+    torch.manual_seed(1)
+    cfg = Config(size=10, start_creatures=5, max_creatures=10, mem_size=4)
+    game = World(cfg)
+
+    pr = cProfile.Profile()
+    pr.enable()
+    for i in range(512):
+        if not game.step(i, visualize=False):   # we did mass extinction before finishing
+            return game
+
+    pr.disable()
+    s = io.StringIO()
+    sortby = SortKey.CUMULATIVE
+    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    ps.print_stats()
+    print(s.getvalue())
+
+# @functools.lru_cache(maxsize=None)
+# def runner(cfg):
+#     time.sleep(5)
+#     return cfg.size
+
+
+# def test_cache():
+#     c = Config()
+#     print(runner(c))
+#     print(runner(c))
+
+
+
 def main():
-    # results = {}
-    # n_trial = 10
-    # for max_creat in tqdm([32, 64, 128, 256, 512]):
-    #     for cell_size in tqdm([0.5, 1.0, 2.0, 3.0, 4.0, 5.0, 8.0]):
-    #         for j in range(n_trial):
-    #             torch.random.manual_seed(j)
-
-        times.clear()
-        game = World(16, 64, 50)
-        fps = 30
-        pcts = []
-        for i in range(99999):
-            # print(i)
-            logging.info(f"{game.creatures.positions.shape[0]} creatures alive.")
-            logging.info(f"Health:\n {game.creatures.healths}")
-            logging.info(f"Energy:\n {game.creatures.energies}")
-            # if i % 100 == 0:
-            #     print(f"On step{i}, {game.creatures.positions.shape[0]} creatures alive.")
-            # collisions, pct_bad = game.trace_rays_grid()
-            # pcts.append(pct_bad)
-            celled_world = game.compute_grid_setup()
-            collisions = game.trace_rays_grid(*celled_world)
-            if i % 20 == 0:
-                game.visualize(None, show_rays=False) 
-                # time.sleep(1/(2*fps))
-            # input()
-            stimuli = game.collect_stimuli(collisions)
-            # print(stimuli.shape)
-            logging.debug(f"Stimuli shape: {stimuli.shape}")
-            outputs = game.think(stimuli)
-            logging.debug(f"Outputs shape: {outputs.shape}")
-
-            game.move_creatures(outputs)
-
-            celled_world = game.compute_grid_setup()
-            # if i == 23:
-            #     return celled_world, game
-            # attacks = game.compute_attacks()
-            attacks2 = game.compute_gridded_attacks(*celled_world)
-        
-            game.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
-            if game.creatures.positions.shape[0] == 0:
-                logging.info("Mass extinction!")
-                break
-
-            game.creatures_eat()   # give energy for being in a square, and then reduce that energy
-
-            game.creatures_reproduce()    # allow high energy individuals to reproduce
-
-            game.grow_food()   # give food time to grow
-            # game.visualize(None)
-            # input()
-            # time.sleep(1/(2*fps))
-            # # game.maybe_environmental_change()   # mass extinction time?
-        return times, game
-        # if (max_creat, cell_size) not in results:
-        #     results[(max_creat, cell_size)] = []
-        # results[(max_creat, cell_size)].append((sum(times.values()), np.percentile(pcts, 98)))
-    # return results
+    times.clear()
+    game = World(Config())
+    for i in range(99999):
+        game.step(i)
+    return times, game
 
         
 
