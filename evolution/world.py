@@ -6,7 +6,6 @@ import plotly.graph_objects as go
 import torch
 from torch.nn import functional as F
 torch.set_grad_enabled(False)
-from numba import cuda
 import time
 from IPython.display import clear_output
 import logging
@@ -17,9 +16,10 @@ from typing import Callable
 
 logging.basicConfig(level=logging.INFO, filename='game.log')
 
-from . import algorithms
+# from . import algorithms
+from . import cu_algorithms
 from .creature_array import CreatureArray
-from .config import Config, ConfigFunction
+from .config import Config, simple_cfg
 
 start = torch.cuda.Event(enable_timing=True)
 end = torch.cuda.Event(enable_timing=True)
@@ -32,7 +32,6 @@ def cuda_profile(func):
         res = func(*args, **kwargs)
         end.record()
         torch.cuda.synchronize()
-        cuda.synchronize()
         times[func.__name__] += start.elapsed_time(end)
         return res
     return wrapper
@@ -46,6 +45,7 @@ class World():
         # pad with -inf on all sides
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
         self.creatures: CreatureArray = CreatureArray(cfg)
+        self.kernels = cu_algorithms.CUDAKernelManager(cfg)
         self.time = 0
 
     #@cuda_profile
@@ -58,7 +58,12 @@ class World():
 
         collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device='cuda')  # [N, R, C]
 
-        algorithms.correct_ray_trace[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, collisions)
+        # algorithms.correct_ray_trace[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, collisions)
+
+        self.kernels('correct_ray_trace',
+                     rays.shape[0], rays.shape[1],  # threads
+                     rays, posns, sizes, colors, collisions, 
+                     self.population)
         return collisions
 
     #@cuda_profile
@@ -68,7 +73,6 @@ class World():
         and [G, G] array of the number of objects in each cell. 
         
         Used to speed up ray tracing by reducing the number of objects we need to check."""
-        rays = self.creatures.rays
         posns = self.creatures.positions
         sizes = self.creatures.sizes
 
@@ -78,8 +82,13 @@ class World():
         cell_counts = torch.zeros((num_cells, num_cells), dtype=torch.int32, device='cuda')
         block_size = 512
         grid_size = self.population // block_size + 1
+        print(posns.shape)
 
-        algorithms.setup_grid[grid_size, block_size](posns, sizes, cells, cell_counts, self.cfg.cell_size)
+        # algorithms.setup_grid[grid_size, block_size](posns, sizes, cells, cell_counts, self.cfg.cell_size)
+        self.kernels('setup_grid', 
+                     grid_size, block_size, # threads
+                     posns, sizes, cells, cell_counts,
+                     num_cells, grid_size)
         return cells, cell_counts  # argument return order should match trace_rays_grid
     
 
@@ -94,9 +103,14 @@ class World():
 
         # traverse the grid and draw lines through it, checking each object that passes through the ray
         collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device='cuda')
-        algorithms.trace_rays_grid(self.cfg)[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, 
-                                                                           cells, cell_counts, 
-                                                                           self.cfg.cell_size, collisions)
+        # algorithms.trace_rays_grid(self.cfg)[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, 
+        #                                                                    cells, cell_counts, 
+        #                                                                    self.cfg.cell_size, collisions)
+        self.kernels('trace_rays_grid', 
+                     rays.shape[0], rays.shape[1], # threads
+                     rays, posns, sizes, colors, 
+                     cells, cell_counts, collisions,
+                     self.population, cells.shape[0])
         return collisions#, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
     
 
@@ -133,8 +147,12 @@ class World():
         # print(grid_size, block_size)
         # print(posns.shape, sizes.shape, colors.shape, head_dirs.shape, nb_results.shape)
         # print(posns.dtype, sizes.dtype, colors.dtype, head_dirs.dtype, nb_results.dtype)
-        algorithms.is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, 
-                                                                 head_dirs, tr_results)
+        # algorithms.is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, 
+        #                                                          head_dirs, tr_results)
+        self.kernels('is_attacking', 
+                     grid_size, block_size,  # threads
+                     posns, sizes, colors, head_dirs, tr_results,
+                     self.population)
         return tr_results
     
     #@cuda_profile
@@ -150,9 +168,14 @@ class World():
         tr_results = torch.zeros((self.population, 2), device='cuda')
         block_size = 512
         grid_size = self.population // block_size + 1
-        algorithms.gridded_is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, head_dirs, 
-                                                                         cells, cell_counts, 
-                                                                         self.cfg.cell_size, tr_results)
+        # algorithms.gridded_is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, head_dirs, 
+        #                                                                  cells, cell_counts, 
+        #                                                                  self.cfg.cell_size, tr_results)
+        self.kernels('gridded_is_attacking', 
+                     grid_size, block_size,  # threads
+                     posns, sizes, colors, head_dirs, 
+                     cells, cell_counts, tr_results,
+                     self.population, cells.shape[0])
         return tr_results
 
     #@cuda_profile
@@ -217,10 +240,18 @@ class World():
         logging.info(f"Energy:\n {self.creatures.energies}")
 
         celled_world = self.compute_grid_setup()
+        # print(celled_world)
+        # input()
+        print(celled_world[0].sum())
+        print(celled_world[1].sum())
         collisions = self.trace_rays_grid(*celled_world)
-        if self.time % 60 == 0 and visualize:
-            self.write_checkpoint('game.ckpt')
-            self.visualize(None, show_rays=False) 
+        print(collisions.sum())
+        # self.visualize(collisions, show_rays=True)
+        # input() 
+        
+        # if self.time % 60 == 0 and visualize:
+        #     self.write_checkpoint('game.ckpt')
+        #     self.visualize(None, show_rays=False) 
 
         stimuli = self.collect_stimuli(collisions)
         outputs = self.think(stimuli)
@@ -228,8 +259,9 @@ class World():
         self.move_creatures(outputs)
 
         celled_world = self.compute_grid_setup()
-
+        # print(celled_world)
         attacks2 = self.compute_gridded_attacks(*celled_world)
+        # print(attacks2)
     
         self.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
         if self.population == 0:
@@ -243,7 +275,7 @@ class World():
         return True
 
     def visualize(self, collisions, show_rays=True):
-        clear_output(wait=True)
+        # clear_output(wait=True)
 
         fig, ax = plt.subplots(figsize=(10, 10))
         
@@ -455,8 +487,7 @@ def benchmark():
     times.clear()
 
     torch.manual_seed(1)
-    cfg = Config(size=10, start_creatures=5, max_creatures=10, mem_size=4, init_food_scale=5.0, food_cover_decr=0.0,
-                 alive_cost=ConfigFunction('linear', 0.0))
+    cfg = simple_cfg()
     game = World(cfg)
 
     pr = cProfile.Profile()
@@ -477,6 +508,8 @@ def benchmark():
 def main(cfg):
     times.clear()
     game = World(cfg)
+    input()
+    print("BEGINNING SIMULATION...")
     for _ in range(99999):
         if not game.step():
             break

@@ -2,7 +2,6 @@ import numpy as np
 import torch    
 import torch.nn as nn
 torch.set_grad_enabled(False)
-from numba import cuda
 import logging
 logging.basicConfig(level=logging.INFO, filename='game.log')
 

@@ -2,10 +2,9 @@ import dataclasses
 from typing import Tuple
 import torch
 torch.set_grad_enabled(False)
-from numba import cuda
 
 
-class ConfigFunction:
+class ConfigFunction:   # for replacing functions in regular python code
     def __init__(self, name, mul):
         self.name = name
         self.mul = mul
@@ -36,6 +35,14 @@ class ConfigFunction:
     
     def __repr__(self):
         return f'{self.name}*{self.mul}'
+    
+class FunctionExpression():  # for code preprocessor in cu_algorithms
+    def __init__(self, symbols, expr):
+        self.symbols = symbols
+        self.expr = expr
+
+    def __repr__(self):
+        return f'{self.symbols} -> {self.expr}'
 
 
 @dataclasses.dataclass(frozen=True)
@@ -73,7 +80,7 @@ class Config:
         move_cost (ConfigFunction): Function to determine the cost of movement based on amount and size.
 
         attack_cost (ConfigFunction): Function to determine the cost of attacking based on number of attacks and size.
-        attack_dmg (ConfigFunction): Function to determine the damage done in an attack based on size.
+        attack_dmg (FunctionExpression): Function to determine the damage done in an attack based on size.
         attack_ignore_color_dist (float): If sum(abs(color1-color2)) < this value, creatures don't harm each other.
         attack_dist_bonus (float): Distance bonus for attacking creatures within a certain distance.
 
@@ -141,7 +148,7 @@ class Config:
     # func(num_attacks, size) to determine attack cost
     attack_cost: ConfigFunction = ConfigFunction('bilinear', 0.05)  
     # func(size) to determine the amount of damage done in an attack
-    attack_dmg: ConfigFunction = ConfigFunction('square', 1.5) 
+    attack_dmg: FunctionExpression = FunctionExpression(['x'], 'x*x * 1.5f') 
     attack_ignore_color_dist: float = 3.0 # if sum(abs(color1-color2)) < this, they don't hurt each other
     attack_dist_bonus: float = 0.5  # if creatures are within the dist_bonus, they can attack each other
     dead_drop_food: ConfigFunction = ConfigFunction('linear', 1.)  # func(size) to determine how much food a creature drops when it dies
@@ -158,5 +165,10 @@ class Config:
 
     ## Algorithm parameters
     max_per_cell: int = 512 # maximum number of creatures in a cell when doing gridded/celled ray tracing
-    cell_size: float = 4.   # width of cells when doing gridded/celled ray tracing
+    cell_size: float = 4.0   # width of cells when doing gridded/celled ray tracing
     cache_size: int = 32    # number of creatures to cache when doing gridded/celled ray tracing (power of 2)
+
+
+def simple_cfg():
+    return Config(size=10, start_creatures=5, max_creatures=10, mem_size=4, 
+                  init_food_scale=5.0, food_cover_decr=0.0, alive_cost=ConfigFunction('linear', 0.0))
