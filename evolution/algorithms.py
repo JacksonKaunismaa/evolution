@@ -306,10 +306,10 @@ def trace_rays_grid(cfg: config.Config):
                     continue
 
                 # if its 0 then its the first object. Else, it needs to be closer than the previous object
-                if results[organism, ray, 0] == 0 or opt_t < min_t:
+                if results[organism, ray, 0] == 0 or t_intersect < min_t:
                     for c in range(3):  # copy in the color
                         results[organism, ray, c] = colors[other_organism, c]
-                    min_t = opt_t
+                    min_t = t_intersect
                 
             # do Bresenhem line steps
             if x == end_x and y == end_y:

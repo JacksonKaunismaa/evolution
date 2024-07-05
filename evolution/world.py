@@ -48,7 +48,7 @@ class World():
         self.kernels = cu_algorithms.CUDAKernelManager(cfg)
         self.time = 0
 
-    #@cuda_profile
+    @cuda_profile
     def trace_rays(self):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
         rays = self.creatures.rays
@@ -66,7 +66,7 @@ class World():
                      self.population)
         return collisions
 
-    #@cuda_profile
+    @cuda_profile
     def compute_grid_setup(self):
         """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
         (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
@@ -82,17 +82,16 @@ class World():
         cell_counts = torch.zeros((num_cells, num_cells), dtype=torch.int32, device='cuda')
         block_size = 512
         grid_size = self.population // block_size + 1
-        print(posns.shape)
 
         # algorithms.setup_grid[grid_size, block_size](posns, sizes, cells, cell_counts, self.cfg.cell_size)
         self.kernels('setup_grid', 
                      grid_size, block_size, # threads
                      posns, sizes, cells, cell_counts,
-                     num_cells, grid_size)
+                     self.population, num_cells)
         return cells, cell_counts  # argument return order should match trace_rays_grid
     
 
-    #@cuda_profile
+    @cuda_profile
     def trace_rays_grid(self, cells, cell_counts):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
 
@@ -114,23 +113,23 @@ class World():
         return collisions#, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
     
 
-    #@cuda_profile
+    @cuda_profile
     def collect_stimuli(self, collisions):
         """Returns [N, F] array for all creature stimuli."""
         return self.creatures.collect_stimuli(collisions, self.food_grid)
     
-    #@cuda_profile
+    @cuda_profile
     def think(self, stimuli):
         """Return [N, O] array of outputs of the creatures' neural networks.."""
         return self.creatures.forward(stimuli.unsqueeze(1))
     
-    #@cuda_profile
+    @cuda_profile
     def move_creatures(self, outputs):
         """Rotate and move all creatures"""
         self.creatures.rotate_creatures(outputs)
         self.creatures.move_creatures(outputs)
 
-    #@cuda_profile
+    @cuda_profile
     def compute_attacks(self):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
@@ -155,7 +154,7 @@ class World():
                      self.population)
         return tr_results
     
-    #@cuda_profile
+    @cuda_profile
     def compute_gridded_attacks(self, cells, cell_counts):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
@@ -178,21 +177,21 @@ class World():
                      self.population, cells.shape[0])
         return tr_results
 
-    #@cuda_profile
+    @cuda_profile
     def do_attacks(self, tr_results):
         # update health and energy
         self.creatures.do_attacks(tr_results)
         self.creatures.kill_dead(self.food_grid)
 
-    #@cuda_profile
+    @cuda_profile
     def creatures_eat(self):
         self.creatures.eat(self.food_grid)
 
-    #@cuda_profile
+    @cuda_profile
     def creatures_reproduce(self):
         self.creatures.reproduce()
 
-    #@cuda_profile
+    @cuda_profile
     def grow_food(self):
         """The higher step_size is, the faster food grows (and the faster corpses decay)."""
         # don't grow on squares that are occupied by creatures
@@ -242,16 +241,16 @@ class World():
         celled_world = self.compute_grid_setup()
         # print(celled_world)
         # input()
-        print(celled_world[0].sum())
-        print(celled_world[1].sum())
+        # print(celled_world[0].sum())
+        # print(celled_world[1].sum())
         collisions = self.trace_rays_grid(*celled_world)
-        print(collisions.sum())
+        # print(collisions.sum())
         # self.visualize(collisions, show_rays=True)
         # input() 
         
-        # if self.time % 60 == 0 and visualize:
-        #     self.write_checkpoint('game.ckpt')
-        #     self.visualize(None, show_rays=False) 
+        if self.time % 60 == 0 and visualize:
+            self.write_checkpoint('game.ckpt')
+            self.visualize(None, show_rays=False) 
 
         stimuli = self.collect_stimuli(collisions)
         outputs = self.think(stimuli)
@@ -266,6 +265,7 @@ class World():
         self.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
         if self.population == 0:
             logging.info("Mass extinction!")
+            print("Mass extinction!")
             return False
 
         self.creatures_reproduce()    # allow high energy individuals to reproduce
@@ -274,8 +274,8 @@ class World():
         self.time += 1
         return True
 
-    def visualize(self, collisions, show_rays=True):
-        # clear_output(wait=True)
+    def visualize(self, collisions, show_rays=True, legend=False):
+        clear_output(wait=True)
 
         fig, ax = plt.subplots(figsize=(10, 10))
         
@@ -333,18 +333,19 @@ class World():
         ax.set_aspect('equal')
         plt.xticks([])
         plt.yticks([])
-        # plt.legend()
-        # plt.gca().invert_yaxis()
+        if legend:
+            plt.legend()
+        plt.gca().invert_yaxis()
         plt.title(f'Step {self.time} - Population {self.population}')
         plt.show()
 
 
-    def visualize_grid_setup(self, cells, cell_counts, cell_size):
+    def visualize_grid_setup(self, cells, cell_counts, collisions=None, show_rays=True):
         """Visualizes the grid setup for ray tracing."""
         # match the return order from self.compute_grid_setup for ease of use
         num_objects = self.creatures.positions.shape[0]
         num_cells = cells.shape[0]
-        width = num_cells * cell_size
+        width = num_cells * self.cfg.cell_size
 
         positions = self.creatures.positions.cpu().numpy()
         sizes = self.creatures.sizes.cpu().numpy()
@@ -380,24 +381,47 @@ class World():
                     alpha=0.5
                 )
                 ax.add_patch(circle)
+
+                if show_rays:
+                    rays_cpu = self.creatures.rays.cpu().numpy()
+                    pos = np.array([x, y])
+                    # Plot the rays
+                    if collisions is not None:
+                        collisions_cpu = collisions.cpu().numpy()
+                        for j in range(len(rays_cpu[i])):
+                            ray_dir = rays_cpu[i][j][:2]
+                            ray_len = rays_cpu[i][j][2]
+                            ray_end = pos + ray_dir * ray_len
+                            collision_info = collisions_cpu[i][j]
+                            if np.any(collision_info[:3] != 0):  # If any component is not zero, ray is active
+                                ray_color = collision_info / 255  # Convert to 0-1 range for matplotlib
+                                ax.plot([pos[0], ray_end[0]], [pos[1], ray_end[1]], color=ray_color)
+                            else:
+                                ax.plot([pos[0], ray_end[0]], [pos[1], ray_end[1]], color='gray', alpha=0.3)
+                    else:
+                        for j in range(len(rays_cpu[i])):
+                            ray_dir = rays_cpu[i][j][:2]
+                            ray_len = rays_cpu[i][j][2]
+                            ray_end = pos + ray_dir * ray_len
+                            ax.plot([pos[0], ray_end[0]], [pos[1], ray_end[1]], color='gray', alpha=0.3)
             
             plt.xlabel('Grid X')
             plt.ylabel('Grid Y')
             plt.title(f'Grid Setup Visualization for Object {obj_idx}')
             # show grid lines
-            ax.set_xticks(np.arange(0, width, cell_size))#, minor=True)
-            ax.set_yticks(np.arange(0, width, cell_size))#, minor=True)
+            ax.set_xticks(np.arange(0, width, self.cfg.cell_size))#, minor=True)
+            ax.set_yticks(np.arange(0, width, self.cfg.cell_size))#, minor=True)
             ax.grid(which='both', color='black', linestyle='-', linewidth=1)
             plt.gca().invert_yaxis()  # Invert y-axis to match array index representation
             plt.show()
 
 
-    def plotly_visualize_grid_setup(self, cells, cell_counts, cell_size):        
+    def plotly_visualize_grid_setup(self, cells, cell_counts):        
         """Visualizes the grid setup for ray tracing."""
         # match the return order from self.compute_grid_setup for ease of use
         num_objects = self.creatures.positions.shape[0]
         num_cells = cells.shape[0]
-        width = num_cells * cell_size
+        width = num_cells * self.cfg.cell_size
 
         positions = self.creatures.positions.cpu().numpy()
         sizes = self.creatures.sizes.cpu().numpy()
@@ -418,10 +442,10 @@ class World():
             fig.add_trace(go.Image(
                 z=heatmap,
                 opacity=0.5,
-                x0=cell_size/2,
-                dx=cell_size,
-                y0=cell_size/2,
-                dy=cell_size,
+                x0=self.cfg.cell_size/2,
+                dx=self.cfg.cell_size,
+                y0=self.cfg.cell_size/2,
+                dy=self.cfg.cell_size,
             ))
 
             # Plot the circles
@@ -455,7 +479,7 @@ class World():
                 xaxis=dict(
                     title='Grid X',
                     tickmode='array',
-                    tickvals=np.arange(0, width, cell_size),
+                    tickvals=np.arange(0, width, self.cfg.cell_size),
                     showgrid=True,
                     gridcolor='black',
                     gridwidth=None,
@@ -464,7 +488,7 @@ class World():
                 yaxis=dict(
                     title='Grid Y',
                     tickmode='array',
-                    tickvals=np.arange(0, width, cell_size),
+                    tickvals=np.arange(0, width, self.cfg.cell_size),
                     showgrid=True,
                     gridcolor='black',
                     gridwidth=None,
@@ -508,7 +532,6 @@ def benchmark():
 def main(cfg):
     times.clear()
     game = World(cfg)
-    input()
     print("BEGINNING SIMULATION...")
     for _ in range(99999):
         if not game.step():

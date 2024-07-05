@@ -169,6 +169,9 @@ class Config:
     cache_size: int = 32    # number of creatures to cache when doing gridded/celled ray tracing (power of 2)
 
 
-def simple_cfg():
-    return Config(size=10, start_creatures=5, max_creatures=10, mem_size=4, 
-                  init_food_scale=5.0, food_cover_decr=0.0, alive_cost=ConfigFunction('linear', 0.0))
+def simple_cfg(**kwargs):
+    cfg = dict(size=10, start_creatures=5, max_creatures=10, mem_size=4, 
+                  init_food_scale=5.0, food_cover_decr=0.0, alive_cost=ConfigFunction('linear', 0.0),
+                  init_size_range=(0.1, 2.5))
+    cfg.update(kwargs)
+    return Config(**cfg)
