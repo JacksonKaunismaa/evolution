@@ -38,7 +38,7 @@ def cuda_profile(func):
 
 
 
-class World():
+class GWorld():
     def __init__(self, cfg: Config):
         self.cfg = cfg
         self.food_grid = torch.rand((cfg.size, cfg.size), device='cuda') * cfg.init_food_scale
@@ -191,6 +191,12 @@ class World():
     def creatures_reproduce(self):
         self.creatures.reproduce()
 
+
+    @property
+    def central_food_grid(self):
+        pad = self.cfg.food_sight
+        return self.food_grid[pad:-pad, pad:-pad]
+
     @cuda_profile
     def grow_food(self):
         """The higher step_size is, the faster food grows (and the faster corpses decay)."""
@@ -208,8 +214,7 @@ class World():
         self.food_grid[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
 
         # don't bother growing food in the padding/inaccesible area
-        pad = self.cfg.food_sight
-        growing = self.food_grid[pad:-pad, pad:-pad]
+        growing = self.central_food_grid
         # grow food and decay dead corpses slowly
         torch.where(growing < self.cfg.max_food, 
                     growing - step_size*(growing-self.cfg.max_food)*self.cfg.food_growth_rate, 
@@ -512,7 +517,7 @@ def benchmark():
 
     torch.manual_seed(1)
     cfg = simple_cfg()
-    game = World(cfg)
+    game = GWorld(cfg)
 
     pr = cProfile.Profile()
     pr.enable()
@@ -531,7 +536,7 @@ def benchmark():
 
 def main(cfg):
     times.clear()
-    game = World(cfg)
+    game = GWorld(cfg)
     print("BEGINNING SIMULATION...")
     for _ in range(99999):
         if not game.step():

@@ -16,12 +16,16 @@ def _cudaGetErrorEnum(error):
     elif isinstance(error, nvrtc.nvrtcResult):
         return nvrtc.nvrtcGetErrorString(error)[1]
     else:
-        raise RuntimeError('Unknown error type: {}'.format(error))
+        return error
+    # else:
+    #     raise RuntimeError('Unknown error type: {}'.format(error))
 
 
 def checkCudaErrors(result):
     if result[0].value:
-        raise RuntimeError("CUDA error code={}({})".format(result[0].value, _cudaGetErrorEnum(result[0])))
+        # print(result[0], type(result[0]))
+        print(result[0], _cudaGetErrorEnum(result[0]))
+        raise RuntimeError(f"CUDA error code={result[0].value}({str(_cudaGetErrorEnum(result[0]))})")
     if len(result) == 1:
         return None
     elif len(result) == 2:

@@ -15,6 +15,6 @@ uniform sampler2D heatmapTexture;
 
 void main()
 {
-    float value = texture(heatmapTexture, TexCoord);
+    float value = texture(heatmapTexture, TexCoord).r;
     FragColor = vec4(0.0, value, 0.0, 1.0);   // green only colormap
 }
