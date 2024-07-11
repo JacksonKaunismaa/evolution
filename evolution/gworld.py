@@ -238,7 +238,7 @@ class GWorld():
         self.creatures = checkpoint['creatures']
         self.cfg = checkpoint['cfg']
 
-    def step(self, visualize=True) -> bool:
+    def step(self, visualize=True, save=True) -> bool:
         logging.info(f"{self.population} creatures alive.")
         logging.info(f"Health:\n {self.creatures.healths}")
         logging.info(f"Energy:\n {self.creatures.energies}")
@@ -253,9 +253,11 @@ class GWorld():
         # self.visualize(collisions, show_rays=True)
         # input() 
         
-        if self.time % 60 == 0 and visualize:
-            self.write_checkpoint('game.ckpt')
-            self.visualize(None, show_rays=False) 
+        if self.time % 60 == 0:
+            if save:
+                self.write_checkpoint('game.ckpt')
+            if visualize:
+                self.visualize(None, show_rays=False) 
 
         stimuli = self.collect_stimuli(collisions)
         outputs = self.think(stimuli)

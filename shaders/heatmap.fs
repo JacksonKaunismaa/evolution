@@ -11,7 +11,7 @@ uniform float negGamma;
 
 
 vec3 heatmapGreen(float value) {
-    float x = value / scale;  // -1, 1 range
+    float x = clamp(value / scale, -1.0, 1.0);  // -1, 1 range
 
     if (x < 0) x = -(pow(abs(x), negGamma));  // gamma on negative range
 

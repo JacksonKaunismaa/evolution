@@ -2,6 +2,7 @@ import torch
 torch.set_grad_enabled(False)
 from cuda import cuda
 from contextlib import contextmanager
+import moderngl as mgl
 
 from .cu_algorithms import checkCudaErrors
 
@@ -77,3 +78,9 @@ def copy_to_buffer(tensor, cuda_buffer):
             memcopy_3d(tensor, ptr)
         else:
             raise ValueError(f'Invalid tensor dim {tensor.dim()}')
+        
+def register_cuda_buffer(buffer: mgl.Buffer):
+    return checkCudaErrors(cuda.cuGraphicsGLRegisterBuffer(
+        int(buffer.glo),
+        cuda.CUgraphicsRegisterFlags.CU_GRAPHICS_REGISTER_FLAGS_NONE
+    ))
