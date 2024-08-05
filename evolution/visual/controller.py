@@ -1,9 +1,16 @@
+from sdl2 import timer
+
 class Controller:
-    def __init__(self, window) -> None:
+    def __init__(self, window, camera):
         # add all attrs of controller that end in _func to window
         for attr in dir(self):
             if attr.endswith('_func'):
                 setattr(window, attr, getattr(self, attr))
+
+        self.wnd = window
+        self.now = timer.SDL_GetTicks()
+        self.delta_time = 0
+        self.camera = camera
 
     def key_event_func(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
@@ -31,3 +38,8 @@ class Controller:
 
     def mouse_move_event_func(self, x, y, dx, dy):
         self.camera.process_mouse_movement(dx, dy)
+
+    def tick(self):
+        curr_time = timer.SDL_GetTicks()
+        self.delta_time = (curr_time - self.now) / 1000.0
+        self.now = curr_time

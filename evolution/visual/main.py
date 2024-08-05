@@ -32,16 +32,10 @@ class Game:
         self.ctx = window.ctx
         self.shaders = loading_utils.load_shaders(shader_path)
         self.world: gworld.GWorld = gworld.GWorld(self.cfg)
-        self.cuDevice = self.world.kernels.cuDevice
         self.heatmap = Heatmap(self.cfg, self.ctx, self.world, self.shaders)
         self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
         self.camera = Camera(self.ctx, self.cfg)
-        
-
-        self.controller = Controller(window)
-
-        self.now = timer.SDL_GetTicks()
-        self.delta_time = 0
+        self.controller = Controller(window, self.camera)
 
 
     def step(self, n=20) -> bool:
@@ -65,11 +59,8 @@ class Game:
         self.creatures.update()
         self.creatures.render()
 
-        curr_time = timer.SDL_GetTicks()
-        self.delta_time = (curr_time - self.now) / 1000.0
-        self.now = curr_time
+        self.controller.tick()
         
-
 
 def main():
     settings.WINDOW['class'] = 'moderngl_window.context.sdl2.Window'

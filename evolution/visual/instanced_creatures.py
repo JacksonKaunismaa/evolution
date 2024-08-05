@@ -1,6 +1,11 @@
 import moderngl as mgl
 import numpy as np
 
+from .. import config
+from .. import gworld
+from .. import cuda_utils
+from .. import loading_utils
+
 
 class InstancedCreatures:
     def __init__(self, cfg, ctx, world, shaders):

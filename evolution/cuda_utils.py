@@ -1,10 +1,32 @@
 import torch
 torch.set_grad_enabled(False)
-from cuda import cuda
+from cuda import cuda, nvrtc
 from contextlib import contextmanager
 import moderngl as mgl
 
-from .cu_algorithms import checkCudaErrors
+
+
+def _cudaGetErrorEnum(error):
+    if isinstance(error, cuda.CUresult):
+        err, name = cuda.cuGetErrorName(error)
+        return name if err == cuda.CUresult.CUDA_SUCCESS else "<unknown>"
+    elif isinstance(error, nvrtc.nvrtcResult):
+        return nvrtc.nvrtcGetErrorString(error)[1]
+    else:
+        return error
+    
+
+def checkCudaErrors(result):
+    if result[0].value:
+        # print(result[0], type(result[0]))
+        print(result[0], _cudaGetErrorEnum(result[0]))
+        raise RuntimeError(f"CUDA error code={result[0].value}({str(_cudaGetErrorEnum(result[0]))})")
+    if len(result) == 1:
+        return None
+    elif len(result) == 2:
+        return result[1]
+    else:
+        return result[1:]
 
 
 def memcopy_1d(tensor, ptr):

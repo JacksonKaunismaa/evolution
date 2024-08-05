@@ -2,7 +2,13 @@ import moderngl as mgl
 import numpy as np
 from cuda import cuda
 from matplotlib import cm
+from OpenGL.GL import *
 
+
+from ..cuda_utils import checkCudaErrors
+from .. import cuda_utils
+from .. import config
+from .. import gworld
 
 class Heatmap:
     def __init__(self, cfg, ctx, world, shaders):
