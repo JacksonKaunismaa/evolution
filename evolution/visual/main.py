@@ -3,6 +3,7 @@ from OpenGL.GL import *
 from contextlib import contextmanager
 import moderngl_window as mglw
 from moderngl_window import settings
+import moderngl as mgl
 import glob
 import os.path as osp
 from cuda import cuda
@@ -29,7 +30,7 @@ class Game:
         # super().__init__(**kwargs)
         self.wnd = window
         self.cfg = cfg
-        self.ctx = window.ctx
+        self.ctx: mgl.Context = window.ctx
         self.shaders = loading_utils.load_shaders(shader_path)
         self.world: gworld.GWorld = gworld.GWorld(self.cfg)
         self.heatmap = Heatmap(self.cfg, self.ctx, self.world, self.shaders)
@@ -54,7 +55,8 @@ class Game:
 
     def render(self):
         # This method is called every frame
-        self.ctx.clear(1.0, 1.0, 1.0)
+        self.ctx.viewport = (0, 0, self.wnd.width, self.wnd.height)
+        self.ctx.clear(0.0, 0.0, 0.0)
         # print(frametime)
         # self.wnd.title = f'Evolution'#: {1./frametime: .2f} FPS'
         self.camera.ubo.write(self.camera.get_camera_matrix())
@@ -77,7 +79,9 @@ def main():
     settings.WINDOW['resizable'] = True
     # settings.WINDOW['fullscreen'] = True
     window = mglw.create_window_from_settings()
-    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
+    # cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
+    cfg = config.Config(start_creatures=1, max_creatures=1, size=5, food_cover_decr=0.0,
+                        init_size_range=(0.1, 0.1))
     game = Game(window, cfg)
     populated = True
 
