@@ -168,6 +168,10 @@ class CUDAKernelManager:
                                             self.stream,   # stream
                                             cuda_args,  # kernel args
                                             0))   # kernel params
+        
+
+    def shutdown(self):
+        checkCudaErrors(cuda.cuStreamDestroy(self.stream))
 
 
 

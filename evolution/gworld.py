@@ -238,7 +238,7 @@ class GWorld():
         self.creatures = checkpoint['creatures']
         self.cfg = checkpoint['cfg']
 
-    def step(self, visualize=True, save=True) -> bool:
+    def step(self, visualize=False, save=True) -> bool:
         logging.info(f"{self.population} creatures alive.")
         logging.info(f"Health:\n {self.creatures.healths}")
         logging.info(f"Energy:\n {self.creatures.energies}")
@@ -536,13 +536,20 @@ def benchmark():
     return times
 
 
-def main(cfg):
+def main(cfg=None):
+    if cfg is None:
+        cfg = Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
     times.clear()
     game = GWorld(cfg)
     print("BEGINNING SIMULATION...")
-    for _ in range(99999):
+    time_now = time.time()
+    for i in range(99999):
         if not game.step():
             break
+        if i % 5 == 4:
+            curr_time = time.time()
+            print(f"FPS: {5/(curr_time - time_now)}")
+            time_now = curr_time
     return times, game
 
         
