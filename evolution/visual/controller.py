@@ -1,7 +1,14 @@
 from sdl2 import timer
+from typing import TYPE_CHECKING
+
+
+from .camera import Camera
+
+if TYPE_CHECKING:
+    from .main import Game
 
 class Controller:
-    def __init__(self, window, camera):
+    def __init__(self, window, camera: Camera, game: 'Game'):
         # add all attrs of controller that end in _func to window
         for attr in dir(self):
             if attr.endswith('_func'):
@@ -11,6 +18,9 @@ class Controller:
         self.now = timer.SDL_GetTicks()
         self.delta_time = 0
         self.camera = camera
+        self.game = game
+        self.click_pos = None
+        self.mouse_pressed = False
 
     def key_event_func(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
@@ -26,15 +36,26 @@ class Controller:
             if key == self.wnd.keys.D:
                 self.camera.process_keyboard('RIGHT', self.delta_time)
 
-            if key == self.wnd.keys.Z:
-                self.camera.process_mouse_movement(0, 1)
+            if key == self.wnd.keys.R:
+                self.camera.reset_camera()
 
-            if key == self.wnd.keys.X:
-                self.camera.process_mouse_movement(0, -1)
+            if key == self.wnd.keys.SPACE:
+                self.game.toggle_pause()
+
+            if key == self.wnd.keys.RIGHT:
+                self.game.step(n=1, force=True)
+
+    def mouse_press_event_func(self, x, y, button):
+        print(button, x, y, self.camera.game_coordinates(x, y), self.wnd._get_drawable_size(), self.wnd.size)
+        print('FOOD:', (self.game.world.food_grid*100).int())
+        print('POS:', self.game.world.creatures.positions)
+        # self.click_pos = (x, y)
 
     def mouse_scroll_event_func(self, xoffset, yoffset):
         self.camera.process_mouse_scroll(yoffset)
 
+    def mouse_drag_event_func(self, x, y, dx, dy):
+        self.camera.process_mouse_movement(dx, dy)
 
     def mouse_move_event_func(self, x, y, dx, dy):
         self.camera.process_mouse_movement(dx, dy)

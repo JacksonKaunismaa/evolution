@@ -17,12 +17,14 @@ class CreatureArray():
     def __init__(self, cfg: Config):
         self.cfg = cfg
 
-        pad = self.cfg.food_sight
-        self.posn_bounds = (pad, cfg.size+pad-1)
-        self.offsets = torch.tensor([[i, j] for i in range(-pad, pad+1) 
-                                     for j in range(-pad, pad+1)], device='cuda').unsqueeze(0)
+        # how much indexing into the food grid needs to be adjusted to avoid OOB
+        self.pad = self.cfg.food_sight 
+        # self.posn_bounds = (pad, cfg.size+pad-1)
+        self.posn_bounds = (0, cfg.size-1)
+        self.offsets = torch.tensor([[i, j] for i in range(-self.pad, self.pad+1) 
+                                     for j in range(-self.pad, self.pad+1)], device='cuda').unsqueeze(0)
 
-        # objects need to stay within [width, size-width]
+        # objects need to stay within [0, size-1] so that indexing makes sense
         self.positions = torch.empty(cfg.start_creatures, 2, device='cuda').uniform_(*self.posn_bounds)
         self.sizes = torch.empty(cfg.start_creatures, device='cuda').uniform_(*cfg.init_size_range)
         logging.info(f"Initial sizes: {self.sizes}")
@@ -86,7 +88,7 @@ class CreatureArray():
         # print(food_grid[self.positions[dead].long()].shape)
         # print(self.positions[dead].long())
         # print(self.sizes[dead].shape)
-        dead_posns = self.positions[dead].long()
+        dead_posns = self.food_grid_pos[dead]
         logging.info(f"{dead_posns.shape[0]} creatures have died.")
         food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[dead])
 
@@ -104,10 +106,19 @@ class CreatureArray():
         self.weights = [w[~dead] for w in self.weights]
         self.biases = [b[~dead] for b in self.biases]
 
+    @property
+    def food_grid_pos(self):
+        return self.positions.long() + self.pad
+    
+    @property
+    def population(self):
+        return self.positions.shape[0]
 
     def eat(self, food_grid):
         """Eat the food in the creatures' vicinity."""
-        pos = self.positions.long()
+        pos = self.food_grid_pos
+        # print('pos', pos)
+        # print('food @ pos', (food_grid[pos[..., 1], pos[..., 0]]*100).int())
         food = food_grid[pos[..., 1], pos[..., 0]] * self.cfg.eat_pct
         # gain food for eating and lose food for staying alive
         alive_cost =  self.cfg.alive_cost(self.sizes)
@@ -116,6 +127,7 @@ class CreatureArray():
         self.energies += food - alive_cost
         food_grid[pos[..., 1], pos[..., 0]] -= food
         self.ages += 1  # if they've eaten, then they've made it to the next step
+        # print('food @ pos after', (food_grid[pos[..., 1], pos[..., 0]]*100).int())
 
 
     def extract_food_windows(self, indices, food_grid):
@@ -128,8 +140,8 @@ class CreatureArray():
     def collect_stimuli(self, collisions, food_grid):
         """Collisions: [N, 3], food_grid: [N, 3, 3] -> [N, F] where F is the number of features."""
         # get the food in the creature's vicinity
-        food = self.extract_food_windows(self.positions.long(), food_grid)  # [N, 9]
-        rays_results = collisions.view(self.positions.shape[0], -1)  # [N, 3*num_rays]
+        food = self.extract_food_windows(self.food_grid_pos, food_grid)  # [N, 9]
+        rays_results = collisions.view(self.population, -1)  # [N, 3*num_rays]
 
         return torch.cat([rays_results, 
                           self.memories, 
@@ -192,7 +204,6 @@ class CreatureArray():
         logging.info(f"Attack energy: {attack_cost}")
         self.healths -= attacks[:,1]
 
-
     def reproduce(self):
         """For sufficiently high energy creatures, create a new creature with mutated genes."""
         # 1 + so that really small creatures don't get unfairly benefitted
@@ -203,7 +214,7 @@ class CreatureArray():
         
         # limit reproducers so we don't exceed max size
         num_reproducers = torch.sum(reproducers)
-        max_reproducers = self.cfg.max_creatures - self.positions.shape[0]
+        max_reproducers = self.cfg.max_creatures - self.population
         if max_reproducers <= 0:
             return 
         

@@ -224,7 +224,7 @@ class GWorld():
     
     @property
     def population(self):
-        return self.creatures.positions.shape[0]
+        return self.creatures.population
 
     def write_checkpoint(self, path):
         torch.save({'food_grid': self.food_grid, 
@@ -294,7 +294,7 @@ class GWorld():
         fig.colorbar(heatmap, ax=ax, fraction=0.046, pad=0.04)
         
         # Move creature attributes to CPU if they're on GPU
-        positions_cpu = self.creatures.positions.cpu().numpy()
+        positions_cpu = self.creatures.positions.cpu().numpy() + self.creatures.pad  # add pad so it lines up with food_grid
         sizes_cpu = self.creatures.sizes.cpu().numpy()
         head_dirs_cpu = self.creatures.head_dirs.cpu().numpy()
         colors_cpu = self.creatures.colors.cpu().numpy()
@@ -350,7 +350,7 @@ class GWorld():
     def visualize_grid_setup(self, cells, cell_counts, collisions=None, show_rays=True):
         """Visualizes the grid setup for ray tracing."""
         # match the return order from self.compute_grid_setup for ease of use
-        num_objects = self.creatures.positions.shape[0]
+        num_objects = self.population
         num_cells = cells.shape[0]
         width = num_cells * self.cfg.cell_size
 
@@ -426,11 +426,11 @@ class GWorld():
     def plotly_visualize_grid_setup(self, cells, cell_counts):        
         """Visualizes the grid setup for ray tracing."""
         # match the return order from self.compute_grid_setup for ease of use
-        num_objects = self.creatures.positions.shape[0]
+        num_objects = self.population
         num_cells = cells.shape[0]
         width = num_cells * self.cfg.cell_size
 
-        positions = self.creatures.positions.cpu().numpy()
+        positions = self.creatures.positions.cpu().numpy() + self.creatures.pad  # add pad so it lines up with food_grid
         sizes = self.creatures.sizes.cpu().numpy()
         colors = self.creatures.colors.cpu().numpy()
         

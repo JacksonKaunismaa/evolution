@@ -29,6 +29,7 @@ class Heatmap:
              1.0, -1.0,    1.0, 0.0,
              1.0,  1.0,    1.0, 1.0,
         ], dtype='f4')
+        
 
         scr_indices = np.array([0, 1, 2, 0, 2, 3], dtype='u4')
         self.screen_vbo = self.ctx.buffer(scr_vertices)

@@ -34,17 +34,23 @@ class Game:
         self.world: gworld.GWorld = gworld.GWorld(self.cfg)
         self.heatmap = Heatmap(self.cfg, self.ctx, self.world, self.shaders)
         self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
-        self.camera = Camera(self.ctx, self.cfg)
-        self.controller = Controller(window, self.camera)
+        self.camera = Camera(self.ctx, self.cfg, window)
+        self.controller = Controller(window, self.camera, self)
+        self.paused = False
 
 
-    def step(self, n=20) -> bool:
+    def step(self, n=1, force=False) -> bool:
+        if self.paused and not force:
+            return True
         for _ in range(n):
             if not self.world.step(visualize=False, save=False):
                 torch.cuda.synchronize()
                 return False
         torch.cuda.synchronize()
         return True
+    
+    def toggle_pause(self):
+        self.paused = not self.paused
 
     def render(self):
         # This method is called every frame
@@ -66,8 +72,10 @@ def main():
     settings.WINDOW['class'] = 'moderngl_window.context.sdl2.Window'
     settings.WINDOW['gl_version'] = (4, 6)
     settings.WINDOW['title'] = 'Evolution'
-    settings.WINDOW['size'] = (1920, 1080)
+    settings.WINDOW['size'] = (1500, 1500)
     settings.WINDOW['vsync'] = True
+    settings.WINDOW['resizable'] = True
+    # settings.WINDOW['fullscreen'] = True
     window = mglw.create_window_from_settings()
     cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
     game = Game(window, cfg)
