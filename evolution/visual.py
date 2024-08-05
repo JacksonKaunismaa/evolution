@@ -293,15 +293,26 @@ def main():
     populated = True
     window.mouse_scroll_event_func = lambda x, y: mouse_scroll_callback(window, game, x, y)
     window.key_event_func = game.key_event
+    
+    curr_time = timer.SDL_GetTicks()
+    curr_fps = 0
+    i = 0
    
     while not window.is_closing and populated:
         window.clear()
         game.render()
         # print(window.frames)
         # time.sleep(5.0)
-        window.title = f'Epoch: {game.world.time} | Population: {game.world.population}'
+        window.title = f'Epoch: {game.world.time} | Population: {game.world.population} | FPS: {curr_fps:.2f}'
         window.swap_buffers()
         # time.sleep(0.1)
         populated = game.step(1)
+        i += 1
+        if i % 5 == 4:
+            next_time = timer.SDL_GetTicks()
+            curr_fps = 5.0 / (next_time - curr_time) * 1000.0
+            curr_time = next_time
+
+            
         
 
