@@ -1,13 +1,14 @@
-from evolution import config
-
-
 import glm
 import moderngl as mgl
 import numpy as np
+import moderngl_window as mglw
+import numpy as pn
 
+
+from .. import config
 
 class Camera:
-    def __init__(self, ctx: mgl.Context, cfg: config.Config, window):
+    def __init__(self, ctx: mgl.Context, cfg: config.Config, window: mglw.BaseWindow):
         self.ctx = ctx
         self.cfg = cfg
         self.ubo = self.ctx.buffer(reserve=2 * 4*4 * 4)  # 2 mat4s, 4x4 floats of 4 bytes
@@ -17,13 +18,10 @@ class Camera:
 
     def reset_camera(self):
         self.position = glm.vec3(0.0, 0.0, 1.0)
-        self.front = glm.vec3(0.0, 0.0, -1.0)
+        self.front = glm.vec3(0.0, 0.0, -1.0)   # points opposite of where camera is 'looking'
         self.up = glm.vec3(0.0, 1.0, 0.0)
         self.right = glm.vec3(1.0, 0.0, 0.0)
-        self.world_up = glm.vec3(0.0, 1.0, 0.0)
-        self.yaw = -90.0
-        self.pitch = 0.0
-        self.movement_speed = 0.025
+        self.movement_speed = 0.5
         self.mouse_sensitivity = 0.01
         self.zoom = 45.0
 
@@ -53,8 +51,6 @@ class Camera:
         self.position += self.right * xoffset
         self.position += self.up * yoffset
 
-        self.update_camera_vectors()
-
     def process_mouse_scroll(self, yoffset):
         # if self.zoom < 1.0:
         #     self.zoom -= yoffset
@@ -64,26 +60,49 @@ class Camera:
         if self.position.z < 0.1:
             self.position.z = 0.1
 
-    def update_camera_vectors(self):
-        front = glm.vec3(0.0, 0.0, 0.0)
-        front.x = np.cos(np.radians(self.yaw)) * np.cos(np.radians(self.pitch))
-        front.y = np.sin(np.radians(self.pitch))
-        front.z = np.sin(np.radians(self.yaw)) * np.cos(np.radians(self.pitch))
-        self.front = glm.normalize(front)
-        self.right = glm.normalize(glm.cross(self.front, self.world_up))
-        self.up = glm.normalize(glm.cross(self.right, self.front))
 
     def get_camera_matrix(self):
         return self.get_projection_matrix() * self.get_view_matrix()
     
     def game_coordinates(self, screen_x, screen_y):
-        # invert get_camera_matrix to get in game coordinates
-        inv = glm.inverse(self.get_camera_matrix())
-        # screen_x = screen_x / self.screen_size[0] * 2 - 1
-        # screen_y = 1 - screen_y / self.screen_size[1] * 2
-        # screen_z = 1
-        print(screen_x, screen_y)
-        screen_pos = glm.vec4(screen_x, screen_y, 0, 1)
-        game_pos = inv * screen_pos
+        # extremely hacky way to go from screen coordinates to game coordinates to determine
+        # where a given click has hit the game board
 
+        # print(self.position)
+        # z_pos = self.position.z
+        # top_left = glm.vec4(-1.0, -1.0, 0.0, 1.0)
+        # top_right = glm.vec4(1.0, -1.0, 0.0, 1.0)
+        # bot_left = glm.vec4(-1.0, 1.0, 0.0, 1.0)
+        # bot_right = glm.vec4(0, 0, 0.0, 1.0)
+        # for pt in [top_left, top_right, bot_left, bot_right]:
+        #     clip_coords = self.get_camera_matrix() * pt
+        #     save_w = clip_coords.w
+        #     clip_coords /= clip_coords.w
+        #     print(clip_coords, save_w)
+        # print(self.get_projection_matrix())
+        # print("#"*20)
+        # print(self.get_view_matrix())
+        # print("#"*20)
+        # print(self.get_camera_matrix())
+
+        test_pt = glm.vec4(0, 0, 0.0, 1.0)
+        clip_coords = self.get_camera_matrix() * test_pt
+        save_w = clip_coords.w
+        clip_coords /= save_w
+        game_pos = glm.unProject(glm.vec3(screen_x, screen_y, 1),
+                                 glm.mat4(1.0),
+                                 glm.mat4(1.0),
+                                 self.window.viewport)
+        # print('ndc', game_pos)
+        game_pos.z = clip_coords.z
+        game_pos = glm.vec4(game_pos, 1.0)
+        # print('pre w scale', game_pos)
+
+        game_pos.y *= -1   # need to invert this for some reason
+        game_pos *= save_w
+        # print('pre_inverse', game_pos)
+        game_pos = glm.inverse(self.get_camera_matrix()) * game_pos    # in [-1, 1] (food_grid vbo coords)
+ 
+        game_pos = (game_pos.xy + 1) / 2   # in [0, 1]
+        game_pos *= self.cfg.size
         return game_pos

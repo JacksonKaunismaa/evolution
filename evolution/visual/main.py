@@ -17,6 +17,7 @@ torch.set_grad_enabled(False)
 import PIL.Image
 import time
 from sdl2 import timer
+from sdl2.ext import window as sdl2_window
 import sdl2.video
 
 
@@ -26,9 +27,9 @@ from ..cu_algorithms import checkCudaErrors
 
 
 class Game:
-    def __init__(self, window, cfg: config.Config, shader_path='./shaders'):
+    def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders'):
         # super().__init__(**kwargs)
-        self.wnd = window
+        self.wnd: mglw.BaseWindow = window
         self.cfg = cfg
         self.ctx: mgl.Context = window.ctx
         self.shaders = loading_utils.load_shaders(shader_path)
@@ -38,6 +39,7 @@ class Game:
         self.camera = Camera(self.ctx, self.cfg, window)
         self.controller = Controller(window, self.camera, self)
         self.paused = False
+        self.max_dims = self.calculate_max_window_size()
 
 
     def step(self, n=1, force=False) -> bool:
@@ -50,13 +52,31 @@ class Game:
         torch.cuda.synchronize()
         return True
     
+    def calculate_max_window_size(self):
+        # calculate non-fullscreen maximum window size, in a very hacky way
+        # basically, we make the window larger than its supposed to be, do a single process_events(),
+        # which captures the automatic resizing event to fit the window in the frame, coming from
+        # the window manager, and then we get the size of the window
+        mode = sdl2.video.SDL_DisplayMode()
+        sdl2.video.SDL_GetDesktopDisplayMode(0, mode)  # these should be larger than the max possible
+        max_width = mode.w * 10
+        max_height = mode.h * 10
+        self.wnd.resize(max_width, max_height)
+        self.wnd.process_events()
+        max_width, max_height = self.wnd.size
+        # self.wnd.size = start_size
+        return max_width, max_height
+        
+    
     def toggle_pause(self):
         self.paused = not self.paused
 
     def render(self):
         # This method is called every frame
-        self.ctx.viewport = (0, 0, self.wnd.width, self.wnd.height)
+        self.ctx.viewport = (0, self.max_dims[1] - (self.wnd.height), self.wnd.width, self.wnd.height)
+        # self.ctx.viewport = (0, 0, self.wnd.width, self.wnd.height)
         self.ctx.clear(0.0, 0.0, 0.0)
+        # print(self.ctx.viewport)
         # print(frametime)
         # self.wnd.title = f'Evolution'#: {1./frametime: .2f} FPS'
         self.camera.ubo.write(self.camera.get_camera_matrix())
@@ -74,18 +94,28 @@ def main():
     settings.WINDOW['class'] = 'moderngl_window.context.sdl2.Window'
     settings.WINDOW['gl_version'] = (4, 6)
     settings.WINDOW['title'] = 'Evolution'
-    settings.WINDOW['size'] = (1500, 1500)
+    settings.WINDOW['size'] = (2000, 2000)
+    settings.WINDOW['aspect_ratio'] = None
     settings.WINDOW['vsync'] = True
     settings.WINDOW['resizable'] = True
     # settings.WINDOW['fullscreen'] = True
     window = mglw.create_window_from_settings()
+    # print(sdl2_window.SDL_)
     # cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
     cfg = config.Config(start_creatures=1, max_creatures=1, size=5, food_cover_decr=0.0,
                         init_size_range=(0.1, 0.1))
     game = Game(window, cfg)
+    # game.toggle_pause()
+    # central_grid = torch.arange(cfg.size**2, dtype=torch.float32, device='cuda').view(cfg.size, cfg.size)
+    # pad = cfg.food_sight
+    # game.world.food_grid[pad:-pad, pad:-pad] = central_grid
+    # print(game.world.food_grid)
     populated = True
 
-    print(sdl2.video.SDL_GL_GetSwapInterval())
+    # sdl2_window._get_sdl_window(window._window).maximize()
+    # mode = sdl2.video.SDL_DisplayMode()
+    # sdl2.video.SDL_GetDesktopDisplayMode(0, mode)
+    # print(mode.h)
     
     curr_time = timer.SDL_GetTicks()
     curr_fps = 0
@@ -98,6 +128,7 @@ def main():
         # time.sleep(5.0)
         window.title = f'Epoch: {game.world.time} | Population: {game.world.population} | FPS: {curr_fps:.2f}'
         window.swap_buffers()
+        game.ctx.viewport = (0, 0, window.width, window.height)
         # window.set_default_viewport()
         # window.process_events()
         # time.sleep(0.1)

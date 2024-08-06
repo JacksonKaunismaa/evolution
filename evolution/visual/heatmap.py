@@ -44,6 +44,7 @@ class Heatmap:
         cmap._init()
         self.prog['colormap'] = np.array(cmap._lut[:-3, :3], dtype='f4')
         self.prog['negGamma'] = 1. / 5
+        print(self.prog['colormap'])
 
         self.screen_vao = self.ctx.vertex_array(self.prog, [
             (self.screen_vbo, '2f 2f', 'pos', 'tex_coord')

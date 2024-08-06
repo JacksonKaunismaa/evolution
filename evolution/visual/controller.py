@@ -1,6 +1,6 @@
 from sdl2 import timer
 from typing import TYPE_CHECKING
-
+import moderngl_window as mglw
 
 from .camera import Camera
 
@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from .main import Game
 
 class Controller:
-    def __init__(self, window, camera: Camera, game: 'Game'):
+    def __init__(self, window: mglw.BaseWindow, camera: Camera, game: 'Game'):
         # add all attrs of controller that end in _func to window
         for attr in dir(self):
             if attr.endswith('_func'):
@@ -46,9 +46,8 @@ class Controller:
                 self.game.step(n=1, force=True)
 
     def mouse_press_event_func(self, x, y, button):
-        print(button, x, y, self.camera.game_coordinates(x, y), self.wnd._get_drawable_size(), self.wnd.size)
-        print('FOOD:', (self.game.world.food_grid*100).int())
-        print('POS:', self.game.world.creatures.positions)
+        print(button, x, y, self.camera.game_coordinates(x, y), self.wnd.size, self.game.ctx.viewport, self.wnd.viewport, self.wnd.position)
+        print('positions:', self.game.world.creatures.positions)
         # self.click_pos = (x, y)
 
     def mouse_scroll_event_func(self, xoffset, yoffset):

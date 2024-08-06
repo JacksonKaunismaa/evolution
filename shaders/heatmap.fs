@@ -18,6 +18,7 @@ vec3 heatmapGreen(float value) {
     x = x * 127 + 128;  // 0, 255 range 
     int i = int(x);
     return colormap[i];
+    // return vec3(255-value*10, 0, 0)/255 + 0.0001 * colormap[i];
 }
 
 
