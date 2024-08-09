@@ -22,6 +22,7 @@ class Controller:
         self.game = game
         self.click_pos = None
         self.mouse_pressed = False
+        self.mouse_pos = None
 
     def key_event_func(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
@@ -47,29 +48,26 @@ class Controller:
                 self.game.step(n=1, force=True)
 
     def mouse_scroll_event_func(self, xoffset, yoffset):
-        self.camera.process_mouse_scroll(yoffset)
-   
+        self.camera.zoom_into_point(yoffset, self.mouse_pos)
+        
     def mouse_press_event_func(self, x, y, button):
         # need to store everything in pixel coords so that we are closest to the actual input 
         # this avoids jittering and weird camera behavior when dragging the map
-        self.click_pos = glm.vec2(x, y)
-        self.camera_pos = self.camera.position.xy
-        # print('click pos:', self.click_pos, self.camera.pixel_to_game_coords(x, y))
-        # print('position', self.game.world.creatures.positions)
-        # print('sizes:', self.game.world.creatures.sizes)
+        if button == self.wnd.mouse.left:
+            self.click_pos = glm.vec2(x, y)
+            self.camera_pos = self.camera.position.xy
+            self.mouse_pressed = True
+
+    def mouse_release_event_func(self, x, y, button):
+        self.mouse_pressed = False
 
     def mouse_drag_event_func(self, x, y, dx, dy):
-        new_coords = glm.vec2(x, y)
-        delta = self.camera.pixel_to_game_delta(new_coords - self.click_pos)  # but it should be this, so compute a delta
+        if not self.mouse_pressed:
+            return
+        self.camera.drag(self.camera_pos, self.click_pos, glm.vec2(x, y))
 
-        # print('camera delta:', delta, game_oords - self.click_pos)
-
-        self.camera.position.xy = self.camera_pos - delta.xy  # and move the camera by that delta
-        # print('new camera pos:', self.camera.position)
-        # print('camera game coord', self.camera_pos - delta)
-
-    def mouse_move_event_func(self, x, y, dx, dy):
-        self.camera.process_mouse_movement(dx, dy)
+    def mouse_position_event_func(self, x, y, dx, dy):
+        self.mouse_pos = glm.vec2(x, y)
 
     def tick(self):
         curr_time = timer.SDL_GetTicks()

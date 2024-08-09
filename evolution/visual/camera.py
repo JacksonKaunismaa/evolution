@@ -45,22 +45,22 @@ class Camera:
         if direction == 'RIGHT':
             self.position += self.right * velocity
 
-    def process_mouse_movement(self, xoffset, yoffset, constrain_pitch=True):
-        # xoffset *= self.mouse_sensitivity
-        # yoffset *= self.mouse_sensitivity
 
-        self.position += self.right * xoffset
-        self.position += self.up * yoffset
+    def drag(self, old_pos: glm.vec2, click_pos: glm.vec2, drag_pos: glm.vec2):
+        # compute game delta coordinates between cursor position now and when the click started
+        delta = self.pixel_to_game_delta(drag_pos - click_pos)
+        self.position.xy = old_pos - delta.xy  # and move the camera by that delta
 
-    def process_mouse_scroll(self, yoffset):
-        # if self.zoom < 1.0:
-        #     self.zoom -= yoffset
-        # if self.zoom > 45.0:
-        #     self.zoom = 45.0
+    def zoom_into_point(self, yoffset, mouse_pos):
+        # we'd like the game position of the cursor to be the same before and after the zoom
+        # therefore, we first zoom without translating, then, we translate the camera so that
+        # the cursor stays in the same place
+        old_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
         self.position += self.front * yoffset / 10
         if self.position.z < 0.1:
             self.position.z = 0.1
-
+        new_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
+        self.position.xy -= (new_cursor_pos - old_cursor_pos).xy
 
     def get_camera_matrix(self):
         return self.get_projection_matrix() * self.get_view_matrix()
@@ -68,23 +68,6 @@ class Camera:
     def pixel_to_game_coords(self, screen_x, screen_y):
         # extremely hacky way to go from screen coordinates to game coordinates to determine
         # where a given click has hit the game board
-
-        # print(self.position)
-        # z_pos = self.position.z
-        # top_left = glm.vec4(-1.0, -1.0, 0.0, 1.0)
-        # top_right = glm.vec4(1.0, -1.0, 0.0, 1.0)
-        # bot_left = glm.vec4(-1.0, 1.0, 0.0, 1.0)
-        # bot_right = glm.vec4(0, 0, 0.0, 1.0)
-        # for pt in [top_left, top_right, bot_left, bot_right]:
-        #     clip_coords = self.get_camera_matrix() * pt
-        #     save_w = clip_coords.w
-        #     clip_coords /= clip_coords.w
-        #     print(clip_coords, save_w)
-        # print(self.get_projection_matrix())
-        # print("#"*20)
-        # print(self.get_view_matrix())
-        # print("#"*20)
-        # print(self.get_camera_matrix())
 
         test_pt = glm.vec4(0, 0, 0.0, 1.0)
         clip_coords = self.get_camera_matrix() * test_pt
