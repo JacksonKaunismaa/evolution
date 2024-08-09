@@ -1,3 +1,4 @@
+from typing import Dict
 import moderngl as mgl
 import numpy as np
 from cuda import cuda
@@ -11,10 +12,10 @@ from .. import config
 from .. import gworld
 
 class Heatmap:
-    def __init__(self, cfg, ctx, world, shaders):
-        self.cfg: config.Config = cfg
-        self.ctx: mgl.Context = ctx
-        self.world: gworld.GWorld = world
+    def __init__(self, cfg: config.Config, ctx: mgl.Context, world: gworld.GWorld, shaders: Dict[str, str]):
+        self.cfg = cfg
+        self.ctx = ctx
+        self.world = world
         self.shaders = shaders
 
         # world.food_grid[50:80, 0:20] = -2
@@ -23,12 +24,22 @@ class Heatmap:
         filter_type = self.ctx.NEAREST
         self.heatmap_sampler.filter = (filter_type, filter_type)
 
+
+        # this thing never gets rotated or translated, so we can afford to use game coordinates
+        # scr_vertices = np.asarray([
+        #     -1.0,  1.0,    0.0, 1.0,
+        #     -1.0, -1.0,    0.0, 0.0,
+        #      1.0, -1.0,    1.0, 0.0,
+        #      1.0,  1.0,    1.0, 1.0,
+        # ], dtype='f4')
         scr_vertices = np.asarray([
-            -1.0,  1.0,    0.0, 1.0,
-            -1.0, -1.0,    0.0, 0.0,
-             1.0, -1.0,    1.0, 0.0,
-             1.0,  1.0,    1.0, 1.0,
+             0.0, 1.0,    0.0, 1.0,
+             0.0, 0.0,    0.0, 0.0,
+             1.0, 0.0,    1.0, 0.0,
+             1.0, 1.0,    1.0, 1.0,
         ], dtype='f4')
+        scr_vertices[::4] *= cfg.size  # scale up to game coordinate sizes
+        scr_vertices[1::4] *= cfg.size
         
 
         scr_indices = np.array([0, 1, 2, 0, 2, 3], dtype='u4')

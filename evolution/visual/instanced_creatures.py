@@ -36,8 +36,8 @@ class InstancedCreatures:
              1.0, -1.0,    1.0, 0.0,
              1.0,  1.0,    1.0, 1.0,
         ], dtype='f4')
-        hbox_vertices[::4] /= self.cfg.size   # make it relative to the screen size
-        hbox_vertices[1::4] /= self.cfg.size
+        # hbox_vertices[::4] /= self.cfg.size   # make it relative to the screen size
+        # hbox_vertices[1::4] /= self.cfg.size
 
         hbox_indices = np.array([0, 1, 2, 0, 2, 3], dtype='u4')
         self.hbox_vbo = self.ctx.buffer(hbox_vertices)
@@ -47,8 +47,6 @@ class InstancedCreatures:
             vertex_shader=self.shaders['creatures.vs'],
             fragment_shader=self.shaders['creatures.fs']
         )
-
-        self.prog['width'] = self.cfg.size
 
         self.vao = self.ctx.vertex_array(self.prog, [
             (self.hbox_vbo, '2f 2f', 'hbox_coord', 'tex_coord'),

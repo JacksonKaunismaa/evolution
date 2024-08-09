@@ -1,3 +1,4 @@
+import glm
 from sdl2 import timer
 from typing import TYPE_CHECKING
 import moderngl_window as mglw
@@ -45,16 +46,27 @@ class Controller:
             if key == self.wnd.keys.RIGHT:
                 self.game.step(n=1, force=True)
 
-    def mouse_press_event_func(self, x, y, button):
-        print(button, x, y, self.camera.game_coordinates(x, y), self.wnd.size, self.game.ctx.viewport, self.wnd.viewport, self.wnd.position)
-        print('positions:', self.game.world.creatures.positions)
-        # self.click_pos = (x, y)
-
     def mouse_scroll_event_func(self, xoffset, yoffset):
         self.camera.process_mouse_scroll(yoffset)
+   
+    def mouse_press_event_func(self, x, y, button):
+        # need to store everything in pixel coords so that we are closest to the actual input 
+        # this avoids jittering and weird camera behavior when dragging the map
+        self.click_pos = glm.vec2(x, y)
+        self.camera_pos = self.camera.position.xy
+        # print('click pos:', self.click_pos, self.camera.pixel_to_game_coords(x, y))
+        # print('position', self.game.world.creatures.positions)
+        # print('sizes:', self.game.world.creatures.sizes)
 
     def mouse_drag_event_func(self, x, y, dx, dy):
-        self.camera.process_mouse_movement(dx, dy)
+        new_coords = glm.vec2(x, y)
+        delta = self.camera.pixel_to_game_delta(new_coords - self.click_pos)  # but it should be this, so compute a delta
+
+        # print('camera delta:', delta, game_oords - self.click_pos)
+
+        self.camera.position.xy = self.camera_pos - delta.xy  # and move the camera by that delta
+        # print('new camera pos:', self.camera.position)
+        # print('camera game coord', self.camera_pos - delta)
 
     def mouse_move_event_func(self, x, y, dx, dy):
         self.camera.process_mouse_movement(dx, dy)

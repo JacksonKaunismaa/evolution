@@ -17,13 +17,14 @@ class Camera:
         self.reset_camera()
 
     def reset_camera(self):
-        self.position = glm.vec3(0.0, 0.0, 1.0)
+        middle = self.cfg.size / 2
+        self.position = glm.vec3(middle, middle, 2.0)
         self.front = glm.vec3(0.0, 0.0, -1.0)   # points opposite of where camera is 'looking'
         self.up = glm.vec3(0.0, 1.0, 0.0)
         self.right = glm.vec3(1.0, 0.0, 0.0)
         self.movement_speed = 0.5
         self.mouse_sensitivity = 0.01
-        self.zoom = 45.0
+        self.zoom = 90.0
 
     def get_view_matrix(self):
         return glm.lookAt(self.position, self.position + self.front, self.up)
@@ -45,8 +46,8 @@ class Camera:
             self.position += self.right * velocity
 
     def process_mouse_movement(self, xoffset, yoffset, constrain_pitch=True):
-        xoffset *= self.mouse_sensitivity
-        yoffset *= self.mouse_sensitivity
+        # xoffset *= self.mouse_sensitivity
+        # yoffset *= self.mouse_sensitivity
 
         self.position += self.right * xoffset
         self.position += self.up * yoffset
@@ -64,7 +65,7 @@ class Camera:
     def get_camera_matrix(self):
         return self.get_projection_matrix() * self.get_view_matrix()
     
-    def game_coordinates(self, screen_x, screen_y):
+    def pixel_to_game_coords(self, screen_x, screen_y):
         # extremely hacky way to go from screen coordinates to game coordinates to determine
         # where a given click has hit the game board
 
@@ -89,20 +90,21 @@ class Camera:
         clip_coords = self.get_camera_matrix() * test_pt
         save_w = clip_coords.w
         clip_coords /= save_w
-        game_pos = glm.unProject(glm.vec3(screen_x, screen_y, 1),
+        ndc_pos = glm.unProject(glm.vec3(screen_x, screen_y, 1),
                                  glm.mat4(1.0),
                                  glm.mat4(1.0),
                                  self.window.viewport)
         # print('ndc', game_pos)
-        game_pos.z = clip_coords.z
-        game_pos = glm.vec4(game_pos, 1.0)
+        ndc_pos.z = clip_coords.z
+        ndc_pos = glm.vec4(ndc_pos, 1.0)
         # print('pre w scale', game_pos)
 
-        game_pos.y *= -1   # need to invert this for some reason
-        game_pos *= save_w
+        ndc_pos.y *= -1   # need to invert this for some reason
+        ndc_pos *= save_w
         # print('pre_inverse', game_pos)
-        game_pos = glm.inverse(self.get_camera_matrix()) * game_pos    # in [-1, 1] (food_grid vbo coords)
- 
-        game_pos = (game_pos.xy + 1) / 2   # in [0, 1]
-        game_pos *= self.cfg.size
-        return game_pos
+        return glm.inverse(self.get_camera_matrix()) * ndc_pos    # in [-1, 1] (food_grid vbo coords)
+    
+    def pixel_to_game_delta(self, xy: glm.vec2):
+        pixel_origin = self.pixel_to_game_coords(0, 0)
+        pixel_xy = self.pixel_to_game_coords(xy.x, xy.y)
+        return pixel_xy - pixel_origin
