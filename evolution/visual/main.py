@@ -39,11 +39,10 @@ class Game:
         self.heatmap = Heatmap(self.cfg, self.ctx, self.world, self.shaders)
         self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
         self.rays = CreatureRays(self.cfg, self.ctx, self.world, self.shaders)
-        self.camera = Camera(self.ctx, self.cfg, window)
+        self.camera = Camera(self.ctx, self.cfg, window, self.world)
         self.controller = Controller(window, self.camera, self)
         self.paused = False
         self.max_dims = self.calculate_max_window_size()
-
 
     def step(self, n=1, force=False) -> bool:
         if self.paused and not force:
@@ -55,13 +54,13 @@ class Game:
         torch.cuda.synchronize()
         return True
     
-    def select_creature(self, creature_id):
-        print("rays creature id updated to ", creature_id)
-        self.rays.update(creature_id)
+    # def select_creature(self, creature_id):
+    #     # print("rays creature id updated to ", creature_id)
+    #     self.rays.update(creature_id)
 
-    def deselect_creature(self):
-        print("rays creature id deselcted to None")
-        self.rays.update(None)
+    # def deselect_creature(self):
+    #     # print("rays creature id deselcted to None")
+    #     self.rays.update(None)
     
     def calculate_max_window_size(self):
         # calculate non-fullscreen maximum window size, in a very hacky way
@@ -82,14 +81,18 @@ class Game:
     def toggle_pause(self):
         self.paused = not self.paused
 
+    def do_creature_selection(self):
+        self.rays.update(self.controller.selected_creature)
+        self.camera.update(self.controller.selected_creature)
+
     def render(self):
         # This method is called every frame
         self.ctx.viewport = (0, self.max_dims[1] - (self.wnd.height), self.wnd.width, self.wnd.height)
         # self.ctx.viewport = (0, 0, self.wnd.width, self.wnd.height)
         self.ctx.clear(0.0, 0.0, 0.0)
-        # print(self.ctx.viewport)
-        # print(frametime)
-        # self.wnd.title = f'Evolution'#: {1./frametime: .2f} FPS'
+
+        self.do_creature_selection()
+        
         self.camera.ubo.write(self.camera.get_camera_matrix())
         self.camera.ubo.bind_to_uniform_block()
 

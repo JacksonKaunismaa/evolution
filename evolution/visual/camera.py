@@ -6,13 +6,15 @@ import numpy as pn
 
 
 from .. import config
+from .. import gworld
 
 class Camera:
-    def __init__(self, ctx: mgl.Context, cfg: config.Config, window: mglw.BaseWindow):
+    def __init__(self, ctx: mgl.Context, cfg: config.Config, window: mglw.BaseWindow, world: gworld.GWorld):
         self.ctx = ctx
         self.cfg = cfg
         self.ubo = self.ctx.buffer(reserve=2 * 4*4 * 4)  # 2 mat4s, 4x4 floats of 4 bytes
         self.window = window
+        self.world = world
 
         self.reset_camera()
 
@@ -45,6 +47,9 @@ class Camera:
         if direction == 'RIGHT':
             self.position += self.right * velocity
 
+    def rotate_to(self, dir_vec):
+        self.up = glm.vec3(dir_vec, 0.0)
+        self.right = glm.normalize(glm.cross(self.front, self.up))
 
     def drag(self, old_pos: glm.vec2, click_pos: glm.vec2, drag_pos: glm.vec2):
         # compute game delta coordinates between cursor position now and when the click started
@@ -91,3 +96,10 @@ class Camera:
         pixel_origin = self.pixel_to_game_coords(0, 0)
         pixel_xy = self.pixel_to_game_coords(xy.x, xy.y)
         return pixel_xy - pixel_origin
+    
+
+    def update(self, creature_id):
+        if creature_id is None:
+            return
+        self.position.xy = glm.vec2(self.world.creatures.positions[creature_id].cpu().numpy())
+        self.rotate_to(glm.vec2(self.world.creatures.head_dirs[creature_id].cpu().numpy()))

@@ -23,6 +23,7 @@ class Controller:
         self.click_pos = None
         self.mouse_pressed = False
         self.mouse_pos = None
+        self.selected_creature = None
 
     def key_event_func(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
@@ -39,6 +40,7 @@ class Controller:
                 self.camera.process_keyboard('RIGHT', self.delta_time)
 
             if key == self.wnd.keys.R:
+                self.selected_creature = None
                 self.camera.reset_camera()
 
             if key == self.wnd.keys.SPACE:
@@ -61,10 +63,10 @@ class Controller:
             self.camera_pos = self.camera.position.xy
             self.mouse_pressed = True
             game_click = self.camera.pixel_to_game_coords(*self.click_pos).xy
-            creature = self.game.world.click_creature(game_click)
-            print(game_click, self.game.world.creatures.positions, self.game.world.creatures.rays, creature)
-            if creature is not None:
-                self.game.select_creature(creature)
+            self.selected_creature = self.game.world.click_creature(game_click)
+            # print(game_click, self.game.world.creatures.positions, self.game.world.creatures.rays, creature)
+            # if creature is not None:
+            # self.game.select_creature(creature)
 
     def mouse_release_event_func(self, x, y, button):
         self.mouse_pressed = False

@@ -13,11 +13,11 @@ class CreatureRays:
         self.ctx: mgl.Context = ctx
         self.world: gworld.GWorld = world
         self.shaders = shaders
+        self.visible = False
 
         # cos(theta), sin(theta), length of arrow * sizeof(float)
         self.rays = self.ctx.buffer(reserve=self.cfg.num_rays * 3 * 4)
         self.ray_colors = self.ctx.buffer(reserve=self.cfg.num_rays * 3 * 4)  # 3 color components * sizeof(float)
-        self.selected_creature = None
 
         self.cuda_rays = cuda_utils.register_cuda_buffer(self.rays)
         self.cuda_ray_colors = cuda_utils.register_cuda_buffer(self.ray_colors)
@@ -36,7 +36,7 @@ class CreatureRays:
              1.0,   1.0,    # 1.0, 1.0,   # top right
         ], dtype='f4')
         hbox_vertices[1::2] *= ray_width
-        print(hbox_vertices)
+        # print(hbox_vertices)
         # hbox_vertices[::4] /= self.cfg.size   # make it relative to the screen size
         # hbox_vertices[1::4] /= self.cfg.size
 
@@ -57,17 +57,16 @@ class CreatureRays:
         index_buffer=self.hbox_ibo)
 
     def update(self, creature_id):
-        # print("updating rays to", creature_id)
-        self.selected_creature = creature_id
         if creature_id is None:
+            self.visible = False
             return
+        self.visible = True
         cuda_utils.copy_to_buffer(self.world.creatures.rays[creature_id], self.cuda_rays)
         cuda_utils.copy_to_buffer(self.world.collisions[creature_id], self.cuda_ray_colors)
         self.prog['position'] = self.world.creatures.positions[creature_id]
 
     def render(self):
-        self.update(self.selected_creature)
-        if self.selected_creature is None:
+        if not self.visible:
             return
         # print('rendering rays')
         self.vao.render(instances=self.cfg.num_rays)
