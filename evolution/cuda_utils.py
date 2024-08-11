@@ -3,6 +3,7 @@ torch.set_grad_enabled(False)
 from cuda import cuda, nvrtc
 from contextlib import contextmanager
 import moderngl as mgl
+from OpenGL.GL import *
 
 
 
@@ -106,3 +107,9 @@ def register_cuda_buffer(buffer: mgl.Buffer):
         int(buffer.glo),
         cuda.CUgraphicsRegisterFlags.CU_GRAPHICS_REGISTER_FLAGS_NONE
     ))
+
+def register_cuda_image(image: mgl.Texture):
+    return checkCudaErrors(cuda.cuGraphicsGLRegisterImage(
+                    int(image.glo),
+                    GL_TEXTURE_2D,
+                    cuda.CUgraphicsRegisterFlags.CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD))

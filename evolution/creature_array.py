@@ -56,16 +56,20 @@ class CreatureArray():
         
         self.biases = [(torch.rand(cfg.start_creatures, 1, next_layer, device='cuda')-0.5) / np.sqrt(next_layer)
                        for next_layer in self.layer_sizes[1:]]
+        self.activations = []
         
 
     def forward(self, inputs):
         """Inputs: [N, 1, F] tensor"""
         # print([w.shape for w in self.weights], [b.shape for b in self.biases])
+        self.activations.clear()
         for w, b in zip(self.weights, self.biases):
             # print(inputs.shape, '@', w.shape, '+', b.shape)
+            self.activations.append(inputs)
             inputs = torch.tanh(inputs @ w + b)
         # print('out' ,inputs.shape)
         outputs = inputs.squeeze(dim=1)  # [N, O]
+        self.activations.append(inputs)
         self.memories = outputs[:, 2:]  # only 2 outputs actually do something, so the rest are memory
         return outputs
     

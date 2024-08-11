@@ -55,16 +55,13 @@ class Heatmap:
         cmap._init()
         self.prog['colormap'] = np.array(cmap._lut[:-3, :3], dtype='f4')
         self.prog['negGamma'] = 1. / 5
-        print(self.prog['colormap'])
+        # print(self.prog['colormap'])
 
         self.screen_vao = self.ctx.vertex_array(self.prog, [
             (self.screen_vbo, '2f 2f', 'pos', 'tex_coord')
         ], index_buffer=self.screen_ibo)
 
-        self.cuda_heatmap = checkCudaErrors(cuda.cuGraphicsGLRegisterImage(
-                                        int(self.heatmap_tex.glo),
-                                        GL_TEXTURE_2D,
-                                        cuda.CUgraphicsRegisterFlags.CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD))
+        self.cuda_heatmap = cuda_utils.register_cuda_image(self.heatmap_tex)
 
     def update(self):
         max_value, min_value = self.cfg.max_food, self.world.central_food_grid.min()

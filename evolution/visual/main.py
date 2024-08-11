@@ -21,6 +21,7 @@ from .controller import Controller
 from .heatmap import Heatmap
 from .instanced_creatures import InstancedCreatures
 from .creature_rays import CreatureRays
+from .brain_visual import BrainVisual
 
 from .camera import Camera
 from .. import gworld, config, loading_utils
@@ -40,6 +41,7 @@ class Game:
         self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
         self.rays = CreatureRays(self.cfg, self.ctx, self.world, self.shaders)
         self.camera = Camera(self.ctx, self.cfg, window, self.world)
+        self.brain_visual = BrainVisual(self.cfg, self.ctx, self.world, self.shaders)
         self.controller = Controller(window, self.camera, self)
         self.paused = False
         self.max_dims = self.calculate_max_window_size()
@@ -81,9 +83,11 @@ class Game:
     def toggle_pause(self):
         self.paused = not self.paused
 
-    def do_creature_selection(self):
+    def selected_creature_updates(self):
         self.rays.update(self.controller.selected_creature)
         self.camera.update(self.controller.selected_creature)
+        self.brain_visual.update(self.controller.selected_creature)
+        
 
     def render(self):
         # This method is called every frame
@@ -91,7 +95,7 @@ class Game:
         # self.ctx.viewport = (0, 0, self.wnd.width, self.wnd.height)
         self.ctx.clear(0.0, 0.0, 0.0)
 
-        self.do_creature_selection()
+        self.selected_creature_updates()
         
         self.camera.ubo.write(self.camera.get_camera_matrix())
         self.camera.ubo.bind_to_uniform_block()
@@ -99,6 +103,7 @@ class Game:
         self.heatmap.render()
         self.creatures.render()
         self.rays.render()
+        self.brain_visual.render()
 
         self.controller.tick()
         
