@@ -21,7 +21,8 @@ from .controller import Controller
 from .heatmap import Heatmap
 from .instanced_creatures import InstancedCreatures
 from .creature_rays import CreatureRays
-from .brain_visual import BrainVisual
+from .brain import BrainVisualizer
+from .thoughts import ThoughtsVisualizer
 
 from .camera import Camera
 from .. import gworld, config, loading_utils
@@ -41,7 +42,8 @@ class Game:
         self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
         self.rays = CreatureRays(self.cfg, self.ctx, self.world, self.shaders)
         self.camera = Camera(self.ctx, self.cfg, window, self.world)
-        self.brain_visual = BrainVisual(self.cfg, self.ctx, self.world, self.shaders)
+        self.brain_visual = BrainVisualizer(self.cfg, self.ctx, self.world, self.shaders)
+        self.thoughts_visual = ThoughtsVisualizer(self.cfg, self.ctx, self, self.shaders)
         self.controller = Controller(window, self.camera, self)
         self.paused = False
         self.max_dims = self.calculate_max_window_size()
@@ -84,9 +86,11 @@ class Game:
         self.paused = not self.paused
 
     def selected_creature_updates(self):
+        self.controller.selected_creature = self.world.update_selected_creature(self.controller.selected_creature)
         self.rays.update(self.controller.selected_creature)
         self.camera.update(self.controller.selected_creature)
-        self.brain_visual.update(self.controller.selected_creature)
+        # self.brain_visual.update(self.controller.selected_creature)
+        self.thoughts_visual.update(self.controller.selected_creature)
         
 
     def render(self):
@@ -104,6 +108,7 @@ class Game:
         self.creatures.render()
         self.rays.render()
         self.brain_visual.render()
+        self.thoughts_visual.render()
 
         self.controller.tick()
         
@@ -120,9 +125,9 @@ def main():
     # settings.WINDOW['fullscreen'] = True
     window = mglw.create_window_from_settings()
     # print(sdl2_window.SDL_)
-    # cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
-    cfg = config.Config(start_creatures=5, max_creatures=5, size=5, food_cover_decr=0.0,
-                        init_size_range=(0.5, 0.5), num_rays=32, immortal=True)
+    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
+    # cfg = config.Config(start_creatures=5, max_creatures=5, size=5, food_cover_decr=0.0,
+    #                     init_size_range=(0.5, 0.5), num_rays=32, immortal=True)
     game = Game(window, cfg)
     # game.toggle_pause()
     # central_grid = torch.arange(cfg.size**2, dtype=torch.float32, device='cuda').view(cfg.size, cfg.size)

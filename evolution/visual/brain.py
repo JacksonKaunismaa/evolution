@@ -9,7 +9,7 @@ from .. import cuda_utils
 from .. import loading_utils
 
 
-class BrainVisual:
+class BrainVisualizer:
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: gworld.GWorld, shaders: Dict[str, str]):
         self.cfg = cfg
         self.ctx = ctx
@@ -20,6 +20,7 @@ class BrainVisual:
         self.neuron_radius = 6
         self.line_density = 300
         self.pad = 3
+        self.display_width = 0.5  # display_width / 2 is what percentage of the screen the brain takes up
         
         self.img = None
         self.neuron_indices = None
@@ -32,12 +33,15 @@ class BrainVisual:
         filter_type = self.ctx.NEAREST
         self.brain_sampler.filter = (filter_type, filter_type)
 
-        brain_vertices = np.asarray([
-             0.0, 1.0,    0.0, 1.0,
-             0.0, 0.0,    0.0, 0.0,
-             1.0, 0.0,    1.0, 0.0,
-             1.0, 1.0,    1.0, 1.0,
+        
+        brain_vertices = np.asarray([   # put in top left of screen
+             -1.0, 1.0,    0.0, 1.0,
+             -1.0, 0.0,    0.0, 0.0,
+             0.0, 0.0,    1.0, 0.0,
+             0.0, 1.0,    1.0, 1.0,
         ], dtype='f4')
+        brain_vertices[::4] *= self.display_width
+        brain_vertices[1::4] *= self.display_width
         
         brain_indices = np.array([0, 1, 2, 0, 2, 3], dtype='u4')
         self.brain_vbo = self.ctx.buffer(brain_vertices)

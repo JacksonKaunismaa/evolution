@@ -57,6 +57,7 @@ class CreatureArray():
         self.biases = [(torch.rand(cfg.start_creatures, 1, next_layer, device='cuda')-0.5) / np.sqrt(next_layer)
                        for next_layer in self.layer_sizes[1:]]
         self.activations = []
+        self.dead = None   # [N] boolean tensor
         
 
     def forward(self, inputs):
@@ -78,9 +79,9 @@ class CreatureArray():
             return
         health_deaths = (self.healths <= 0)
         energy_deaths = (self.energies <= 0)
-        dead = health_deaths | energy_deaths
+        self.dead = health_deaths | energy_deaths
 
-        if not torch.any(dead):
+        if not torch.any(self.dead):
             return
 
         logging.info(f"{health_deaths.sum()} creatures died from health.")
@@ -94,23 +95,23 @@ class CreatureArray():
         # print(food_grid[self.positions[dead].long()].shape)
         # print(self.positions[dead].long())
         # print(self.sizes[dead].shape)
-        dead_posns = self.food_grid_pos[dead]
+        dead_posns = self.food_grid_pos[self.dead]
         logging.info(f"{dead_posns.shape[0]} creatures have died.")
-        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[dead])
+        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
 
-        self.positions = self.positions[~dead]
-        self.memories = self.memories[~dead]
-        self.energies = self.energies[~dead]
-        self.healths = self.healths[~dead]
-        self.colors = self.colors[~dead]
-        self.ages = self.ages[~dead]
-        self.rays = self.rays[~dead]
-        self.head_dirs = self.head_dirs[~dead]
-        self.sizes = self.sizes[~dead]
-        self.mutation_rates = self.mutation_rates[~dead]
+        self.positions = self.positions[~self.dead]
+        self.memories = self.memories[~self.dead]
+        self.energies = self.energies[~self.dead]
+        self.healths = self.healths[~self.dead]
+        self.colors = self.colors[~self.dead]
+        self.ages = self.ages[~self.dead]
+        self.rays = self.rays[~self.dead]
+        self.head_dirs = self.head_dirs[~self.dead]
+        self.sizes = self.sizes[~self.dead]
+        self.mutation_rates = self.mutation_rates[~self.dead]
         
-        self.weights = [w[~dead] for w in self.weights]
-        self.biases = [b[~dead] for b in self.biases]
+        self.weights = [w[~self.dead] for w in self.weights]
+        self.biases = [b[~self.dead] for b in self.biases]
 
     @property
     def food_grid_pos(self):

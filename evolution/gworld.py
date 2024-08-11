@@ -256,6 +256,23 @@ class GWorld():
         nonzero = torch.nonzero(close_enough)
         # print('nonzero', nonzero)
         return nonzero[0].item() if nonzero.shape[0] != 0 else None
+
+
+    def update_selected_creature(self, creature_id):
+        """Taking into account creatures that have died and been reborn this epoch, update the selected creature."""
+        if creature_id is None:
+            return None
+        if self.creatures.dead is None:
+            return creature_id
+        
+        if self.creatures.dead[creature_id]:   # if its dead, then there is no longer any creature selected
+            return None  # indexing into dead is fine since it's using the old indices
+        
+        # otherwise, we need to compute how many creatures have died in indices before this one
+        # and then adjust the index accordingly
+        dead_before = torch.sum(self.creatures.dead[:creature_id])
+        return creature_id - dead_before
+        
     
 
     def update_creatures(self):
