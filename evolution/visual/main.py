@@ -9,10 +9,6 @@ import os.path as osp
 from cuda import cuda
 import torch
 
-from evolution.visual.controller import Controller
-from evolution.visual.heatmap import Heatmap
-from evolution.visual.instanced_creatures import InstancedCreatures
-
 torch.set_grad_enabled(False)
 import PIL.Image
 import time
@@ -20,6 +16,11 @@ from sdl2 import timer
 from sdl2.ext import window as sdl2_window
 import sdl2.video
 
+
+from .controller import Controller
+from .heatmap import Heatmap
+from .instanced_creatures import InstancedCreatures
+from .creature_rays import CreatureRays
 
 from .camera import Camera
 from .. import gworld, config, loading_utils
@@ -32,10 +33,12 @@ class Game:
         self.wnd: mglw.BaseWindow = window
         self.cfg = cfg
         self.ctx: mgl.Context = window.ctx
+        self.ctx.enable(mgl.BLEND)
         self.shaders = loading_utils.load_shaders(shader_path)
         self.world: gworld.GWorld = gworld.GWorld(self.cfg)
         self.heatmap = Heatmap(self.cfg, self.ctx, self.world, self.shaders)
         self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
+        self.rays = CreatureRays(self.cfg, self.ctx, self.world, self.shaders)
         self.camera = Camera(self.ctx, self.cfg, window)
         self.controller = Controller(window, self.camera, self)
         self.paused = False
@@ -51,6 +54,14 @@ class Game:
                 return False
         torch.cuda.synchronize()
         return True
+    
+    def select_creature(self, creature_id):
+        print("rays creature id updated to ", creature_id)
+        self.rays.update(creature_id)
+
+    def deselect_creature(self):
+        print("rays creature id deselcted to None")
+        self.rays.update(None)
     
     def calculate_max_window_size(self):
         # calculate non-fullscreen maximum window size, in a very hacky way
@@ -82,15 +93,15 @@ class Game:
         self.camera.ubo.write(self.camera.get_camera_matrix())
         self.camera.ubo.bind_to_uniform_block()
 
-        self.heatmap.update()
         self.heatmap.render()
-        self.creatures.update()
         self.creatures.render()
+        self.rays.render()
 
         self.controller.tick()
         
 
 def main():
+    torch.random.manual_seed(0)
     settings.WINDOW['class'] = 'moderngl_window.context.sdl2.Window'
     settings.WINDOW['gl_version'] = (4, 6)
     settings.WINDOW['title'] = 'Evolution'
@@ -102,8 +113,8 @@ def main():
     window = mglw.create_window_from_settings()
     # print(sdl2_window.SDL_)
     # cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
-    cfg = config.Config(start_creatures=1, max_creatures=1, size=5, food_cover_decr=0.0,
-                        init_size_range=(0.1, 0.1))
+    cfg = config.Config(start_creatures=5, max_creatures=5, size=5, food_cover_decr=0.0,
+                        init_size_range=(0.5, 0.5), num_rays=32, immortal=True)
     game = Game(window, cfg)
     # game.toggle_pause()
     # central_grid = torch.arange(cfg.size**2, dtype=torch.float32, device='cuda').view(cfg.size, cfg.size)
@@ -147,7 +158,7 @@ def main():
     game.heatmap.heatmap_tex.release()
     game.heatmap.heatmap_sampler.release()
     game.creatures.creature_tex.release()
-    game.creatures.sampler.release()
+    game.creatures.creature_sampler.release()
     game.creatures.positions.release()
     game.creatures.sizes.release()
     game.creatures.head_dirs.release()

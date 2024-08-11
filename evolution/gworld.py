@@ -46,6 +46,12 @@ class GWorld():
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
         self.creatures: CreatureArray = CreatureArray(cfg)
         self.kernels = cu_algorithms.CUDAKernelManager(cfg)
+
+
+        # we keep track of these objects so that we can visualize them
+        self.celled_world = None    # array of grid cells for fast object clicking
+        self.outputs = None   # the set of neural outputs that decide what the creatures want to do
+        self.collisions = None   # the set of ray collisions for each creature
         self.time = 0
 
     @cuda_profile
@@ -238,31 +244,27 @@ class GWorld():
         self.creatures = checkpoint['creatures']
         self.cfg = checkpoint['cfg']
 
-    def step(self, visualize=False, save=True) -> bool:
-        logging.info(f"{self.population} creatures alive.")
-        logging.info(f"Health:\n {self.creatures.healths}")
-        logging.info(f"Energy:\n {self.creatures.energies}")
 
-        celled_world = self.compute_grid_setup()
-        # print(celled_world)
-        # input()
-        # print(celled_world[0].sum())
-        # print(celled_world[1].sum())
-        collisions = self.trace_rays_grid(*celled_world)
-        # print(collisions.sum())
-        # self.visualize(collisions, show_rays=True)
-        # input() 
-        
-        if self.time % 60 == 0:
-            if save:
-                self.write_checkpoint('game.ckpt')
-            if visualize:
-                self.visualize(None, show_rays=False) 
+    def click_creature(self, mouse_pos) -> int:
+        """Return the index of the creature clicked on, or None if no creature was clicked."""
+        mouse_pos = torch.tensor(mouse_pos, device='cuda')   # [2]
+        # print('mouse_pos', mouse_pos)
+        dists = torch.norm(self.creatures.positions - mouse_pos, dim=1)   # [N, 2] - [1, 2] = [N, 2]
+        # print('dists', dists)
+        close_enough = dists < self.creatures.sizes
+        # print('close_enough', close_enough)
+        nonzero = torch.nonzero(close_enough)
+        # print('nonzero', nonzero)
+        return nonzero[0].item() if nonzero.shape[0] != 0 else None
+    
 
-        stimuli = self.collect_stimuli(collisions)
-        outputs = self.think(stimuli)
+    def update_creatures(self):
+        """Move creatures, update health and energy, reproduce, eat, grow food. Update all the states of the creatures
+        and the world."""
+        if self.outputs == None:   # skip updating if we haven't computed the outputs yet
+            return
 
-        self.move_creatures(outputs)
+        self.move_creatures(self.outputs)
 
         celled_world = self.compute_grid_setup()
         # print(celled_world)
@@ -271,13 +273,41 @@ class GWorld():
     
         self.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
         if self.population == 0:
+            return
+        self.creatures_reproduce()    # allow high energy individuals to reproduce
+        self.creatures_eat()   # give energy for being in a square, and then reduce that energy
+        self.grow_food()   # give food time to grow
+
+
+    def compute_decisions(self):
+        """Compute the decisions of all creatures. This includes running the neural networks, computing memories, and
+        running vision ray tracing. Sets `outputs`, `collisions`, and `celled_world`."""
+        self.celled_world = self.compute_grid_setup()
+        self.collisions = self.trace_rays_grid(*self.celled_world)
+        stimuli = self.collect_stimuli(self.collisions)
+        self.outputs = self.think(stimuli)
+        
+
+    def step(self, visualize=False, save=True) -> bool:
+        logging.info(f"{self.population} creatures alive.")
+        logging.info(f"Health:\n {self.creatures.healths}")
+        logging.info(f"Energy:\n {self.creatures.energies}")
+        
+        self.update_creatures()   # move creatures, update health and energy, reproduce, eat, grow food
+
+        self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
+        
+        if self.time % 60 == 0:   # save this generation
+            if save:
+                self.write_checkpoint('game.ckpt')
+            if visualize:
+                self.visualize(None, show_rays=False) 
+
+        if self.population == 0:
             logging.info("Mass extinction!")
             print("Mass extinction!")
             return False
 
-        self.creatures_reproduce()    # allow high energy individuals to reproduce
-        self.creatures_eat()   # give energy for being in a square, and then reduce that energy
-        self.grow_food()   # give food time to grow
         self.time += 1
         return True
 

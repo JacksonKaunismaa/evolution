@@ -26,5 +26,5 @@ void main()
 {
     float value = texture(heatmapTexture, TexCoord).r;
     vec3 color = heatmapGreen(value);
-    FragColor = vec4(color, 0.3);   // green only colormap
+    FragColor = vec4(color, 1.0);   // green only colormap
 }

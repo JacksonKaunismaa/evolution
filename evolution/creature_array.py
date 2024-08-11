@@ -70,6 +70,8 @@ class CreatureArray():
         return outputs
     
     def kill_dead(self, food_grid):
+        if self.cfg.immortal:
+            return
         health_deaths = (self.healths <= 0)
         energy_deaths = (self.energies <= 0)
         dead = health_deaths | energy_deaths

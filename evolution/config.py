@@ -124,6 +124,7 @@ class Config:
     # func(size)*scale to determine initial energy
     init_health: ConfigFunction = ConfigFunction('square', 1.0)   
     size_min: float = 0.1  # minimum size of creatures (after mutating)
+    immortal: bool = False  # if True, creatures don't die
 
     # mutation
     init_mut_rate_range: Tuple[float, float] = (0.01, 0.04)  # (min, max) mutation rate at the beginning

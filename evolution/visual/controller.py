@@ -10,7 +10,7 @@ if TYPE_CHECKING:
 
 class Controller:
     def __init__(self, window: mglw.BaseWindow, camera: Camera, game: 'Game'):
-        # add all attrs of controller that end in _func to window
+        # add all attrs of controller that end in _func to window, since these are associated with events
         for attr in dir(self):
             if attr.endswith('_func'):
                 setattr(window, attr, getattr(self, attr))
@@ -47,6 +47,9 @@ class Controller:
             if key == self.wnd.keys.RIGHT:
                 self.game.step(n=1, force=True)
 
+            if key == self.wnd.keys.B:
+                self.game.creatures.toggle_hitboxes()
+
     def mouse_scroll_event_func(self, xoffset, yoffset):
         self.camera.zoom_into_point(yoffset, self.mouse_pos)
         
@@ -57,6 +60,11 @@ class Controller:
             self.click_pos = glm.vec2(x, y)
             self.camera_pos = self.camera.position.xy
             self.mouse_pressed = True
+            game_click = self.camera.pixel_to_game_coords(*self.click_pos).xy
+            creature = self.game.world.click_creature(game_click)
+            print(game_click, self.game.world.creatures.positions, self.game.world.creatures.rays, creature)
+            if creature is not None:
+                self.game.select_creature(creature)
 
     def mouse_release_event_func(self, x, y, button):
         self.mouse_pressed = False

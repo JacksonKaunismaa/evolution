@@ -74,5 +74,6 @@ class Heatmap:
         cuda_utils.copy_to_texture(self.world.central_food_grid, self.cuda_heatmap)
 
     def render(self):
+        self.update()
         self.heatmap_sampler.use()
         self.screen_vao.render()
