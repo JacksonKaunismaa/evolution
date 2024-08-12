@@ -11,7 +11,7 @@ void main()
 {
     // vec4 texture_color = texture(spriteTexture, TexCoord);
 
-    vec4 color = vec4(Color / 255., 0.3);
+    vec4 color = vec4(Color / 255., 0.5);
     if (Color.x == 0.0)
         color.a = 0.1;    // if (texture_color.a < 0.1)
     //     discard;

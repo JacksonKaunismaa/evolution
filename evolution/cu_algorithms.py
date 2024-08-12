@@ -25,7 +25,7 @@ class CUDAKernelManager:
                                                           self.cuDevice))
         arch_arg = f'--gpu-architecture=compute_{major}{minor}'.encode(self.encoding)
         debug_args =  [b'--device-debug', b'--generate-line-info']
-        self.compile_args = [b'--use_fast_math', b'--extra-device-vectorization', arch_arg] #+ debug_args
+        self.compile_args = [b'--use_fast_math', b'--extra-device-vectorization', arch_arg] + debug_args
         self.kernels = self.compile_kernels()
         self.stream = checkCudaErrors(cuda.cuStreamCreate(0))
 

@@ -13,6 +13,7 @@ from tqdm import trange, tqdm
 from functools import partial, wraps
 import functools
 from typing import Callable
+import os.path as osp
 
 logging.basicConfig(level=logging.INFO, filename='game.log')
 
@@ -239,10 +240,14 @@ class GWorld():
                     }, path)
         
     def load_checkpoint(self, path):
-        checkpoint = torch.load(path)
-        self.food_grid = checkpoint['food_grid']
-        self.creatures = checkpoint['creatures']
-        self.cfg = checkpoint['cfg']
+        if not osp.exists(path):
+            print(f"Warning: checkpoint file '{path}' not found, continuing anyway...")
+        else:
+            print(f"Loading checkpoint '{path}'...")
+            checkpoint = torch.load(path)
+            self.food_grid = checkpoint['food_grid']
+            self.creatures = checkpoint['creatures']
+            self.cfg = checkpoint['cfg']
 
 
     def click_creature(self, mouse_pos) -> int:
@@ -300,6 +305,10 @@ class GWorld():
         """Compute the decisions of all creatures. This includes running the neural networks, computing memories, and
         running vision ray tracing. Sets `outputs`, `collisions`, and `celled_world`."""
         self.celled_world = self.compute_grid_setup()
+
+        print("Percent max'ed out cells: ", 100.*(self.celled_world[1] >= self.cfg.max_per_cell).sum() / self.celled_world[1].numel())
+        print("Max in cell: ", self.celled_world[1].max())
+        # input()
         self.collisions = self.trace_rays_grid(*self.celled_world)
         stimuli = self.collect_stimuli(self.collisions)
         self.outputs = self.think(stimuli)

@@ -45,15 +45,19 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     // getting our starting and ending grid coordinates
     int x = int(our_loc_x / CFG_cell_size);
     int y = int(our_loc_y / CFG_cell_size);
-    int end_x = int((our_loc_y + ray_len * ray_dir_x) / CFG_cell_size);
+    int end_x = int((our_loc_x + ray_len * ray_dir_x) / CFG_cell_size);
     int end_y = int((our_loc_y + ray_len * ray_dir_y) / CFG_cell_size);
 
-    // Bresenham's line algorithm initialization
-    int dx = abs(end_x - x);
-    int dy = abs(end_y - y);
+    // A Fast Voxel Traversal Algorithm for Ray Tracing - John Amanatides, Andrew Woo
+    // https://www.desmos.com/calculator/yh3hevkyc5
+    float t_delta_x = CFG_cell_size / abs(ray_dir_x);
+    float t_delta_y = CFG_cell_size / abs(ray_dir_y);
+    float t_x = -(our_loc_x - x * CFG_cell_size) / ray_dir_x;
+    float t_y = -(our_loc_y - y * CFG_cell_size) / ray_dir_y;
+    float t_max_x = ray_dir_x > 0 ? t_delta_x + t_x : t_x;
+    float t_max_y = ray_dir_y > 0 ? t_delta_y + t_y : t_y;
     int sx = x < end_x ? 1 : -1;
     int sy = y < end_y ? 1 : -1;
-    int err = dx - dy;
     bool found_intersect = false;
 
     while (!found_intersect) {
@@ -64,6 +68,9 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
         for (int i = 0; i < cell_count; i++) {  // for each object in the cell
 
             int other_organism = cells[(cell_idx) * CFG_max_per_cell + i];
+            if (organism == 25 && ray == 21) {
+                cell_idx = cell_idx + 1 - 2*3 + 5;
+            }
             if (other_organism == organism) continue;  // don't check ourselves
 
             // check the cache to see if we've already checked this one
@@ -117,16 +124,12 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
                 t_best = t_intersect;
             }
         }
-        // do Bresenhem line steps
-        if (x == end_x && y == end_y) break;  // if outside the grid
-
-        int e2 = 2 * err;
-        if (e2 > -dy) {
-            err -= dy;
+        // do Voxel Traversal
+        if (t_max_x < t_max_y) {
+            t_max_x += t_delta_x;
             x += sx;
-        }
-        if (e2 < dx) {
-            err += dx;
+        } else {
+            t_max_y += t_delta_y;
             y += sy;
         }
     }

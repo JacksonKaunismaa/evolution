@@ -20,21 +20,24 @@ class Camera:
 
     def reset_camera(self):
         middle = self.cfg.size / 2
-        self.position = glm.vec3(middle, middle, 2.0)
+        self.position = glm.vec3(middle, middle, 5.0)
         self.front = glm.vec3(0.0, 0.0, -1.0)   # points opposite of where camera is 'looking'
         self.up = glm.vec3(0.0, 1.0, 0.0)
         self.right = glm.vec3(1.0, 0.0, 0.0)
         self.movement_speed = 0.5
         self.mouse_sensitivity = 0.01
-        self.zoom = 90.0
+        self.fov = 140.0
+        self.zoom = 1.0
+        self.following = False
 
     def get_view_matrix(self):
         return glm.lookAt(self.position, self.position + self.front, self.up)
 
     def get_projection_matrix(self):
-        return glm.perspective(glm.radians(self.zoom), 
+        return glm.scale(glm.perspective(glm.radians(self.fov), 
                                self.window.size[0] / self.window.size[1], 
-                               0.1, 100.0)
+                               0.1, 100.0),
+                            glm.vec3(1./self.zoom, 1./self.zoom, 1.0))
     
     def process_keyboard(self, direction, delta_time):
         velocity = self.movement_speed * delta_time
@@ -61,9 +64,10 @@ class Camera:
         # therefore, we first zoom without translating, then, we translate the camera so that
         # the cursor stays in the same place
         old_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
-        self.position += self.front * yoffset / 10
-        if self.position.z < 0.1:
-            self.position.z = 0.1
+        # self.position += self.front * yoffset / 10
+        self.zoom /= (1+yoffset/5) #* self.scroll_sensitivity
+        self.zoom = np.clip(self.zoom, 0.01, 20) # prevent zooming in/out too far
+        # print(self.zoom)
         new_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
         self.position.xy -= (new_cursor_pos - old_cursor_pos).xy
 
@@ -96,10 +100,14 @@ class Camera:
         pixel_origin = self.pixel_to_game_coords(0, 0)
         pixel_xy = self.pixel_to_game_coords(xy.x, xy.y)
         return pixel_xy - pixel_origin
+
+    def toggle_follow(self):
+        self.following = not self.following
     
 
     def update(self, creature_id):
         if creature_id is None:
             return
-        self.position.xy = glm.vec2(self.world.creatures.positions[creature_id].cpu().numpy())
-        self.rotate_to(glm.vec2(self.world.creatures.head_dirs[creature_id].cpu().numpy()))
+        if self.following:
+            self.position.xy = glm.vec2(self.world.creatures.positions[creature_id].cpu().numpy())
+        # self.rotate_to(glm.vec2(self.world.creatures.head_dirs[creature_id].cpu().numpy()))

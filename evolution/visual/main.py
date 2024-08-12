@@ -30,14 +30,18 @@ from ..cu_algorithms import checkCudaErrors
 
 
 class Game:
-    def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders'):
+    def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders', load_path=None):
         # super().__init__(**kwargs)
         self.wnd: mglw.BaseWindow = window
+        self.world: gworld.GWorld = gworld.GWorld(cfg)
+        if load_path is not None:
+            self.world.load_checkpoint(load_path)
+            cfg = self.world.cfg
+
         self.cfg = cfg
         self.ctx: mgl.Context = window.ctx
         self.ctx.enable(mgl.BLEND)
         self.shaders = loading_utils.load_shaders(shader_path)
-        self.world: gworld.GWorld = gworld.GWorld(self.cfg)
         self.heatmap = Heatmap(self.cfg, self.ctx, self.world, self.shaders)
         self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
         self.rays = CreatureRays(self.cfg, self.ctx, self.world, self.shaders)
@@ -45,12 +49,22 @@ class Game:
         self.brain_visual = BrainVisualizer(self.cfg, self.ctx, self.world, self.shaders)
         self.thoughts_visual = ThoughtsVisualizer(self.cfg, self.ctx, self, self.shaders)
         self.controller = Controller(window, self.camera, self)
-        self.paused = False
+
         self.max_dims = self.calculate_max_window_size()
 
-    def step(self, n=1, force=False) -> bool:
+        self.paused = False
+        self.game_speed = 1
+        self.dead_updated = False
+
+    def save(self):
+        self.world.write_checkpoint('game.ckpt')
+
+    def step(self, n=None, force=False) -> bool:
         if self.paused and not force:
             return True
+        self.dead_updated = False
+        if n is None:
+            n = self.game_speed
         for _ in range(n):
             if not self.world.step(visualize=False, save=False):
                 torch.cuda.synchronize()
@@ -86,7 +100,9 @@ class Game:
         self.paused = not self.paused
 
     def selected_creature_updates(self):
-        self.controller.selected_creature = self.world.update_selected_creature(self.controller.selected_creature)
+        if not self.dead_updated:
+            self.controller.selected_creature = self.world.update_selected_creature(self.controller.selected_creature)
+        self.dead_updated = True
         self.rays.update(self.controller.selected_creature)
         self.camera.update(self.controller.selected_creature)
         # self.brain_visual.update(self.controller.selected_creature)
@@ -127,9 +143,10 @@ def main():
     # print(sdl2_window.SDL_)
     cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
     # cfg = config.Config(start_creatures=5, max_creatures=5, size=5, food_cover_decr=0.0,
-    #                     init_size_range=(0.5, 0.5), num_rays=32, immortal=True)
-    game = Game(window, cfg)
-    # game.toggle_pause()
+    #                     init_size_range=(0.2, 0.2), num_rays=32, immortal=True)
+    game = Game(window, cfg, load_path='game.ckpt')
+    game.toggle_pause()
+    game.world.compute_decisions()
     # central_grid = torch.arange(cfg.size**2, dtype=torch.float32, device='cuda').view(cfg.size, cfg.size)
     # pad = cfg.food_sight
     # game.world.food_grid[pad:-pad, pad:-pad] = central_grid
@@ -156,7 +173,7 @@ def main():
         # window.set_default_viewport()
         # window.process_events()
         # time.sleep(0.1)
-        populated = game.step(1)
+        populated = game.step()
         i += 1
         if i % 5 == 4:
             next_time = timer.SDL_GetTicks()
