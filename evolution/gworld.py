@@ -8,14 +8,14 @@ from torch.nn import functional as F
 torch.set_grad_enabled(False)
 import time
 from IPython.display import clear_output
-import logging
+# import logging
 from tqdm import trange, tqdm
 from functools import partial, wraps
 import functools
 from typing import Callable
 import os.path as osp
 
-logging.basicConfig(level=logging.INFO, filename='game.log')
+# logging.basicConfig(level=logging.info, filename='game.log')
 
 # from . import algorithms
 from . import cu_algorithms
@@ -47,6 +47,7 @@ class GWorld():
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
         self.creatures: CreatureArray = CreatureArray(cfg)
         self.kernels = cu_algorithms.CUDAKernelManager(cfg)
+        self.n_maxxed = 0
 
 
         # we keep track of these objects so that we can visualize them
@@ -131,10 +132,19 @@ class GWorld():
         return self.creatures.forward(stimuli.unsqueeze(1))
     
     @cuda_profile
+    def rotate_creatures(self, outputs):
+        """Rotate all creatures based on their outputs."""
+        self.creatures.rotate_creatures(outputs)
+    
+    @cuda_profile
+    def only_move_creatures(self, outputs):
+        """Rotate and move all creatures"""
+        self.creatures.move_creatures(outputs)
+
     def move_creatures(self, outputs):
         """Rotate and move all creatures"""
-        self.creatures.rotate_creatures(outputs)
-        self.creatures.move_creatures(outputs)
+        self.rotate_creatures(outputs)
+        self.only_move_creatures(outputs)
 
     @cuda_profile
     def compute_attacks(self):
@@ -183,12 +193,20 @@ class GWorld():
                      cells, cell_counts, tr_results,
                      self.population, cells.shape[0])
         return tr_results
-
+    
     @cuda_profile
-    def do_attacks(self, tr_results):
+    def only_do_attacks(self, tr_results):
         # update health and energy
         self.creatures.do_attacks(tr_results)
+
+    @cuda_profile
+    def kill_dead(self):
         self.creatures.kill_dead(self.food_grid)
+
+    def do_attacks(self, tr_results):
+        # update health and energy
+        self.only_do_attacks(tr_results)
+        self.kill_dead()
 
     @cuda_profile
     def creatures_eat(self):
@@ -214,7 +232,7 @@ class GWorld():
         # energy entering is step_size*max_food*(grid_size**2), so we should set step size to sum(size**2)/max_food/(grid_size**2)/10
     
         step_size = torch.sum(self.cfg.alive_cost(self.creatures.sizes))/self.cfg.max_food/(self.cfg.size**2)
-        logging.info(f"Food growth step size: {step_size}")
+        #logging.info(f"Food growth step size: {step_size}")
 
         posns = self.creatures.positions.long()
         # this allows negative food. We can think of this as "overfeeding" -> toxicity.
@@ -305,9 +323,7 @@ class GWorld():
         """Compute the decisions of all creatures. This includes running the neural networks, computing memories, and
         running vision ray tracing. Sets `outputs`, `collisions`, and `celled_world`."""
         self.celled_world = self.compute_grid_setup()
-
-        print("Percent max'ed out cells: ", 100.*(self.celled_world[1] >= self.cfg.max_per_cell).sum() / self.celled_world[1].numel())
-        print("Max in cell: ", self.celled_world[1].max())
+        self.n_maxxed += (self.celled_world[1] >= self.cfg.max_per_cell).sum()
         # input()
         self.collisions = self.trace_rays_grid(*self.celled_world)
         stimuli = self.collect_stimuli(self.collisions)
@@ -315,24 +331,27 @@ class GWorld():
         
 
     def step(self, visualize=False, save=True) -> bool:
-        logging.info(f"{self.population} creatures alive.")
-        logging.info(f"Health:\n {self.creatures.healths}")
-        logging.info(f"Energy:\n {self.creatures.energies}")
+        #logging.info(f"{self.population} creatures alive.")
+        #logging.info(f"Health:\n {self.creatures.healths}")
+        #logging.info(f"Energy:\n {self.creatures.energies}")
         
+        
+        # we do these steps in this (seemingly backwards) order, because we want vision and brain
+        # information to be up to date when we visualize the scene, which happens after we exit from here
         self.update_creatures()   # move creatures, update health and energy, reproduce, eat, grow food
+        
+        if self.population == 0:
+            #logging.info("Mass extinction!")
+            print("Mass extinction!")
+            return False
 
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
         
-        if self.time % 60 == 0:   # save this generation
-            if save:
-                self.write_checkpoint('game.ckpt')
-            if visualize:
-                self.visualize(None, show_rays=False) 
-
-        if self.population == 0:
-            logging.info("Mass extinction!")
-            print("Mass extinction!")
-            return False
+        # if self.time % 60 == 0:   # save this generation
+        #     if save:
+        #         self.write_checkpoint('game.ckpt')
+        #     if visualize:
+        #         self.visualize(None, show_rays=False) 
 
         self.time += 1
         return True
@@ -567,45 +586,44 @@ class GWorld():
             fig.show()
 
 
-def benchmark():
-    import cProfile
-    from pstats import SortKey
-    import io, pstats
+def benchmark(cfg=None, max_steps=512):
+    # import cProfile
+    # from pstats import SortKey
+    # import io, pstats
     times.clear()
 
-    torch.manual_seed(1)
-    cfg = simple_cfg()
+    # torch.manual_seed(1)
+    if cfg is None:
+        cfg = simple_cfg()
     game = GWorld(cfg)
 
-    pr = cProfile.Profile()
-    pr.enable()
-    for i in range(512):
+    # pr = cProfile.Profile()
+    # pr.enable()
+    for i in trange(max_steps):
         if not game.step(visualize=False):   # we did mass extinction before finishing
             return game
+    
+    times['n_maxxed'] = game.n_maxxed
 
-    pr.disable()
-    s = io.StringIO()
-    sortby = SortKey.CUMULATIVE
-    ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
-    ps.print_stats()
-    print(s.getvalue())
+    # pr.disable()
+    # s = io.StringIO()
+    # sortby = SortKey.CUMULATIVE
+    # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
+    # ps.print_stats()
+    # print(s.getvalue())
     return times
 
 
-def main(cfg=None):
+def main(cfg=None, max_steps=99999):
     if cfg is None:
         cfg = Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
     times.clear()
     game = GWorld(cfg)
     print("BEGINNING SIMULATION...")
     time_now = time.time()
-    for i in range(99999):
+    for i in trange(max_steps):
         if not game.step():
             break
-        if i % 5 == 4:
-            curr_time = time.time()
-            print(f"FPS: {5/(curr_time - time_now)}")
-            time_now = curr_time
     return times, game
 
         

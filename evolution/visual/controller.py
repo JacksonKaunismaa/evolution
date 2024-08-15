@@ -27,66 +27,66 @@ class Controller:
 
     def key_event_func(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
-            if key == self.wnd.keys.W:
+            if key == self.wnd.keys.W:   # movement
                 self.camera.process_keyboard('FORWARD', self.delta_time)
 
-            if key == self.wnd.keys.S:
+            if key == self.wnd.keys.S:   # movement
                 self.camera.process_keyboard('BACKWARD', self.delta_time)
 
-            if key == self.wnd.keys.A:
+            if key == self.wnd.keys.A:   # movement
                 self.camera.process_keyboard('LEFT', self.delta_time)
 
-            if key == self.wnd.keys.D:
+            if key == self.wnd.keys.D:   # movement
                 self.camera.process_keyboard('RIGHT', self.delta_time)
 
-            if key == self.wnd.keys.R:
+            if key == self.wnd.keys.R:   # reset camera to starting position, deselect any creature
                 self.set_selected_creature(None)
                 self.camera.reset_camera()
 
-            if key == self.wnd.keys.Y:
+            if key == self.wnd.keys.Y:   # toggle whether we are locked on to the selected creature
                 self.camera.toggle_follow()
 
-            if key == self.wnd.keys.T:
+            if key == self.wnd.keys.T:   # deselect creature
                 self.set_selected_creature(None)
 
-            if key == self.wnd.keys.SPACE:
+            if key == self.wnd.keys.SPACE:   # pause simulation
                 self.game.toggle_pause()
 
-            if key == self.wnd.keys.RIGHT:
+            if key == self.wnd.keys.RIGHT:   # force step simulation by 1 
                 self.game.step(n=1, force=True)
 
-            if key == self.wnd.keys.C:
+            if key == self.wnd.keys.C:    # save snapshot of current state to 'game.ckpt'
                 self.game.save()
 
-            if key == self.wnd.keys.NUMBER_0:
+            if key == self.wnd.keys.NUMBER_0:   # start following creature 0 
                 self.set_selected_creature(0)
 
-            if key == self.wnd.keys.P:
+            if key == self.wnd.keys.P:     # increase id of followed creature by 1
                 self.set_selected_creature(self.selected_creature + 1)
 
-            if key == self.wnd.keys.UP:
+            if key == self.wnd.keys.UP:    # speed up simulation so that we do 1 more step per frame
                 self.game.game_speed += 1
 
-            if key == self.wnd.keys.DOWN:
+            if key == self.wnd.keys.DOWN:  # slow down simulation so that we do 1 less step per frame
                 self.game.game_speed -= 1
                 self.game.game_speed = max(1, self.game.game_speed)
-
-            if key == self.wnd.keys.B:
+ 
+            if key == self.wnd.keys.B:    # turn hitboxes on/off
                 self.game.creatures.toggle_hitboxes()
 
     def set_selected_creature(self, creature):
-        print("Setting to creature", creature)
+        # print("Setting to creature", creature)
         self.camera.following = True
         self.selected_creature = creature
-        if creature is not None:
-            print('collision', self.game.world.collisions[creature])
-            print('rays', self.game.world.creatures.rays[creature])
-            posn = self.game.world.creatures.positions[creature]
-            # print('position', posn)
-            grid_posn = (posn // self.game.world.cfg.cell_size).long()
-            # print('cell_size', self.game.world.cfg.cell_size)
-            # print('grid_center',self.game.world.celled_world[1].shape, self.game.world.celled_world[1][grid_posn[1], grid_posn[0]])
-            # print('grid_position', self.game.world.celled_world[1][grid_posn[1]-4:grid_posn[1]+4, grid_posn[0]-4:grid_posn[0]+4])
+        # if creature is not None:
+        #     print('collision', self.game.world.collisions[creature])
+        #     print('rays', self.game.world.creatures.rays[creature])
+        #     posn = self.game.world.creatures.positions[creature]
+        #     # print('position', posn)
+        #     grid_posn = (posn // self.game.world.cfg.cell_size).long()
+        #     # print('cell_size', self.game.world.cfg.cell_size)
+        #     # print('grid_center',self.game.world.celled_world[1].shape, self.game.world.celled_world[1][grid_posn[1], grid_posn[0]])
+        #     # print('grid_position', self.game.world.celled_world[1][grid_posn[1]-4:grid_posn[1]+4, grid_posn[0]-4:grid_posn[0]+4])
 
     def mouse_scroll_event_func(self, xoffset, yoffset):
         self.camera.zoom_into_point(yoffset, self.mouse_pos)

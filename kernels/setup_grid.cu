@@ -29,8 +29,8 @@ void setup_grid(float* positions, float* sizes, int* cells, int* cell_counts,
             int grid_idx = j * num_cells + i;
             // int count = cell_counts[grid_idx] + 1;
             int old_count = atomicAdd(&cell_counts[grid_idx], 1);
-            if (old_count >= CFG_max_per_cell) {
-                return;
+            if (old_count >= CFG_max_per_cell - 1) {  // if old == max-1, then curr = max
+                continue;
             }
             cells[grid_idx * CFG_max_per_cell + old_count] = creature;  // add the creature to the cell
         }

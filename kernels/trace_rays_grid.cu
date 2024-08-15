@@ -47,6 +47,8 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     int y = int(our_loc_y / CFG_cell_size);
     int end_x = int((our_loc_x + ray_len * ray_dir_x) / CFG_cell_size);
     int end_y = int((our_loc_y + ray_len * ray_dir_y) / CFG_cell_size);
+    end_x = max(0, min(end_x, num_cells-1));
+    end_y = max(0, min(end_y, num_cells-1));
 
     // A Fast Voxel Traversal Algorithm for Ray Tracing - John Amanatides, Andrew Woo
     // https://www.desmos.com/calculator/yh3hevkyc5
@@ -61,16 +63,18 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     bool found_intersect = false;
 
     while (!found_intersect) {
-        if (x < 0 || x >= num_cells || y < 0 || y >= num_cells) break;   // if outside the grid
         // num objects in current cell of line
+        if (x < 0 || x >= num_cells || y < 0 || y >= num_cells) break;  // if outside the grid
+        
         int cell_idx = y * num_cells + x;
-        int cell_count = cell_counts[cell_idx];
+        int cell_count = min(cell_counts[cell_idx], CFG_max_per_cell-1);
         for (int i = 0; i < cell_count; i++) {  // for each object in the cell
 
+
             int other_organism = cells[(cell_idx) * CFG_max_per_cell + i];
-            if (organism == 25 && ray == 21) {
-                cell_idx = cell_idx + 1 - 2*3 + 5;
-            }
+            // if (organism == 25 && ray == 21) {
+            //     cell_idx = cell_idx + 1 - 2*3 + 5;
+            // }
             if (other_organism == organism) continue;  // don't check ourselves
 
             // check the cache to see if we've already checked this one
@@ -124,6 +128,8 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
                 t_best = t_intersect;
             }
         }
+        if (x == end_x && y == end_y) break;   // includes being outside the grid
+
         // do Voxel Traversal
         if (t_max_x < t_max_y) {
             t_max_x += t_delta_x;
@@ -132,5 +138,6 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
             t_max_y += t_delta_y;
             y += sy;
         }
+        
     }
 }

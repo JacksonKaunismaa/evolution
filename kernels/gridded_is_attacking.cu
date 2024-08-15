@@ -45,8 +45,10 @@ void gridded_is_attacking(float* positions, float* sizes, float* colors, float* 
     // if attack bonus is big enough to hit everything in the cell, don't compute distance
     bool small_cells = CFG_cell_size*1.4f < CFG_attack_dist_bonus;
 
+    int cell_count = min(cell_counts[cell_idx], CFG_max_per_cell-1);
+
     // check all creatures that share the cell of the head
-    for (int idx = 0; idx < cell_counts[cell_idx]; idx++) {
+    for (int idx = 0; idx < cell_count; idx++) {
         int other = cells[cell_idx * CFG_max_per_cell + idx];
         if (other == organism || other >= num_organisms) {  // if out of bounds or self, skip
             continue;
