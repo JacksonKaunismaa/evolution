@@ -284,7 +284,9 @@ class GWorld():
         if self.outputs == None:   # skip updating if we haven't computed the outputs yet
             return
 
+        print(self.creatures.head_dirs)
         self.move_creatures(self.outputs)
+        print(self.creatures.head_dirs)
 
         celled_world = self.compute_grid_setup()
         # print(celled_world)
@@ -323,6 +325,7 @@ class GWorld():
             #logging.info("Mass extinction!")
             print("Mass extinction!")
             return False
+        print(self.creatures.head_dirs)
 
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
         print(self.creatures.sizes)
