@@ -284,18 +284,17 @@ class GWorld():
         if self.outputs == None:   # skip updating if we haven't computed the outputs yet
             return
 
-        print(self.creatures.head_dirs)
-        self.move_creatures(self.outputs)
-        print(self.creatures.head_dirs)
 
         celled_world = self.compute_grid_setup()
         # print(celled_world)
         attacks2 = self.compute_gridded_attacks(*celled_world)
         # print(attacks2)
     
+        print('pre kill', self.creatures.head_dirs)
         self.do_attacks(attacks2)  # update health and energy of creatures
         # self.creatures_reproduce()    # allow high energy individuals to reproduce
         self.fused_kill_reproduce()
+        print('post kill', self.creatures.head_dirs)
         self.creatures_eat()   # give energy for being in a square, and then reduce that energy
         self.grow_food()   # give food time to grow
 
@@ -325,12 +324,8 @@ class GWorld():
             #logging.info("Mass extinction!")
             print("Mass extinction!")
             return False
-        print(self.creatures.head_dirs)
 
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
-        print(self.creatures.sizes)
-        print(self.creatures.head_dirs)
-        print(self.creatures.positions)
         
         # if self.time % 60 == 0:   # save this generation
         #     if save:
