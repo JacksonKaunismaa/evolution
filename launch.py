@@ -13,7 +13,7 @@ torch.set_grad_enabled(False)
 # Blocking call entering rendering/event loop
 # mglw.run_window_config(evolution.visual.Game)
 
-# evolution.visual.main.main()
+evolution.visual.main.main()
 
 from evolution import config
 import pickle
@@ -39,6 +39,6 @@ import os.path as osp
 #             with open("benchmark.pkl", "wb") as f:
 #                 pickle.dump(full_results, f)
 
-cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
-                    cell_size=2.0, cache_size=128, max_per_cell=128)
-print(evolution.gworld.benchmark(cfg, max_steps=2500))
+# cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
+#                     cell_size=2.0, cache_size=128, max_per_cell=128)
+# print(evolution.gworld.benchmark(cfg, max_steps=2500))
