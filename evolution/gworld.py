@@ -263,12 +263,15 @@ class GWorld():
         # print('close_enough', close_enough)
         nonzero = torch.nonzero(close_enough)
         # print('nonzero', nonzero)
-        return nonzero[0].item() if nonzero.shape[0] != 0 else None
-
-
-    def update_selected_creature(self, creature_id):
-        """Taking into account creatures that have died and been reborn this epoch, update the selected creature."""
-        return self.creatures.update_selected_creature(creature_id)
+        contig_index = nonzero[0].item() if nonzero.shape[0] != 0 else None
+        # print(contig_index)
+        discontig_index = self.creatures.alive.nonzero()[contig_index].item() if contig_index is not None else None
+        # print(discontig_index)
+        return discontig_index
+    
+    def get_selected_creature(self, creature_id):
+        """Given a discontiguous creature_id, retrieve the contiguous index."""
+        return self.creatures.get_selected_creature(creature_id)
     
     @cuda_utils.cuda_profile
     def fused_kill_reproduce(self):

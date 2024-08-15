@@ -60,7 +60,8 @@ class CreatureArray():
         self._biases = [(torch.rand(cfg.max_creatures, 1, next_layer, device='cuda')-0.5) / np.sqrt(next_layer)
                        for next_layer in self.layer_sizes[1:]]
         self.activations = []
-        self.dead = None   # [N] boolean tensor
+        self.dead = None   # [N] contiguous boolean tensor
+        self.dead_idxs = None # [N] discontiguous index tensor of creatures that died on last step
         self.reproduce_dims = {'sizes': 1, 
                                'colors': self._colors.shape[1], 
                                'weights': [reduce(mul, w.shape[1:], 1) for w in self._weights],
@@ -73,7 +74,7 @@ class CreatureArray():
         
         self.alive = torch.zeros(cfg.max_creatures, dtype=torch.bool, device='cuda')
         self.alive[:cfg.start_creatures] = True
-        self.reindex(force=True)
+        self.reindex()
 
     def update_old_memory(self):
         """Write back updated memory to the old creatures."""
@@ -83,25 +84,8 @@ class CreatureArray():
         self._healths[self.alive] = self.healths
         self._ages[self.alive] = self.ages
         
-    def reindex(self, deads=None, new_alives=None, force=False):
-        """Reindex the creatures so that the dead creatures are removed."""
-        # write the updated info for already existing creatures that have changed their attributes
-        if deads is None and new_alives is None and not force:
-            return
-        
-        if new_alives is not None or deads is not None:
-            self.update_old_memory()
-
-        if deads is not None: # boolean tensor with contiguous indices
-            alive_idxs = torch.nonzero(self.alive).squeeze()
-            dead_idxs = alive_idxs[deads]
-            self.alive[dead_idxs] = False
-        
-        if new_alives is not None:  # index tensor with discontiguous indices
-            self.alive[new_alives] = True
-        
-        # print(self.alive)
-        
+    def reindex(self):
+        """Reindex the creatures so that the dead creatures are removed."""        
         self.positions = self._positions[self.alive]
         self.memories = self._memories[self.alive]
         self.energies = self._energies[self.alive]
@@ -228,30 +212,50 @@ class CreatureArray():
         #logging.info(f"Attack energy: {attack_cost}")
         self.healths -= attacks[:,1]
         
-    def update_selected_creature(self, creature_id):
-        """Taking into account creatures that have died and been reborn this epoch, update the selected creature."""
+    # def update_selected_creature(self, creature_id):
+    #     """Taking into account creatures that have died and been reborn this epoch, update the selected creature."""
+    #     if creature_id is None:
+    #         return None
+    #     if self.dead is None:
+    #         return creature_id
+        
+    #     if self.dead[creature_id]:   # if its dead, then there is no longer any creature selected
+    #         return None  # indexing into dead is fine since it's using the old indices
+        
+    #     # otherwise, we need to compute how many creatures have died in indices before this one
+    #     # and then adjust the index accordingly
+    #     dead_before = torch.sum(self.dead[:creature_id])
+    #     return creature_id - dead_before
+    
+    def get_selected_creature(self, creature_id):
+        """Given a discontiguous creature_id, retrieve the contiguous index."""
         if creature_id is None:
             return None
-        if self.dead is None:
-            return creature_id
         
-        if self.dead[creature_id]:   # if its dead, then there is no longer any creature selected
-            return None  # indexing into dead is fine since it's using the old indices
+        # print(self.dead_idxs, creature_id)
+        if self.dead_idxs is not None and creature_id in self.dead_idxs:
+            # print("selected creature died")
+            return None
         
-        # otherwise, we need to compute how many creatures have died in indices before this one
-        # and then adjust the index accordingly
-        dead_before = torch.sum(self.dead[:creature_id])
-        return creature_id - dead_before
+        # print("selected creature is still alive", creature_id)
+        
+        contig_creature = self.alive[:creature_id].sum().item()
+        # print("contig_creature", contig_creature, 'discontig_creature', creature_id)
+        return contig_creature
+            
     
     def fused_kill_reproduce(self, food_grid):
         """Kill the dead creatures and reproduce the living ones."""
         deads = self._kill_dead(food_grid)
         # print('deads is', deads)
-        new_alives = self._reproduce(deads) 
-        self.reindex(deads, new_alives)
+        any_reproduced = self._reproduce(deads)
+        if deads is not None or any_reproduced:
+            self.reindex()
         
     @cuda_utils.cuda_profile
     def _kill_dead(self, food_grid):
+        """Update self.alive, contiguous memory storage (_attrs), and food_grid for all creatures that have been killed. 
+        Returns contiguous boolean indices of creatures that have died."""
         if self.cfg.immortal:
             return
         health_deaths = (self.healths <= 0)
@@ -261,15 +265,23 @@ class CreatureArray():
             return
         dead_posns = self.positions[self.dead].long()
         food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
+        
+        if self.dead is not None:
+            self.update_old_memory()
+            alive_idxs = torch.nonzero(self.alive).squeeze()    # contiguous index tensor with values that are discintiguous indices
+            self.dead_idxs = alive_idxs[self.dead]    # we index it with a contiguous boolean tensor -> gives discontiguous indices
+            self.alive[self.dead_idxs] = False
         return self.dead
 
     @cuda_utils.cuda_profile
-    def _reproduce(self, deads):
-        """For sufficiently high energy creatures, create a new creature with mutated genes."""
-        # dead_sum = 0 if deads is None else deads.sum()
-        max_reproducers = self.cfg.max_creatures - self.population #+ dead_sum # dont bother if no can reproduce anyway 
+    def _reproduce(self, deads) -> bool:
+        """For sufficiently high energy creatures, create a new creature with mutated genes. Updates self.alive,
+        contiguous memory storage (_attrs) for old creatures if this wasn't already done by _kill_dead, writes
+        to contiguous memory storage the new creature attributes. Returns True if at least 1 creature reproduces,
+        otherwise False."""
+        max_reproducers = self.cfg.max_creatures - self.population # dont bother if none can reproduce anyway 
         if max_reproducers <= 0:
-            return
+            return False
         
         # 1 + so that really small creatures don't get unfairly benefitted
         reproducers = self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes)  # contiguous boolean tensor
@@ -279,7 +291,7 @@ class CreatureArray():
         # limit reproducers so we don't exceed max size
         num_reproducers = torch.sum(reproducers)
         if num_reproducers == 0:  # no one can reproduce
-            return
+            return False
         
         if num_reproducers > max_reproducers:  # this benefits older creatures because they 
             num_reproducers = max_reproducers  # are more likely to be in the num_reproducers window
@@ -355,7 +367,9 @@ class CreatureArray():
                 
         # print("reproduction of creatures", reproducers)
         # write the info for newly created creatures
+
         new_alives = torch.nonzero(~self.alive)[:num_reproducers].squeeze(1)
+        # print(torch.nonzero(~self.alive).shape, new_alives.shape, num_reproducers, dead_sum, max_reproducers, self.population)
         # print("new alives", new_alives)
         
         self._positions[new_alives] = new_positions
@@ -374,5 +388,9 @@ class CreatureArray():
             
         for i, nb in enumerate(new_biases):
             self._biases[i][new_alives] = nb
+            
+        if deads is None:   # if deads is not None, then we've already called update_old_memory, so we don't need to do it again
+            self.update_old_memory()
+        self.alive[new_alives] = True
         
-        return new_alives
+        return True

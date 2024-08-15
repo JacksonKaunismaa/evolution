@@ -23,7 +23,9 @@ class Controller:
         self.click_pos = None
         self.mouse_pressed = False
         self.mouse_pos = None
+        
         self.selected_creature = None
+        self.contig_creature = None
 
     def key_event_func(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
@@ -58,11 +60,11 @@ class Controller:
             if key == self.wnd.keys.C:    # save snapshot of current state to 'game.ckpt'
                 self.game.save()
 
-            if key == self.wnd.keys.NUMBER_0:   # start following creature 0 
-                self.set_selected_creature(0)
+            # if key == self.wnd.keys.NUMBER_0:   # start following creature 0 
+            #     self.set_selected_creature(0)
 
-            if key == self.wnd.keys.P:     # increase id of followed creature by 1
-                self.set_selected_creature(self.selected_creature + 1)
+            # if key == self.wnd.keys.P:     # increase id of followed creature by 1
+            #     self.set_selected_creature(self.selected_creature + 1)
 
             if key == self.wnd.keys.UP:    # speed up simulation so that we do 1 more step per frame
                 self.game.game_speed += 1
@@ -87,6 +89,13 @@ class Controller:
         #     # print('cell_size', self.game.world.cfg.cell_size)
         #     # print('grid_center',self.game.world.celled_world[1].shape, self.game.world.celled_world[1][grid_posn[1], grid_posn[0]])
         #     # print('grid_position', self.game.world.celled_world[1][grid_posn[1]-4:grid_posn[1]+4, grid_posn[0]-4:grid_posn[0]+4])
+        
+    def get_selected_creature(self):
+        creature = self.game.world.get_selected_creature(self.selected_creature)
+        if creature is None:
+            self.set_selected_creature(None)
+        self.contig_creature = creature
+        return creature
 
     def mouse_scroll_event_func(self, xoffset, yoffset):
         self.camera.zoom_into_point(yoffset, self.mouse_pos)
@@ -102,8 +111,8 @@ class Controller:
             creature_id = self.game.world.click_creature(game_click)
             if creature_id is not None:
                 self.set_selected_creature(creature_id)
-        print(self.game.world.creatures.positions)
-        print(self.game.world.creatures.sizes)
+        # print(self.game.world.creatures.positions)
+        # print(self.game.world.creatures.sizes)
             # print(game_click, self.game.world.creatures.positions, self.game.world.creatures.rays, creature)
             # if creature is not None:
             # self.game.select_creature(creature)
