@@ -69,8 +69,6 @@ class CreatureArray():
                                'rays': reduce(mul, self.rays.shape[1:], 1),
                                'positions': self.positions.shape[1]}
         self.total_reproduce_dims = sum([(sum(v) if isinstance(v, list) else v) for v in self.reproduce_dims.values()])
-        print(self.positions)
-        print(self.head_dirs)
 
     def forward(self, inputs):
         """Inputs: [N, 1, F] tensor"""
