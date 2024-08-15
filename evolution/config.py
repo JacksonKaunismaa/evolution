@@ -123,7 +123,7 @@ class Config:
     init_energy: ConfigFunction = ConfigFunction('linear', 1.0) 
     # func(size)*scale to determine initial energy
     init_health: ConfigFunction = ConfigFunction('square', 1.0)   
-    size_min: float = 0.1  # minimum size of creatures (after mutating)
+    size_range: Tuple[float, float] = (0.1, 5.0)  # (minimum,maximum) size of creatures (after mutating)
     immortal: bool = False  # if True, creatures don't die
 
     # mutation
@@ -151,7 +151,7 @@ class Config:
     # func(size) to determine the amount of damage done in an attack
     attack_dmg: FunctionExpression = FunctionExpression(['x'], 'x*x * 1.5f') 
     attack_ignore_color_dist: float = 3.0 # if sum(abs(color1-color2)) < this, they don't hurt each other
-    attack_dist_bonus: float = 0.5  # if creatures are within the dist_bonus, they can attack each other
+    attack_dist_bonus: float = 0.0  # if creatures are within the dist_bonus, they can attack each other
     dead_drop_food: ConfigFunction = ConfigFunction('linear', 1.)  # func(size) to determine how much food a creature drops when it dies
 
 

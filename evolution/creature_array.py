@@ -106,23 +106,25 @@ class CreatureArray():
         # print(food_grid[self.positions[dead].long()].shape)
         # print(self.positions[dead].long())
         # print(self.sizes[dead].shape)
-        dead_posns = self.food_grid_pos[self.dead]
+        dead_posns = self.positions[self.dead].long()
         #logging.info(f"{dead_posns.shape[0]} creatures have died.")
         food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
-
-        self.positions = self.positions[~self.dead]
-        self.memories = self.memories[~self.dead]
-        self.energies = self.energies[~self.dead]
-        self.healths = self.healths[~self.dead]
-        self.colors = self.colors[~self.dead]
-        self.ages = self.ages[~self.dead]
-        self.rays = self.rays[~self.dead]
-        self.head_dirs = self.head_dirs[~self.dead]
-        self.sizes = self.sizes[~self.dead]
-        self.mutation_rates = self.mutation_rates[~self.dead]
         
-        self.weights = [w[~self.dead] for w in self.weights]
-        self.biases = [b[~self.dead] for b in self.biases]
+        
+        alive = ~self.dead
+        self.positions = self.positions[alive]
+        self.memories = self.memories[alive]
+        self.energies = self.energies[alive]
+        self.healths = self.healths[alive]
+        self.colors = self.colors[alive]
+        self.ages = self.ages[alive]
+        self.rays = self.rays[alive]
+        self.head_dirs = self.head_dirs[alive]
+        self.sizes = self.sizes[alive]
+        self.mutation_rates = self.mutation_rates[alive]
+        
+        self.weights = [w[alive] for w in self.weights]
+        self.biases = [b[alive] for b in self.biases]
 
     @property
     def food_grid_pos(self):
@@ -286,7 +288,7 @@ class CreatureArray():
         pos_perturb = reproduced[:, idx:idx+self.reproduce_dims['positions']] * self.cfg.reproduce_dist#* new_sizes.unsqueeze(1) * self.cfg.reproduce_dist
         idx += self.reproduce_dims['positions']
 
-        new_sizes = torch.clamp_min(self.sizes[reproducers] + size_perturb, self.cfg.size_min)
+        new_sizes = torch.clamp(self.sizes[reproducers] + size_perturb, *self.cfg.size_range)
         new_colors = torch.clamp(self.colors[reproducers] + color_perturb, 1, 255)
         new_weights = [w[reproducers] + wp for w, wp in zip(self.weights, weight_perturbs)]
         # #logging.info(f"existing bias shapes: {[b[reproducers].shape for b in self.biases]}")

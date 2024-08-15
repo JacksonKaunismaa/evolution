@@ -201,7 +201,7 @@ class GWorld():
 
     @cuda_profile
     def kill_dead(self):
-        self.creatures.kill_dead(self.food_grid)
+        self.creatures.kill_dead(self.central_food_grid)
 
     def do_attacks(self, tr_results):
         # update health and energy
@@ -235,11 +235,11 @@ class GWorld():
         #logging.info(f"Food growth step size: {step_size}")
 
         posns = self.creatures.positions.long()
+        growing = self.central_food_grid
         # this allows negative food. We can think of this as "overfeeding" -> toxicity.
-        self.food_grid[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
+        growing[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
 
         # don't bother growing food in the padding/inaccesible area
-        growing = self.central_food_grid
         # grow food and decay dead corpses slowly
         torch.where(growing < self.cfg.max_food, 
                     growing - step_size*(growing-self.cfg.max_food)*self.cfg.food_growth_rate, 
