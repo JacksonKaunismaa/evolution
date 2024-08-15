@@ -294,7 +294,7 @@ class GWorld():
         self.do_attacks(attacks2)  # update health and energy of creatures
         # self.creatures_reproduce()    # allow high energy individuals to reproduce
         self.fused_kill_reproduce()
-        print('post kill', self.creatures.head_dirs)
+        print('post repr', self.creatures.head_dirs)
         self.creatures_eat()   # give energy for being in a square, and then reduce that energy
         self.grow_food()   # give food time to grow
 

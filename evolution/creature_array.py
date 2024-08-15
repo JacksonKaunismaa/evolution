@@ -247,7 +247,7 @@ class CreatureArray():
     def fused_kill_reproduce(self, food_grid):
         """Kill the dead creatures and reproduce the living ones."""
         deads = self._kill_dead(food_grid)
-        print('mid kill', self.head_dirs)
+        print('post kill', self.head_dirs)
         # print('deads is', deads)
         any_reproduced = self._reproduce(deads)
         if deads is not None or any_reproduced:
