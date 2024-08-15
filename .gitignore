@@ -1,3 +1,5 @@
 **/__pycache__
 **/*.log
 **/*.ckpt
+**/*.pkl
+**/*.ncu-rep
