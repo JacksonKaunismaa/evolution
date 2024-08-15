@@ -75,6 +75,8 @@ class CreatureArray():
         self.alive = torch.zeros(cfg.max_creatures, dtype=torch.bool, device='cuda')
         self.alive[:cfg.start_creatures] = True
         self.reindex()
+        print(self.positions)
+        print(self.head_dirs)
 
     def update_old_memory(self):
         """Write back updated memory to the old creatures."""
