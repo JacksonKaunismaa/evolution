@@ -102,6 +102,8 @@ class Controller:
             creature_id = self.game.world.click_creature(game_click)
             if creature_id is not None:
                 self.set_selected_creature(creature_id)
+        print(self.game.world.creatures.positions)
+        print(self.game.world.creatures.sizes)
             # print(game_click, self.game.world.creatures.positions, self.game.world.creatures.rays, creature)
             # if creature is not None:
             # self.game.select_creature(creature)

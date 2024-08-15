@@ -21,22 +21,7 @@ import os.path as osp
 from . import cu_algorithms
 from .creature_array import CreatureArray
 from .config import Config, simple_cfg
-
-start = torch.cuda.Event(enable_timing=True)
-end = torch.cuda.Event(enable_timing=True)
-times = defaultdict(float)
-
-def cuda_profile(func):
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        start.record()
-        res = func(*args, **kwargs)
-        end.record()
-        torch.cuda.synchronize()
-        times[func.__name__] += start.elapsed_time(end)
-        return res
-    return wrapper
-
+from . import cuda_utils
 
 
 class GWorld():
@@ -56,7 +41,7 @@ class GWorld():
         self.collisions = None   # the set of ray collisions for each creature
         self.time = 0
 
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def trace_rays(self):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
         rays = self.creatures.rays
@@ -74,7 +59,7 @@ class GWorld():
                      self.population)
         return collisions
 
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def compute_grid_setup(self):
         """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
         (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
@@ -99,7 +84,7 @@ class GWorld():
         return cells, cell_counts  # argument return order should match trace_rays_grid
     
 
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def trace_rays_grid(self, cells, cell_counts):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
 
@@ -121,22 +106,22 @@ class GWorld():
         return collisions#, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
     
 
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def collect_stimuli(self, collisions):
         """Returns [N, F] array for all creature stimuli."""
         return self.creatures.collect_stimuli(collisions, self.food_grid)
     
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def think(self, stimuli):
         """Return [N, O] array of outputs of the creatures' neural networks.."""
         return self.creatures.forward(stimuli.unsqueeze(1))
     
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def rotate_creatures(self, outputs):
         """Rotate all creatures based on their outputs."""
         self.creatures.rotate_creatures(outputs)
     
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def only_move_creatures(self, outputs):
         """Rotate and move all creatures"""
         self.creatures.move_creatures(outputs)
@@ -146,7 +131,7 @@ class GWorld():
         self.rotate_creatures(outputs)
         self.only_move_creatures(outputs)
 
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def compute_attacks(self):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
@@ -171,7 +156,7 @@ class GWorld():
                      self.population)
         return tr_results
     
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def compute_gridded_attacks(self, cells, cell_counts):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
@@ -194,25 +179,25 @@ class GWorld():
                      self.population, cells.shape[0])
         return tr_results
     
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def only_do_attacks(self, tr_results):
         # update health and energy
         self.creatures.do_attacks(tr_results)
 
-    @cuda_profile
-    def kill_dead(self):
-        self.creatures.kill_dead(self.central_food_grid)
+    # @cuda_utils.cuda_profile
+    # def kill_dead(self):
+    #     self.creatures.kill_dead(self.central_food_grid)
 
     def do_attacks(self, tr_results):
         # update health and energy
         self.only_do_attacks(tr_results)
-        self.kill_dead()
+        # self.kill_dead()
 
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def creatures_eat(self):
         self.creatures.eat(self.food_grid)
 
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def creatures_reproduce(self):
         self.creatures.reproduce()
 
@@ -222,7 +207,7 @@ class GWorld():
         pad = self.cfg.food_sight
         return self.food_grid[pad:-pad, pad:-pad]
 
-    @cuda_profile
+    @cuda_utils.cuda_profile
     def grow_food(self):
         """The higher step_size is, the faster food grows (and the faster corpses decay)."""
         # don't grow on squares that are occupied by creatures
@@ -283,19 +268,11 @@ class GWorld():
 
     def update_selected_creature(self, creature_id):
         """Taking into account creatures that have died and been reborn this epoch, update the selected creature."""
-        if creature_id is None:
-            return None
-        if self.creatures.dead is None:
-            return creature_id
-        
-        if self.creatures.dead[creature_id]:   # if its dead, then there is no longer any creature selected
-            return None  # indexing into dead is fine since it's using the old indices
-        
-        # otherwise, we need to compute how many creatures have died in indices before this one
-        # and then adjust the index accordingly
-        dead_before = torch.sum(self.creatures.dead[:creature_id])
-        return creature_id - dead_before
-        
+        return self.creatures.update_selected_creature(creature_id)
+    
+    @cuda_utils.cuda_profile
+    def fused_kill_reproduce(self):
+        self.creatures.fused_kill_reproduce(self.central_food_grid)
     
 
     def update_creatures(self):
@@ -311,10 +288,9 @@ class GWorld():
         attacks2 = self.compute_gridded_attacks(*celled_world)
         # print(attacks2)
     
-        self.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
-        if self.population == 0:
-            return
-        self.creatures_reproduce()    # allow high energy individuals to reproduce
+        self.do_attacks(attacks2)  # update health and energy of creatures
+        # self.creatures_reproduce()    # allow high energy individuals to reproduce
+        self.fused_kill_reproduce()
         self.creatures_eat()   # give energy for being in a square, and then reduce that energy
         self.grow_food()   # give food time to grow
 
@@ -590,7 +566,7 @@ def benchmark(cfg=None, max_steps=512):
     # import cProfile
     # from pstats import SortKey
     # import io, pstats
-    times.clear()
+    cuda_utils.times.clear()
 
     # torch.manual_seed(1)
     if cfg is None:
@@ -603,7 +579,7 @@ def benchmark(cfg=None, max_steps=512):
         if not game.step(visualize=False):   # we did mass extinction before finishing
             return game
     
-    times['n_maxxed'] = game.n_maxxed
+    cuda_utils.times['n_maxxed'] = game.n_maxxed
 
     # pr.disable()
     # s = io.StringIO()
@@ -611,20 +587,20 @@ def benchmark(cfg=None, max_steps=512):
     # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
     # ps.print_stats()
     # print(s.getvalue())
-    return times
+    return cuda_utils.times
 
 
 def main(cfg=None, max_steps=99999):
     if cfg is None:
         cfg = Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
-    times.clear()
+    cuda_utils.times.clear()
     game = GWorld(cfg)
     print("BEGINNING SIMULATION...")
     time_now = time.time()
     for i in trange(max_steps):
         if not game.step():
             break
-    return times, game
+    return cuda_utils.times, game
 
         
 

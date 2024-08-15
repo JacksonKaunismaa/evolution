@@ -8,6 +8,7 @@ torch.set_grad_enabled(False)
 # logging.basicConfig(level=logging.ERROR, filename='game.log')
 
 from .config import Config
+from . import cuda_utils
 
 
 """Store all relevant creature attributes in CUDA objects to ensure minimal
@@ -27,25 +28,25 @@ class CreatureArray():
                                      for j in range(-self.pad, self.pad+1)], device='cuda').unsqueeze(0)
 
         # objects need to stay within [0, size-1] so that indexing makes sense
-        self.positions = torch.empty(cfg.start_creatures, 2, device='cuda').uniform_(*self.posn_bounds)
-        self.sizes = torch.empty(cfg.start_creatures, device='cuda').uniform_(*cfg.init_size_range)
+        self._positions = torch.empty(cfg.max_creatures, 2, device='cuda').uniform_(*self.posn_bounds)
+        self._sizes = torch.empty(cfg.max_creatures, device='cuda').uniform_(*cfg.init_size_range)
         #logging.info(f"Initial sizes: {self.sizes}")
-        self.memories = torch.zeros(cfg.start_creatures, cfg.mem_size, device='cuda')
-        self.energies = cfg.init_energy(self.sizes)
-        self.healths = cfg.init_health(self.sizes)
-        self.ages = torch.zeros(cfg.start_creatures, device='cuda')
+        self._memories = torch.zeros(cfg.max_creatures, cfg.mem_size, device='cuda')
+        self._energies = cfg.init_energy(self._sizes)
+        self._healths = cfg.init_health(self._sizes)
+        self._ages = torch.zeros(cfg.max_creatures, device='cuda')
 
-        self.rays = torch.randn(cfg.start_creatures, cfg.num_rays, 3, device='cuda')
-        self.rays[..., :2] /= torch.norm(self.rays[..., :2], dim=2, keepdim=True)
-        self.rays[..., 2] = torch.clamp_min(torch.abs(self.rays[..., 2]), cfg.min_ray_dist)
+        self._rays = torch.randn(cfg.max_creatures, cfg.num_rays, 3, device='cuda')
+        self._rays[..., :2] /= torch.norm(self._rays[..., :2], dim=2, keepdim=True)
+        self._rays[..., 2] = torch.clamp_min(torch.abs(self._rays[..., 2]), cfg.min_ray_dist)
 
-        self.head_dirs = torch.randn(cfg.start_creatures, 2, device='cuda')
-        self.head_dirs /= torch.norm(self.head_dirs, dim=1, keepdim=True)
+        self._head_dirs = torch.randn(cfg.max_creatures, 2, device='cuda')
+        self._head_dirs /= torch.norm(self._head_dirs, dim=1, keepdim=True)
 
-        self.colors = torch.empty(cfg.start_creatures, 3, device='cuda').uniform_(1, 255)
+        self._colors = torch.empty(cfg.max_creatures, 3, device='cuda').uniform_(1, 255)
 
         # we have mutation rate for rays, sizes, colors, weights/biases, and mutation rate itself
-        self.mutation_rates = torch.empty(cfg.start_creatures, 6, device='cuda').uniform_(*cfg.init_mut_rate_range)
+        self._mutation_rates = torch.empty(cfg.max_creatures, 6, device='cuda').uniform_(*cfg.init_mut_rate_range)
 
         # inputs: rays (x num_rays*3 colors), memory (x mem_size), food (3x3 = 9), health, energy
         # outputs: move forward/back, rotate, memory (x mem_size)
@@ -53,22 +54,66 @@ class CreatureArray():
 
 
         """weights are each [N, in, out]"""
-        self.weights = [(torch.rand(cfg.start_creatures, prev_layer, next_layer, device='cuda')-0.5) / (np.sqrt(15.0 / prev_layer))
+        self._weights = [(torch.rand(cfg.max_creatures, prev_layer, next_layer, device='cuda')-0.5) / (np.sqrt(15.0 / prev_layer))
                         for prev_layer, next_layer in zip(self.layer_sizes[:-1], self.layer_sizes[1:])]
         
-        self.biases = [(torch.rand(cfg.start_creatures, 1, next_layer, device='cuda')-0.5) / np.sqrt(next_layer)
+        self._biases = [(torch.rand(cfg.max_creatures, 1, next_layer, device='cuda')-0.5) / np.sqrt(next_layer)
                        for next_layer in self.layer_sizes[1:]]
         self.activations = []
         self.dead = None   # [N] boolean tensor
         self.reproduce_dims = {'sizes': 1, 
-                               'colors': self.colors.shape[1], 
-                               'weights': [reduce(mul, w.shape[1:], 1) for w in self.weights],
-                               'biases': [reduce(mul, b.shape[1:], 1) for b in self.biases],
-                               'mutation_rates': self.mutation_rates.shape[1],
-                               'head_dirs': self.head_dirs.shape[1],
-                               'rays': reduce(mul, self.rays.shape[1:], 1),
-                               'positions': self.positions.shape[1]}
+                               'colors': self._colors.shape[1], 
+                               'weights': [reduce(mul, w.shape[1:], 1) for w in self._weights],
+                               'biases': [reduce(mul, b.shape[1:], 1) for b in self._biases],
+                               'mutation_rates': self._mutation_rates.shape[1],
+                               'head_dirs': self._head_dirs.shape[1],
+                               'rays': reduce(mul, self._rays.shape[1:], 1),
+                               'positions': self._positions.shape[1]}
         self.total_reproduce_dims = sum([(sum(v) if isinstance(v, list) else v) for v in self.reproduce_dims.values()])
+        
+        self.alive = torch.zeros(cfg.max_creatures, dtype=torch.bool, device='cuda')
+        self.alive[:cfg.start_creatures] = True
+        self.reindex(force=True)
+
+    def update_old_memory(self):
+        """Write back updated memory to the old creatures."""
+        self._positions[self.alive] = self.positions
+        self._memories[self.alive] = self.memories
+        self._energies[self.alive] = self.energies
+        self._healths[self.alive] = self.healths
+        self._ages[self.alive] = self.ages
+        
+    def reindex(self, deads=None, new_alives=None, force=False):
+        """Reindex the creatures so that the dead creatures are removed."""
+        # write the updated info for already existing creatures that have changed their attributes
+        if deads is None and new_alives is None and not force:
+            return
+        
+        if new_alives is not None or deads is not None:
+            self.update_old_memory()
+
+        if deads is not None: # boolean tensor with contiguous indices
+            alive_idxs = torch.nonzero(self.alive).squeeze()
+            dead_idxs = alive_idxs[deads]
+            self.alive[dead_idxs] = False
+        
+        if new_alives is not None:  # index tensor with discontiguous indices
+            self.alive[new_alives] = True
+        
+        # print(self.alive)
+        
+        self.positions = self._positions[self.alive]
+        self.memories = self._memories[self.alive]
+        self.energies = self._energies[self.alive]
+        self.healths = self._healths[self.alive]
+        self.ages = self._ages[self.alive]
+        self.sizes = self._sizes[self.alive]
+        self.rays = self._rays[self.alive]
+        self.head_dirs = self._head_dirs[self.alive]
+        self.colors = self._colors[self.alive]
+        self.mutation_rates = self._mutation_rates[self.alive]
+        self.weights = [w[self.alive] for w in self._weights]
+        self.biases = [b[self.alive] for b in self._biases]
         
 
     def forward(self, inputs):
@@ -84,47 +129,6 @@ class CreatureArray():
         self.activations.append(inputs)
         self.memories = outputs[:, 2:]  # only 2 outputs actually do something, so the rest are memory
         return outputs
-    
-    def kill_dead(self, food_grid):
-        if self.cfg.immortal:
-            return
-        health_deaths = (self.healths <= 0)
-        energy_deaths = (self.energies <= 0)
-        self.dead = health_deaths | energy_deaths
-
-        if not torch.any(self.dead):
-            return
-
-        #logging.info(f"{health_deaths.sum()} creatures died from health.")
-        #logging.info(f"{energy_deaths.sum()} creatures died from energy.")
-
-        #logging.info(f"Dead from health: {self.sizes[health_deaths]}")
-        #logging.info(f"Dead from energy: {self.sizes[energy_deaths]}")
-
-        # the dead drop their food on their ground
-        # print(self.positions[dead].long().shape)
-        # print(food_grid[self.positions[dead].long()].shape)
-        # print(self.positions[dead].long())
-        # print(self.sizes[dead].shape)
-        dead_posns = self.positions[self.dead].long()
-        #logging.info(f"{dead_posns.shape[0]} creatures have died.")
-        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
-        
-        
-        alive = ~self.dead
-        self.positions = self.positions[alive]
-        self.memories = self.memories[alive]
-        self.energies = self.energies[alive]
-        self.healths = self.healths[alive]
-        self.colors = self.colors[alive]
-        self.ages = self.ages[alive]
-        self.rays = self.rays[alive]
-        self.head_dirs = self.head_dirs[alive]
-        self.sizes = self.sizes[alive]
-        self.mutation_rates = self.mutation_rates[alive]
-        
-        self.weights = [w[alive] for w in self.weights]
-        self.biases = [b[alive] for b in self.biases]
 
     @property
     def food_grid_pos(self):
@@ -132,7 +136,7 @@ class CreatureArray():
     
     @property
     def population(self):
-        return self.positions.shape[0]
+        return self.alive.sum().item()
 
     def eat(self, food_grid):
         """Eat the food in the creatures' vicinity."""
@@ -223,21 +227,58 @@ class CreatureArray():
         self.energies -= attack_cost
         #logging.info(f"Attack energy: {attack_cost}")
         self.healths -= attacks[:,1]
+        
+    def update_selected_creature(self, creature_id):
+        """Taking into account creatures that have died and been reborn this epoch, update the selected creature."""
+        if creature_id is None:
+            return None
+        if self.dead is None:
+            return creature_id
+        
+        if self.dead[creature_id]:   # if its dead, then there is no longer any creature selected
+            return None  # indexing into dead is fine since it's using the old indices
+        
+        # otherwise, we need to compute how many creatures have died in indices before this one
+        # and then adjust the index accordingly
+        dead_before = torch.sum(self.dead[:creature_id])
+        return creature_id - dead_before
+    
+    def fused_kill_reproduce(self, food_grid):
+        """Kill the dead creatures and reproduce the living ones."""
+        deads = self._kill_dead(food_grid)
+        # print('deads is', deads)
+        new_alives = self._reproduce(deads) 
+        self.reindex(deads, new_alives)
+        
+    @cuda_utils.cuda_profile
+    def _kill_dead(self, food_grid):
+        if self.cfg.immortal:
+            return
+        health_deaths = (self.healths <= 0)
+        energy_deaths = (self.energies <= 0)
+        self.dead = health_deaths | energy_deaths   # congiuous boolean tensor
+        if not torch.any(self.dead):
+            return
+        dead_posns = self.positions[self.dead].long()
+        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
+        return self.dead
 
-    def reproduce(self):
+    @cuda_utils.cuda_profile
+    def _reproduce(self, deads):
         """For sufficiently high energy creatures, create a new creature with mutated genes."""
-        max_reproducers = self.cfg.max_creatures - self.population  # dont bother if no can reproduce anyway 
+        # dead_sum = 0 if deads is None else deads.sum()
+        max_reproducers = self.cfg.max_creatures - self.population #+ dead_sum # dont bother if no can reproduce anyway 
         if max_reproducers <= 0:
-            return 
+            return
         
         # 1 + so that really small creatures don't get unfairly benefitted
-        reproducers = self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes)
-        # if not torch.any(reproducers):
-        #     return
+        reproducers = self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes)  # contiguous boolean tensor
+        if deads is not None:
+            reproducers &= ~deads   # only alive creatures can reproduce
         
         # limit reproducers so we don't exceed max size
         num_reproducers = torch.sum(reproducers)
-        if num_reproducers == 0:    # no one can reproduce
+        if num_reproducers == 0:  # no one can reproduce
             return
         
         if num_reproducers > max_reproducers:  # this benefits older creatures because they 
@@ -311,17 +352,27 @@ class CreatureArray():
         new_head_dirs /= torch.norm(new_head_dirs, dim=1, keepdim=True)
 
         new_positions = torch.clamp(self.positions[reproducers] + pos_perturb, *self.posn_bounds)
+                
+        # print("reproduction of creatures", reproducers)
+        # write the info for newly created creatures
+        new_alives = torch.nonzero(~self.alive)[:num_reproducers].squeeze(1)
+        # print("new alives", new_alives)
         
-        self.positions = torch.cat([self.positions, new_positions], dim=0)
-        self.sizes = torch.cat([self.sizes, new_sizes], dim=0)
-        self.memories = torch.cat([self.memories, new_memories], dim=0)
-        self.energies = torch.cat([self.energies, new_energy], dim=0)
-        self.healths = torch.cat([self.healths, new_health], dim=0)
-        self.ages = torch.cat([self.ages, new_ages], dim=0)
-        self.rays = torch.cat([self.rays, new_rays], dim=0)
-        self.head_dirs = torch.cat([self.head_dirs, new_head_dirs], dim=0)
-        self.colors = torch.cat([self.colors, new_colors], dim=0)
-        self.mutation_rates = torch.cat([self.mutation_rates, new_mutation_rates], dim=0)
-
-        self.weights = [torch.cat([w, nw], dim=0) for w, nw in zip(self.weights, new_weights)]
-        self.biases = [torch.cat([b, nb], dim=0) for b, nb in zip(self.biases, new_biases)]     
+        self._positions[new_alives] = new_positions
+        self._sizes[new_alives] = new_sizes
+        self._memories[new_alives] = new_memories
+        self._energies[new_alives] = new_energy
+        self._healths[new_alives] = new_health
+        self._ages[new_alives] = new_ages
+        self._rays[new_alives] = new_rays
+        self._head_dirs[new_alives] = new_head_dirs
+        self._colors[new_alives] = new_colors
+        self._mutation_rates[new_alives] = new_mutation_rates
+        
+        for i, nw in enumerate(new_weights):
+            self._weights[i][new_alives] = nw
+            
+        for i, nb in enumerate(new_biases):
+            self._biases[i][new_alives] = nb
+        
+        return new_alives
