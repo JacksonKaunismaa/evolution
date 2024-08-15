@@ -325,6 +325,8 @@ class GWorld():
             return False
 
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
+        print(self.creatures.sizes)
+        print(self.creatures.head_dirs)
         
         # if self.time % 60 == 0:   # save this generation
         #     if save:
