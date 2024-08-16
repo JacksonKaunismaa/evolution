@@ -298,11 +298,13 @@ class CreatureArray():
         
         if num_reproducers > max_reproducers:  # this benefits older creatures because they 
             num_reproducers = max_reproducers  # are more likely to be in the num_reproducers window
-            non_reproducers = torch.nonzero(reproducers)[num_reproducers:]
+            reproducer_indices = torch.nonzero(reproducers)#[num_reproducers:]
+            perm = torch.randperm(reproducer_indices.shape[0], device='cuda')
+            non_reproducers = reproducer_indices[perm[num_reproducers:]]
             reproducers[non_reproducers] = False
 
 
-        print('reproduce', reproducers)
+        # print('reproduce', reproducers)
         # could fuse this
         self.energies[reproducers] -= self.sizes[reproducers]  # subtract off the energy that you've put into the world
         self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
