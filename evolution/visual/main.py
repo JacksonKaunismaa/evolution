@@ -100,13 +100,11 @@ class Game:
         self.paused = not self.paused
 
     def selected_creature_updates(self):
-        if not self.dead_updated:
-            self.controller.selected_creature = self.world.update_selected_creature(self.controller.selected_creature)
-        self.dead_updated = True
-        self.rays.update(self.controller.selected_creature)
-        self.camera.update(self.controller.selected_creature)
-        # self.brain_visual.update(self.controller.selected_creature)
-        self.thoughts_visual.update(self.controller.selected_creature)
+        creature = self.controller.get_selected_creature()
+        self.rays.update(creature)
+        self.camera.update(creature)
+        # self.brain_visual.update(creature)
+        self.thoughts_visual.update(creature)
         
 
     def render(self):

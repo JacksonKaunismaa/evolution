@@ -4,7 +4,24 @@ from cuda import cuda, nvrtc
 from contextlib import contextmanager
 import moderngl as mgl
 from OpenGL.GL import *
+from functools import wraps
+from collections import defaultdict
 
+
+start = torch.cuda.Event(enable_timing=True)
+end = torch.cuda.Event(enable_timing=True)
+times = defaultdict(float)
+
+def cuda_profile(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        start.record()
+        res = func(*args, **kwargs)
+        end.record()
+        torch.cuda.synchronize()
+        times[func.__name__] += start.elapsed_time(end)
+        return res
+    return wrapper
 
 
 def _cudaGetErrorEnum(error):
