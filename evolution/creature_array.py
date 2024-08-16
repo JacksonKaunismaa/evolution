@@ -8,6 +8,7 @@ torch.set_grad_enabled(False)
 # logging.basicConfig(level=logging.ERROR, filename='game.log')
 
 from .config import Config
+from .batched_random import BatchedRandom
 from . import cuda_utils
 
 
@@ -62,15 +63,15 @@ class CreatureArray():
         self.activations = []
         self.dead = None   # [N] contiguous boolean tensor
         self.dead_idxs = None # [N] discontiguous index tensor of creatures that died on last step
-        self.reproduce_dims = {'sizes': 1, 
-                               'colors': self._colors.shape[1], 
-                               'weights': [reduce(mul, w.shape[1:], 1) for w in self._weights],
-                               'biases': [reduce(mul, b.shape[1:], 1) for b in self._biases],
-                               'mutation_rates': self._mutation_rates.shape[1],
-                               'head_dirs': self._head_dirs.shape[1],
-                               'rays': reduce(mul, self._rays.shape[1:], 1),
-                               'positions': self._positions.shape[1]}
-        self.total_reproduce_dims = sum([(sum(v) if isinstance(v, list) else v) for v in self.reproduce_dims.values()])
+        reproduce_dims = {'sizes': self._sizes, 
+                               'colors': self._colors, 
+                               'weights': self._weights,
+                               'biases': self._biases,
+                               'mutation_rates': self._mutation_rates,
+                               'head_dirs': self._head_dirs,
+                               'rays': self._rays,
+                               'positions': self._positions}
+        self.reproduce_rand = BatchedRandom(reproduce_dims)
         
         self.alive = torch.zeros(cfg.max_creatures, dtype=torch.bool, device='cuda')
         self.alive[:cfg.start_creatures] = True
@@ -314,51 +315,26 @@ class CreatureArray():
         # #logging.info(f"Energy after reproduce: {self.energies[reproducers]}")
         
         mut = self.mutation_rates[reproducers]
-        reproduced = torch.randn(num_reproducers, self.total_reproduce_dims, device='cuda')
-        idx = 0
-        # #logging.info(f"Num reproducers:{reproducers.sum()}")
-        # #logging.info(f"Mut: {mut}")
-        # #logging.info(f"Reproducers sizes: {self.sizes[reproducers]}")
-        # #logging.info(f"Reproducers colors: {self.colors[reproducers]}")
-        # #logging.info(f"mut[:,0]: {mut[:,0], mut[:,0].shape}")
-        # #logging.info(f"mut[:,1]: {mut[:,1], mut[:,1].shape}")
-        size_perturb = reproduced[:, idx:idx+self.reproduce_dims['sizes']].squeeze(1) * mut[:,0]
-        idx += self.reproduce_dims['sizes']
-        color_perturb = reproduced[:, idx:idx+self.reproduce_dims['colors']] * mut[:, 1, None]
-        idx += self.reproduce_dims['colors']
-        ray_perturb = reproduced[:, idx:idx+self.reproduce_dims['rays']].view(-1, *self.rays.shape[1:]) * mut[:, 2, None, None]
-        idx += self.reproduce_dims['rays']
-        
+        self.reproduce_rand.generate(num_reproducers)
 
-        weight_perturbs = []
-        for i, w in enumerate(self.weights):
-            amt = self.reproduce_dims['weights'][i]
-            weight_perturbs.append(reproduced[:, idx:idx+amt].view(-1, *w.shape[1:]) * mut[:, 3, None, None])
-            idx += amt
-        
-        bias_perturbs = []
-        for i, b in enumerate(self.biases):
-            amt = self.reproduce_dims['biases'][i]
-            bias_perturbs.append(reproduced[:, idx:idx+amt].view(-1, *b.shape[1:]) * mut[:, 4, None, None])
-            idx += amt
+        size_perturb = self.reproduce_rand.get('sizes') * mut[:,0]
+        color_perturb = self.reproduce_rand.get('colors') * mut[:, 1, None]
+        ray_perturb = self.reproduce_rand.get('rays') * mut[:, 2, None, None]        
 
-        mut_rate_perturb = reproduced[:, idx:idx+self.reproduce_dims['mutation_rates']] * mut[:, 5, None]
-        idx += self.reproduce_dims['mutation_rates']
-        
-        new_head_dirs = reproduced[:, idx:idx+self.reproduce_dims['head_dirs']]
-        idx += self.reproduce_dims['head_dirs']
-        
-        pos_perturb = reproduced[:, idx:idx+self.reproduce_dims['positions']] * self.cfg.reproduce_dist#* new_sizes.unsqueeze(1) * self.cfg.reproduce_dist
-        idx += self.reproduce_dims['positions']
+        weight_perturbs = [self.reproduce_rand.get('weights', i) for i in range(len(self.weights))]
+        bias_perturbs = [self.reproduce_rand.get('biases', i) for i in range(len(self.biases))]
+
+        mut_rate_perturb = self.reproduce_rand.get('mutation_rates') * mut[:, 5, None]
+
+        new_head_dirs = self.reproduce_rand.get('head_dirs')
+        pos_perturb = self.reproduce_rand.get('positions') * self.cfg.reproduce_dist#* new_sizes.unsqueeze(1) * self.cfg.reproduce_dist
 
         new_sizes = torch.clamp(self.sizes[reproducers] + size_perturb, *self.cfg.size_range)
         new_colors = torch.clamp(self.colors[reproducers] + color_perturb, 1, 255)
+
         new_weights = [w[reproducers] + wp for w, wp in zip(self.weights, weight_perturbs)]
-        # #logging.info(f"existing bias shapes: {[b[reproducers].shape for b in self.biases]}")
-        # #logging.info(f"perturb bias shapse: {[bp.shape for bp in bias_perturbs]}")
-        # #logging.info(f"bias mut shape: {mut[:, 4, None].shape}")
         new_biases = [b[reproducers] + bp for b, bp in zip(self.biases, bias_perturbs)]
-        # #logging.info(f"Bias sahpes: {[b.shape for b in new_biases]}")
+        
         new_mutation_rates = mut + mut_rate_perturb
 
         new_memories = torch.zeros_like(self.memories[reproducers])
@@ -375,12 +351,7 @@ class CreatureArray():
 
         new_positions = torch.clamp(self.positions[reproducers] + pos_perturb, *self.posn_bounds)
                 
-        # print("reproduction of creatures", reproducers)
-        # write the info for newly created creatures
-
         new_alives = torch.nonzero(~self.alive)[:num_reproducers].squeeze(1)
-        # print(torch.nonzero(~self.alive).shape, new_alives.shape, num_reproducers, dead_sum, max_reproducers, self.population)
-        # print("new alives", new_alives)
         
         self._positions[new_alives] = new_positions
         self._sizes[new_alives] = new_sizes
