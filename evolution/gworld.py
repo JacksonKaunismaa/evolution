@@ -304,20 +304,17 @@ class GWorld():
         if self.outputs == None:   # skip updating if we haven't computed the outputs yet
             return
 
+        self.move_creatures(self.outputs)
 
         celled_world = self.compute_grid_setup()
         # print(celled_world)
         attacks2 = self.compute_gridded_attacks(*celled_world)
         # print(attacks2)
     
-        print('pre kill', self.creatures.head_dirs)
         self.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
         if self.population == 0:
             return
-        print("post kill", self.creatures.head_dirs)
         self.creatures_reproduce()    # allow high energy individuals to reproduce
-        print('post repr', self.creatures.head_dirs)
-        self.move_creatures(self.outputs)
         self.creatures_eat()   # give energy for being in a square, and then reduce that energy
         self.grow_food()   # give food time to grow
 
