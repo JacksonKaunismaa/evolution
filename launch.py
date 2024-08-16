@@ -42,3 +42,13 @@ import os.path as osp
 # cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
 #                     cell_size=2.0, cache_size=128, max_per_cell=128)
 # print(evolution.gworld.benchmark(cfg, max_steps=2500))
+
+# total_repr_time = 0
+# N = 100
+# for _ in range(N):
+#     cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
+#                         cell_size=2.0, cache_size=128, max_per_cell=128)
+#     bmarks = evolution.gworld.benchmark(cfg, max_steps=2500)
+#     total_repr_time += bmarks['fused_kill_reproduce']
+
+# print(total_repr_time / N)

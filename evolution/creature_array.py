@@ -269,7 +269,7 @@ class CreatureArray():
         food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
         
         if self.dead is not None:
-            print('dead', self.dead)
+            # print('dead', self.dead)
             self.update_old_memory()
             alive_idxs = torch.nonzero(self.alive).squeeze()    # contiguous index tensor with values that are discintiguous indices
             self.dead_idxs = alive_idxs[self.dead]    # we index it with a contiguous boolean tensor -> gives discontiguous indices
@@ -306,7 +306,7 @@ class CreatureArray():
         self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
         # #logging.info(f"Energy after reproduce: {self.energies[reproducers]}")
         
-        print('reproduce', reproducers)
+        # print('reproduce', reproducers)
         
         mut = self.mutation_rates[reproducers]
         reproduced = torch.randn(num_reproducers, self.total_reproduce_dims, device='cuda')
