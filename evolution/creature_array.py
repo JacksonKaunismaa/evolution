@@ -109,7 +109,7 @@ class CreatureArray():
         #logging.info(f"{dead_posns.shape[0]} creatures have died.")
         food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
         
-        
+        print('dead', self.dead)
         alive = ~self.dead
         self.positions = self.positions[alive]
         self.memories = self.memories[alive]
@@ -244,11 +244,13 @@ class CreatureArray():
             non_reproducers = torch.nonzero(reproducers)[num_reproducers:]
             reproducers[non_reproducers] = False
 
+
+        print('reproduce', reproducers)
         # could fuse this
         self.energies[reproducers] -= self.sizes[reproducers]  # subtract off the energy that you've put into the world
         self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
         # #logging.info(f"Energy after reproduce: {self.energies[reproducers]}")
-            
+        
         mut = self.mutation_rates[reproducers]
         reproduced = torch.randn(num_reproducers, self.total_reproduce_dims, device='cuda')
         idx = 0
