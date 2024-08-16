@@ -311,6 +311,7 @@ class GWorld():
         attacks2 = self.compute_gridded_attacks(*celled_world)
         # print(attacks2)
     
+        print('sizes', self.creatures.sizes)
         self.do_attacks(attacks2)  # update health and energy of creatures, and kill any creatures that are dead
         if self.population == 0:
             return
