@@ -290,7 +290,8 @@ class GWorld():
         # print(celled_world)
         attacks2 = self.compute_gridded_attacks(*celled_world)
         # print(attacks2)
-    
+
+        print('sizes', self.creatures.sizes)
         self.do_attacks(attacks2)  # update health and energy of creatures
         # self.creatures_reproduce()    # allow high energy individuals to reproduce
         self.fused_kill_reproduce()
