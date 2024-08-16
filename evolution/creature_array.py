@@ -84,6 +84,7 @@ class CreatureArray():
         self._healths[self.alive] = self.healths
         self._ages[self.alive] = self.ages
         self._head_dirs[self.alive] = self.head_dirs
+        self._rays[self.alive] = self.rays
         
     def reindex(self):
         """Reindex the creatures so that the dead creatures are removed."""        
