@@ -10,6 +10,7 @@ torch.set_grad_enabled(False)
 from .config import Config
 from .batched_random import BatchedRandom
 from . import cuda_utils
+from .cu_algorithms import CUDAKernelManager
 
 
 """Store all relevant creature attributes in CUDA objects to ensure minimal
@@ -18,8 +19,9 @@ can add a new set of creatures by appending a new set of entries to the array.""
 
 
 class CreatureArray():
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, kernels: CUDAKernelManager):
         self.cfg = cfg
+        self.kernels = kernels
 
         # how much indexing into the food grid needs to be adjusted to avoid OOB
         self.pad = self.cfg.food_sight 
@@ -105,20 +107,6 @@ class CreatureArray():
         self.weights = [w[self.alive] for w in self._weights]
         self.biases = [b[self.alive] for b in self._biases]
         
-
-    def forward(self, inputs):
-        """Inputs: [N, 1, F] tensor"""
-        # print([w.shape for w in self.weights], [b.shape for b in self.biases])
-        self.activations.clear()
-        for w, b in zip(self.weights, self.biases):
-            # print(inputs.shape, '@', w.shape, '+', b.shape)
-            self.activations.append(inputs)
-            inputs = torch.tanh(inputs @ w + b)
-        # print('out' ,inputs.shape)
-        outputs = inputs.squeeze(dim=1)  # [N, O]
-        self.activations.append(inputs)
-        self.memories = outputs[:, 2:]  # only 2 outputs actually do something, so the rest are memory
-        return outputs
     
     @property
     def food_grid_pos(self):
@@ -164,35 +152,58 @@ class CreatureArray():
                           self.energies.unsqueeze(1)
                         ], 
                         dim=1)  # [N, F]
-    
 
+    def forward(self, inputs):
+        """Inputs: [N, 1, F] tensor"""
+        # print([w.shape for w in self.weights], [b.shape for b in self.biases])
+        self.activations.clear()
+        for w, b in zip(self.weights, self.biases):
+            # print(inputs.shape, '@', w.shape, '+', b.shape)
+            self.activations.append(inputs)
+            inputs = torch.tanh(inputs @ w + b)
+        # print('out' ,inputs.shape)
+        outputs = inputs.squeeze(dim=1)  # [N, O]
+        self.activations.append(inputs)
+        self.memories = outputs[:, 2:]  # only 2 outputs actually do something, so the rest are memory
+        return outputs
+    
     def rotate_creatures(self, outputs):
-        """`outputs` [N,6] are move forward/backward, rotate left/rotate, and then 4 for memory.
-        Rotation is done first, and then movement. the "move" output is a scalar between -1 and 1, which
-        is multiplied by the object's speed to determine how far to move. Rotation is also a scalar between
-        -1 and 1, which is multiplied by the object's rotation speed to determine how far to rotate. 
+        """`outputs` [N,2+cfg.mem_size] are move forward/backward, rotate left/rotate, and then cfg.mem_size
+        for memory. Rotation is done first, and then movement. the "move" output is a scalar between -1 and 1, 
+        which is multiplied by the object's speed to determine how far to move. Rotation is also a scalar 
+        between -1 and 1, which is multiplied by the object's rotation speed to determine how far to rotate. 
         Negative rotation is clockwise, positive is counter-clockwise. """
-        # rotation => need to rotate the rays and the object's direction
-        # rotate amount
-        rotate = self.cfg.rotate_amt(outputs[:,1], self.sizes)
-        rotate_energy = self.cfg.rotate_cost(rotate, self.sizes)
+        # # rotation => need to rotate the rays and the object's direction
+        # # rotate amount
+        # rotate = self.cfg.rotate_amt(outputs[:,1], self.sizes)
+        # rotate_energy = self.cfg.rotate_cost(rotate, self.sizes)
+        # rotate = outputs[:,1] / (1 + self.sizes) * 0.314159
+        # rotate_energy = 1 - torch.exp(-abs(rotate) * self.sizes)
+        # energy_decr = self.energies - rotate_energy
         
-        #logging.info(f"Rotate amt: {rotate}")
-        #logging.info(f"Rotate cost: {rotate_energy}")
-        self.energies -= rotate_energy
+        # #logging.info(f"Rotate amt: {rotate}")
+        # #logging.info(f"Rotate cost: {rotate_energy}")
+        # # self.energies -= rotate_energy
         
-        rotation_matrix = torch.empty((outputs.shape[0], 2, 2), device='cuda')  # [N, 2, 2]
-        cos_rotate = torch.cos(rotate)
-        sin_rotate = torch.sin(rotate)
-        rotation_matrix[:,0,0] = cos_rotate
-        rotation_matrix[:,0,1] = -sin_rotate
-        rotation_matrix[:,1,0] = sin_rotate
-        rotation_matrix[:,1,1] = cos_rotate
+        # rotation_matrix = torch.empty((self.population, 2, 2), device='cuda')  # [N, 2, 2]
+        # cos_rotate = torch.cos(rotate)
+        # sin_rotate = torch.sin(rotate)
+        # rotation_matrix[:,0,0] = cos_rotate
+        # rotation_matrix[:,0,1] = -sin_rotate
+        # rotation_matrix[:,1,0] = sin_rotate
+        # rotation_matrix[:,1,1] = cos_rotate
+        
+        block_size = 512
+        grid_size = self.population // block_size + 1
+        rotation_matrix = torch.empty((self.population, 2, 2), device='cuda')  # [N, 2, 2]
+        self.kernels('build_rotation_matrices', grid_size, block_size,
+                     outputs, self.sizes, self.energies, self.population, outputs.shape[1],
+                     rotation_matrix)
+        
 
         # rotate the rays and head directions
         self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
         self.head_dirs = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
-
 
     def move_creatures(self, outputs):
         # move => need to move the object's position
@@ -214,24 +225,10 @@ class CreatureArray():
         # #logging.info(f'Attacks:\n{attacks}')
         # self.energies -= attacks[:,0] * self.sizes * 0.1  # takes 0.1 * size to do an attack
         attack_cost = self.cfg.attack_cost(attacks[:,0], self.sizes)
+        # attack_cost = attacks[:, 0] * self.sizes * self.cfg.attack_cost.mul
         self.energies -= attack_cost
         #logging.info(f"Attack energy: {attack_cost}")
         self.healths -= attacks[:,1]
-        
-    # def update_selected_creature(self, creature_id):
-    #     """Taking into account creatures that have died and been reborn this epoch, update the selected creature."""
-    #     if creature_id is None:
-    #         return None
-    #     if self.dead is None:
-    #         return creature_id
-        
-    #     if self.dead[creature_id]:   # if its dead, then there is no longer any creature selected
-    #         return None  # indexing into dead is fine since it's using the old indices
-        
-    #     # otherwise, we need to compute how many creatures have died in indices before this one
-    #     # and then adjust the index accordingly
-    #     dead_before = torch.sum(self.dead[:creature_id])
-    #     return creature_id - dead_before
     
     def get_selected_creature(self, creature_id):
         """Given a discontiguous creature_id, retrieve the contiguous index."""
@@ -249,7 +246,6 @@ class CreatureArray():
         # print("contig_creature", contig_creature, 'discontig_creature', creature_id)
         return contig_creature
             
-    
     def fused_kill_reproduce(self, food_grid):
         """Kill the dead creatures and reproduce the living ones."""
         deads = self._kill_dead(food_grid)

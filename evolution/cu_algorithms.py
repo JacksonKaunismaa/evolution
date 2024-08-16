@@ -65,6 +65,7 @@ class CUDAKernelManager:
             macros = self.get_macros(code)
             # print("macros are", macros)
             args = self.compile_args + macros
+            # print(args)
             nvrtc_prog = checkCudaErrors(nvrtc.nvrtcCreateProgram(code.encode(self.encoding), 
                                                                   cu_file.encode(self.encoding), 0, [], []))
             checkCudaErrors(nvrtc.nvrtcCompileProgram(nvrtc_prog, len(args), args))

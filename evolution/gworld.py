@@ -30,8 +30,8 @@ class GWorld():
         self.food_grid = torch.rand((cfg.size, cfg.size), device='cuda') * cfg.init_food_scale
         # pad with -inf on all sides
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
-        self.creatures: CreatureArray = CreatureArray(cfg)
         self.kernels = cu_algorithms.CUDAKernelManager(cfg)
+        self.creatures: CreatureArray = CreatureArray(cfg, self.kernels)
         self.n_maxxed = 0
 
 
@@ -104,7 +104,7 @@ class GWorld():
                      rays, posns, sizes, colors, 
                      cells, cell_counts, collisions,
                      self.population, cells.shape[0])
-        return collisions#, (cell_counts >= max_per_cell).sum().item() / (num_cells**2) #, cells, cell_counts
+        return collisions
     
 
     @cuda_utils.cuda_profile
@@ -591,7 +591,7 @@ def benchmark(cfg=None, max_steps=512):
         if not game.step(visualize=False):   # we did mass extinction before finishing
             return game
     
-    cuda_utils.times['n_maxxed'] = game.n_maxxed
+    cuda_utils.times['n_maxxed'] = game.n_maxxed.item()
 
     # pr.disable()
     # s = io.StringIO()

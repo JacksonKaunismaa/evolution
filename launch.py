@@ -7,13 +7,14 @@ import moderngl_window as mglw
 import evolution.gworld
 import evolution.visual.main
 import torch
+import numpy as np
 torch.set_grad_enabled(False)
 # torch.random.manual_seed(0)
 
 # Blocking call entering rendering/event loop
 # mglw.run_window_config(evolution.visual.Game)
 
-evolution.visual.main.main()
+# evolution.visual.main.main()
 
 from evolution import config
 import pickle
@@ -43,12 +44,20 @@ import os.path as osp
 #                     cell_size=2.0, cache_size=128, max_per_cell=128)
 # print(evolution.gworld.benchmark(cfg, max_steps=2500))
 
-# total_repr_time = 0
-# N = 100
-# for _ in range(N):
-#     cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
-#                         cell_size=2.0, cache_size=128, max_per_cell=128)
-#     bmarks = evolution.gworld.benchmark(cfg, max_steps=2500)
-#     total_repr_time += bmarks['fused_kill_reproduce']
+from collections import defaultdict
+total_times = defaultdict(list)
+N = 10
+for i in range(N):
+    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
+                        cell_size=2.0, cache_size=128, max_per_cell=128)
+    bmarks = evolution.gworld.benchmark(cfg, max_steps=2500)
+    # if i == 0:  # skip first iteration for compilation weirdness
+    #     continue
+    for k, v in bmarks.items():
+        total_times[k].append(v)
 
-# print(total_repr_time / N)
+for k, v in total_times.items():
+    # compute mean and sample standard deviation
+    mean = np.mean(v)
+    std = np.std(v, ddof=1) / np.sqrt(len(v))
+    print(k, mean, '+-', std)
