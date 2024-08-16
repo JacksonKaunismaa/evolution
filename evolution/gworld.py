@@ -37,6 +37,7 @@ class GWorld():
 
         # we keep track of these objects so that we can visualize them
         self.celled_world = None    # array of grid cells for fast object clicking
+        self.increasing_food_decr_enabled = False
         self.outputs = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions = None   # the set of ray collisions for each creature
         self.time = 0
@@ -240,6 +241,7 @@ class GWorld():
         torch.save({'food_grid': self.food_grid, 
                     'creatures': self.creatures, 
                     'cfg': self.cfg,
+                    'time': self.time
                     }, path)
         
     def load_checkpoint(self, path):
@@ -251,6 +253,7 @@ class GWorld():
             self.food_grid = checkpoint['food_grid']
             self.creatures = checkpoint['creatures']
             self.cfg = checkpoint['cfg']
+            self.time = checkpoint.get('time', 0)
 
 
     def click_creature(self, mouse_pos) -> int:
@@ -309,6 +312,9 @@ class GWorld():
         stimuli = self.collect_stimuli(self.collisions)
         self.outputs = self.think(stimuli)
         
+    def toggle_increasing_food_decr(self):
+        self.increasing_food_decr_enabled = not self.increasing_food_decr_enabled
+        
 
     def step(self, visualize=False, save=True) -> bool:
         #logging.info(f"{self.population} creatures alive.")
@@ -334,6 +340,8 @@ class GWorld():
         #         self.visualize(None, show_rays=False) 
 
         self.time += 1
+        if self.increasing_food_decr_enabled:
+            self.cfg.food_cover_decr += 1e-6
         return True
 
     def visualize(self, collisions, show_rays=True, legend=False):

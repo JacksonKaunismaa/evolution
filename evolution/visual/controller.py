@@ -38,8 +38,10 @@ class Controller:
             if key == self.wnd.keys.A:   # movement
                 self.camera.process_keyboard('LEFT', self.delta_time)
 
-            if key == self.wnd.keys.D:   # movement
-                self.camera.process_keyboard('RIGHT', self.delta_time)
+            if key == self.wnd.keys.D:   # toggle extra food decay
+                # self.camera.process_keyboard('RIGHT', self.delta_time)
+                self.game.world.toggle_increasing_food_decr()
+                print(self.game.cfg.food_cover_decr)
 
             if key == self.wnd.keys.R:   # reset camera to starting position, deselect any creature
                 self.set_selected_creature(None)
@@ -111,6 +113,8 @@ class Controller:
             creature_id = self.game.world.click_creature(game_click)
             if creature_id is not None:
                 self.set_selected_creature(creature_id)
+        print(self.camera.cfg.food_cover_decr)
+        
         # print(self.game.world.creatures.positions)
         # print(self.game.world.creatures.sizes)
             # print(game_click, self.game.world.creatures.positions, self.game.world.creatures.rays, creature)

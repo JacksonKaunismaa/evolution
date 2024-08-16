@@ -45,7 +45,7 @@ class FunctionExpression():  # for code preprocessor in cu_algorithms
         return f'{self.symbols} -> {self.expr}'
 
 
-@dataclasses.dataclass(frozen=True)
+@dataclasses.dataclass
 class Config:
     """
     Configuration parameters for the simulation environment.
@@ -161,9 +161,10 @@ class Config:
     reproduce_thresh: ConfigFunction = ConfigFunction('square', 11.)  
     reproduce_energy_loss_frac: float = 15.  # factor to divide energy by after reproducing (and subtracting off init_energy costs)
     reproduce_dist: float = 3.  # standard deviation of distance from parent to place offspring
+    mature_age_mul: float = 20.0  # size * mature_age_mult is the age at which creatures can reproduce
 
     
-
+    
     ## Algorithm parameters
     max_per_cell: int = 512 # maximum number of creatures in a cell when doing gridded/celled ray tracing
     cell_size: float = 4.0   # width of cells when doing gridded/celled ray tracing

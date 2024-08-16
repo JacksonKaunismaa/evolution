@@ -87,15 +87,18 @@ class CreatureArray():
         self._rays[self.alive] = self.rays
         
     def reindex(self):
-        """Reindex the creatures so that the dead creatures are removed."""        
+        """Reindex the creatures so that the dead creatures are removed."""    
+        # writeable params    
         self.positions = self._positions[self.alive]
         self.memories = self._memories[self.alive]
         self.energies = self._energies[self.alive]
         self.healths = self._healths[self.alive]
         self.ages = self._ages[self.alive]
-        self.sizes = self._sizes[self.alive]
         self.rays = self._rays[self.alive]
         self.head_dirs = self._head_dirs[self.alive]
+        
+        # readonly params
+        self.sizes = self._sizes[self.alive]
         self.colors = self._colors[self.alive]
         self.mutation_rates = self._mutation_rates[self.alive]
         self.weights = [w[self.alive] for w in self._weights]
@@ -287,7 +290,7 @@ class CreatureArray():
             return False
         
         # 1 + so that really small creatures don't get unfairly benefitted
-        reproducers = self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes)  # contiguous boolean tensor
+        reproducers = (self.ages >= self.sizes*self.cfg.mature_age_mul) & (self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes))  # contiguous boolean tensor
         if deads is not None:
             reproducers &= ~deads   # only alive creatures can reproduce
         
