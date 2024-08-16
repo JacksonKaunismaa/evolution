@@ -83,6 +83,7 @@ class CreatureArray():
         self._energies[self.alive] = self.energies
         self._healths[self.alive] = self.healths
         self._ages[self.alive] = self.ages
+        self._head_dirs[self.alive] = self.head_dirs
         
     def reindex(self):
         """Reindex the creatures so that the dead creatures are removed."""        
@@ -247,7 +248,6 @@ class CreatureArray():
     def fused_kill_reproduce(self, food_grid):
         """Kill the dead creatures and reproduce the living ones."""
         deads = self._kill_dead(food_grid)
-        print('post kill', self.head_dirs)
         # print('deads is', deads)
         any_reproduced = self._reproduce(deads)
         if deads is not None or any_reproduced:
