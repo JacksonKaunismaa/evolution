@@ -46,10 +46,10 @@ import os.path as osp
 
 from collections import defaultdict
 total_times = defaultdict(list)
-N = 10
+N = 20
 for i in range(N):
     cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
-                        cell_size=2.0, cache_size=128, max_per_cell=128)
+                        cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0)
     bmarks = evolution.gworld.benchmark(cfg, max_steps=2500)
     # if i == 0:  # skip first iteration for compilation weirdness
     #     continue

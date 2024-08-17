@@ -1,7 +1,9 @@
 extern "C" __global__
 void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors, 
                      int* cells, int* cell_counts, float* results,
-                     int num_organisms, int num_cells) {
+                     int num_organisms, int num_cells,
+                    //  int* cells_hit, int* orgs_checked, int* cache_hits
+                    ) {
     /*
     Positions is [N, 2], where the 2 coordinates are the location.
     Sizes is [N, 1] where the coordinate is the radius.
@@ -34,13 +36,15 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
 
     float t_best = ray_len+1.0f;  // initialize the best t value to the max length of the ray
 
-    // set up cache for checking (so we don't double check objects)
-    // needs to be a power of 2, defines the number of low-order bits we check
-    int check_array[CFG_cache_size];
-    for (int i = 0; i < CFG_cache_size; i++) {
-        check_array[i] = -1;
-    }
-    int mask = CFG_cache_size - 1;
+    #if CFG_use_cache
+        // set up cache for checking (so we don't double check objects)
+        // needs to be a power of 2, defines the number of low-order bits we check
+        int check_array[CFG_cache_size];
+        for (int i = 0; i < CFG_cache_size; i++) {
+            check_array[i] = -1;
+        }
+        int mask = CFG_cache_size - 1;
+    #endif
 
     // getting our starting and ending grid coordinates
     int x = int(our_loc_x / CFG_cell_size);
@@ -69,18 +73,22 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
         int cell_idx = y * num_cells + x;
         int cell_count = min(cell_counts[cell_idx], CFG_max_per_cell-1);
         for (int i = 0; i < cell_count; i++) {  // for each object in the cell
-
-
             int other_organism = cells[(cell_idx) * CFG_max_per_cell + i];
             // if (organism == 25 && ray == 21) {
             //     cell_idx = cell_idx + 1 - 2*3 + 5;
             // }
             if (other_organism == organism) continue;  // don't check ourselves
+            // orgs_checked[organism * CFG_num_rays + ray] += 1;
 
-            // check the cache to see if we've already checked this one
-            int cache_idx = other_organism & mask;
-            if (check_array[cache_idx] == other_organism) continue;
-            check_array[cache_idx] = other_organism; // we have checked someone
+            #if CFG_use_cache
+                // check the cache to see if we've already checked this one
+                int cache_idx = other_organism & mask;
+                if (check_array[cache_idx] == other_organism) {
+                    // cache_hits[organism * CFG_num_rays + ray] += 1;
+                    continue;
+                }
+                check_array[cache_idx] = other_organism; // we have checked someone
+            #endif
 
             // get info about other organism
             float other_x = positions[other_organism * 2 + 0];
@@ -138,6 +146,6 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
             t_max_y += t_delta_y;
             y += sy;
         }
-        
+        // cells_hit[organism * CFG_num_rays + ray] += 1;
     }
 }

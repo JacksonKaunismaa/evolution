@@ -41,7 +41,9 @@ class CreatureArray():
 
         self._rays = torch.randn(cfg.max_creatures, cfg.num_rays, 3, device='cuda')
         self._rays[..., :2] /= torch.norm(self._rays[..., :2], dim=2, keepdim=True)
-        self._rays[..., 2] = torch.clamp_min(torch.abs(self._rays[..., 2]), cfg.min_ray_dist)
+        self._rays[..., 2] = torch.clamp(torch.abs(self._rays[..., 2]), 
+                                         cfg.ray_dist_range[0]*self._sizes.unsqueeze(1),
+                                         cfg.ray_dist_range[1]*self._sizes.unsqueeze(1))
 
         self._head_dirs = torch.randn(cfg.max_creatures, 2, device='cuda')
         self._head_dirs /= torch.norm(self._head_dirs, dim=1, keepdim=True)
@@ -66,13 +68,13 @@ class CreatureArray():
         self.dead = None   # [N] contiguous boolean tensor
         self.dead_idxs = None # [N] discontiguous index tensor of creatures that died on last step
         reproduce_dims = {'sizes': self._sizes, 
-                               'colors': self._colors, 
-                               'weights': self._weights,
-                               'biases': self._biases,
-                               'mutation_rates': self._mutation_rates,
-                               'head_dirs': self._head_dirs,
-                               'rays': self._rays,
-                               'positions': self._positions}
+                          'colors': self._colors, 
+                          'weights': self._weights,
+                          'biases': self._biases,
+                          'mutation_rates': self._mutation_rates,
+                          'head_dirs': self._head_dirs,
+                          'rays': self._rays,
+                          'positions': self._positions}
         self.reproduce_rand = BatchedRandom(reproduce_dims)
         
         self.alive = torch.zeros(cfg.max_creatures, dtype=torch.bool, device='cuda')
@@ -341,7 +343,9 @@ class CreatureArray():
         
         new_rays = self.rays[reproducers] + ray_perturb
         new_rays[..., :2] /= torch.norm(new_rays[...,:2], dim=2, keepdim=True)
-        new_rays[..., 2] = torch.clamp_min(new_rays[...,2], self.cfg.min_ray_dist) 
+        new_rays[..., 2] = torch.clamp(new_rays[...,2],
+                                       self.cfg.ray_dist_range[0]*new_sizes.unsqueeze(1),
+                                        self.cfg.ray_dist_range[1]*new_sizes.unsqueeze(1)) 
 
         new_head_dirs /= torch.norm(new_head_dirs, dim=1, keepdim=True)
 

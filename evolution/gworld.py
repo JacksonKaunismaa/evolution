@@ -41,6 +41,7 @@ class GWorld():
         self.outputs = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions = None   # the set of ray collisions for each creature
         self.time = 0
+        # self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
 
     @cuda_utils.cuda_profile
     def trace_rays(self):
@@ -99,11 +100,19 @@ class GWorld():
         # algorithms.trace_rays_grid(self.cfg)[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, 
         #                                                                    cells, cell_counts, 
         #                                                                    self.cfg.cell_size, collisions)
+        # cells_hit = torch.zeros((rays.shape[0], rays.shape[1]), device='cuda', dtype=torch.int32)
+        # organisms_checked = torch.zeros((rays.shape[0], rays.shape[1]), device='cuda', dtype=torch.int32)
+        # cache_hits = torch.zeros((rays.shape[0], rays.shape[1]), device='cuda', dtype=torch.int32)
         self.kernels('trace_rays_grid', 
                      rays.shape[0], rays.shape[1], # threads
                      rays, posns, sizes, colors, 
                      cells, cell_counts, collisions,
-                     self.population, cells.shape[0])
+                     self.population, cells.shape[0],
+                    #  cells_hit, organisms_checked, cache_hits
+                     )
+        # self.all_hits['cells_hit'].append(cells_hit.cpu().numpy())
+        # self.all_hits['organisms_checked'].append(organisms_checked.cpu().numpy())
+        # self.all_hits['cache_hits'].append(cache_hits.cpu().numpy())
         return collisions
     
 
