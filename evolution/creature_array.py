@@ -270,7 +270,7 @@ class CreatureArray():
             self.reindex()
         
     @cuda_utils.cuda_profile
-    def _kill_dead(self, food_grid):
+    def _kill_dead(self, food_grid: torch.Tensor):
         """Update self.alive, contiguous memory storage (_attrs), and food_grid for all creatures that have been killed. 
         Returns contiguous boolean indices of creatures that have died."""
         if self.cfg.immortal:
@@ -281,7 +281,10 @@ class CreatureArray():
         if not torch.any(self.dead):
             return
         dead_posns = self.positions[self.dead].long()
-        food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
+        # food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
+        food_grid.index_put_((dead_posns[..., 1], dead_posns[..., 0]), 
+                             self.cfg.dead_drop_food(self.sizes[self.dead]), 
+                             accumulate=True)
         
         if self.dead is not None:
             # print('dead', self.dead)

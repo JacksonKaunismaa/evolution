@@ -240,7 +240,10 @@ class GWorld():
         growing = self.central_food_grid
         # print('growing', growing, self.creatures.positions)
         # this allows negative food. We can think of this as "overfeeding" -> toxicity.
-        growing[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
+        # growing[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
+        growing.index_put_((posns[:, 1], posns[:, 0]),
+                           torch.full((self.population,), -self.cfg.food_cover_decr, device='cuda'),
+                           accumulate=True)
 
         # don't bother growing food in the padding/inaccesible area
         # grow food and decay dead corpses slowly
