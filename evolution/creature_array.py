@@ -274,7 +274,15 @@ class CreatureArray():
             # print('dead', self.dead)
             self.update_old_memory()
             alive_idxs = torch.nonzero(self.alive).squeeze()    # contiguous index tensor with values that are discintiguous indices
-            self.dead_idxs = alive_idxs[self.dead]    # we index it with a contiguous boolean tensor -> gives discontiguous indices
+            try:
+                self.dead_idxs = alive_idxs[self.dead]    # we index it with a contiguous boolean tensor -> gives discontiguous indices
+            except IndexError:
+                print('alive_idxs', alive_idxs)
+                print('alive', self.alive)
+                print('dead', self.dead.shape)
+                print('population', self.population)
+                raise
+
             self.alive[self.dead_idxs] = False
         return self.dead
 

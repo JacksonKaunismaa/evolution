@@ -1,7 +1,7 @@
 extern "C" __global__
 void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors, 
                      int* cells, int* cell_counts, float* results,
-                     int num_organisms, int num_cells,
+                     int num_organisms, int num_cells
                     //  int* cells_hit, int* orgs_checked, int* cache_hits
                     ) {
     /*
