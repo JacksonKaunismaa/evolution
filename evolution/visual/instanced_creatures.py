@@ -34,6 +34,7 @@ class InstancedCreatures:
         self.creature_sampler.filter = (filter_type, filter_type)
         self.circle_sampler.filter = (filter_type, filter_type)
         self.hitboxes_on = False
+        self.visible = True
 
         creature_vertices = np.asarray([
             -1.0,  1.0,    0.0, 1.0,
@@ -79,6 +80,9 @@ class InstancedCreatures:
 
     def toggle_hitboxes(self):
         self.hitboxes_on = not self.hitboxes_on
+        
+    def toggle_visibility(self):
+        self.visible = not self.visible
 
     def update(self):
         cuda_utils.copy_to_buffer(self.world.creatures.positions, self.cuda_positions)
@@ -87,6 +91,8 @@ class InstancedCreatures:
         cuda_utils.copy_to_buffer(self.world.creatures.colors, self.cuda_colors)
 
     def render(self):
+        if not self.visible:
+            return
         self.update()
         # self.creature_sampler.use(self.creature_tex_loc)
         # self.circle_sampler.use(self.circle_tex_loc)

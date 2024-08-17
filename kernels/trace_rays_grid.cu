@@ -108,7 +108,7 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
                     // rays is different from the '3' in indexing results (c.f. colors)
                     results[ray_idx + c] = colors[other_organism * 3 + c];
                 }
-                break;
+                return;
             }
 
             // dot product of direction from us to them and the ray direction

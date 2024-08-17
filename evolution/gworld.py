@@ -40,8 +40,9 @@ class GWorld():
         self.increasing_food_decr_enabled = False
         self.outputs = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions = None   # the set of ray collisions for each creature
+        self._selected_cell = None
         self.time = 0
-        # self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
+        self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
 
     @cuda_utils.cuda_profile
     def trace_rays(self):
@@ -115,6 +116,12 @@ class GWorld():
         # self.all_hits['cache_hits'].append(cache_hits.cpu().numpy())
         return collisions
     
+    
+    def set_selected_cell(self, cell):
+        self._selected_cell = (int(cell.x), int(cell.y))
+        print("Init Cell food:", self.central_food_grid[self._selected_cell[1], self._selected_cell[0]].item())
+        print(self.central_food_grid)
+
 
     @cuda_utils.cuda_profile
     def collect_stimuli(self, collisions):
@@ -231,6 +238,7 @@ class GWorld():
 
         posns = self.creatures.positions.long()
         growing = self.central_food_grid
+        # print('growing', growing, self.creatures.positions)
         # this allows negative food. We can think of this as "overfeeding" -> toxicity.
         growing[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
 

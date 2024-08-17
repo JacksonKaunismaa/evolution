@@ -26,7 +26,7 @@ class CreatureArray():
         # how much indexing into the food grid needs to be adjusted to avoid OOB
         self.pad = self.cfg.food_sight 
         # self.posn_bounds = (pad, cfg.size+pad-1)
-        self.posn_bounds = (0, cfg.size-1)
+        self.posn_bounds = (0, cfg.size-1e-4)
         self.offsets = torch.tensor([[i, j] for i in range(-self.pad, self.pad+1) 
                                      for j in range(-self.pad, self.pad+1)], device='cuda').unsqueeze(0)
 
@@ -118,18 +118,31 @@ class CreatureArray():
     def population(self):
         return self.alive.sum().item()
 
-    def eat(self, food_grid):
+    def eat(self, food_grid: torch.Tensor):
         """Eat the food in the creatures' vicinity."""
         pos = self.food_grid_pos
         # print('pos', pos)
+        posn_counts = torch.zeros_like(food_grid, dtype=torch.int, device='cuda')
+        posn_counts.index_put_((pos[:,1], pos[:,0]), torch.ones(self.population, device='cuda', dtype=torch.int), 
+                               accumulate=True)   # how many creatures are in each position
+        # print('count', posn_counts)
+        
+        food_per_creature = torch.where(posn_counts > 1. / self.cfg.eat_pct,
+                          1. / posn_counts.float() * food_grid,
+                          self.cfg.eat_pct * food_grid)
+        # print('food_per_creat', food_per_creature)
+        food = food_per_creature[pos[:, 1], pos[:, 0]]
+        # print('food', food)
+                    
         # print('food @ pos', (food_grid[pos[..., 1], pos[..., 0]]*100).int())
-        food = food_grid[pos[..., 1], pos[..., 0]] * self.cfg.eat_pct
+        # food = food_grid[pos[:, 1], pos[:, 0]] * self.cfg.eat_pct
         # gain food for eating and lose food for staying alive
         alive_cost =  self.cfg.alive_cost(self.sizes)
         #logging.info(f"Food: {food}")
         #logging.info(f"Alive cost: {alive_cost}")
         self.energies += food - alive_cost
-        food_grid[pos[..., 1], pos[..., 0]] -= food
+        food_grid.index_put_((pos[:,1], pos[:,0]), -food, accumulate=True)
+        # print('after rm food', food_grid)
         self.ages += 1  # if they've eaten, then they've made it to the next step
         # print('food @ pos after', (food_grid[pos[..., 1], pos[..., 0]]*100).int())
 

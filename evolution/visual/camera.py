@@ -74,6 +74,11 @@ class Camera:
     def get_camera_matrix(self):
         return self.get_projection_matrix() * self.get_view_matrix()
     
+    def click_in_bounds(self, game_click) -> bool:
+        """Args: game_click: glm.vec2, position of a given click in game coords
+        Returns: bool, whether the click is within the bounds of the game"""
+        return 0 <= game_click.x < self.cfg.size and 0 <= game_click.y < self.cfg.size
+    
     def pixel_to_game_coords(self, screen_x, screen_y):
         # extremely hacky way to go from screen coordinates to game coordinates to determine
         # where a given click has hit the game board
