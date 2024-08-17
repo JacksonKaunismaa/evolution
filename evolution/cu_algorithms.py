@@ -25,7 +25,7 @@ class CUDAKernelManager:
                                                           self.cuDevice))
         arch_arg = f'--gpu-architecture=compute_{major}{minor}'.encode(self.encoding)
         debug_args =  [b'--device-debug', b'--generate-line-info']
-        self.compile_args = [b'--use_fast_math', b'--extra-device-vectorization', arch_arg] #+ debug_args
+        self.compile_args = [b'--use_fast_math', b'--extra-device-vectorization', arch_arg] + debug_args
         self.kernels = self.compile_kernels()
         self.stream = checkCudaErrors(cuda.cuStreamCreate(0))
 
@@ -68,7 +68,11 @@ class CUDAKernelManager:
             # print(args)
             nvrtc_prog = checkCudaErrors(nvrtc.nvrtcCreateProgram(code.encode(self.encoding), 
                                                                   cu_file.encode(self.encoding), 0, [], []))
-            checkCudaErrors(nvrtc.nvrtcCompileProgram(nvrtc_prog, len(args), args))
+            try:
+                checkCudaErrors(nvrtc.nvrtcCompileProgram(nvrtc_prog, len(args), args))
+            except RuntimeError:
+                print("Failed to compile kernel: ", cu_file, "with args", args)
+                raise
             ptxSize = checkCudaErrors(nvrtc.nvrtcGetPTXSize(nvrtc_prog))
             ptx = b" " * ptxSize
             # print(ptxSize)
@@ -119,8 +123,14 @@ class CUDAKernelManager:
             self.var_template = 'a{}'
             for i, value in enumerate(args):
                 if isinstance(value, torch.Tensor):
-                    value = value.data_ptr()
-                setattr(self, self.var_template.format(i), np.array(value, dtype=np.uint64))
+                    value = np.array(value.data_ptr(), dtype=np.uint64)
+                elif isinstance(value, float):
+                    value = np.array(value, dtype=np.float32)
+                elif isinstance(value, int):
+                    value = np.array(value, dtype=np.uint64)
+                else:
+                    raise ValueError(f"Unsupported type {type(value)} for kernel argument")
+                setattr(self, self.var_template.format(i), value)
 
         def get_args(self):
             return np.array([getattr(self, self.var_template.format(i)).ctypes.data 
