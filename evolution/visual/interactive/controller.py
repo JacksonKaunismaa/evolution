@@ -24,9 +24,6 @@ class Controller:
         self.mouse_pressed = False
         self.mouse_pos = None
         
-        self.selected_creature = None
-        self.contig_creature = None
-
     def key_event_func(self, key, action, modifiers):
         if action == self.wnd.keys.ACTION_PRESS:
             if key == self.wnd.keys.W:   # movement
@@ -66,11 +63,11 @@ class Controller:
             if key == self.wnd.keys.C:    # save snapshot of current state to 'game.ckpt'
                 self.game.save()
 
-            # if key == self.wnd.keys.NUMBER_0:   # start following creature 0 
-            #     self.set_selected_creature(0)
+            if key == self.wnd.keys.NUMBER_0:   # start following creature 0 
+                self.set_selected_creature(0)
 
-            # if key == self.wnd.keys.P:     # increase id of followed creature by 1
-            #     self.set_selected_creature(self.selected_creature + 1)
+            if key == self.wnd.keys.P:     # increase id of followed creature by 1
+                self.set_selected_creature(self.game.world._selected_creature + 1)
 
             if key == self.wnd.keys.UP:    # speed up simulation so that we do 1 more step per frame
                 self.game.game_speed += 1
@@ -83,9 +80,9 @@ class Controller:
                 self.game.creatures.toggle_hitboxes()
 
     def set_selected_creature(self, creature):
-        # print("Setting to creature", creature)
+        print("Setting to creature", creature)
         self.camera.following = True
-        self.selected_creature = creature
+        self.game.world.set_selected_creature(creature)
         # if creature is not None:
         #     print('collision', self.game.world.collisions[creature])
         #     print('rays', self.game.world.creatures.rays[creature])
@@ -98,13 +95,6 @@ class Controller:
         
     def set_selected_cell(self, xy):
         self.game.world.set_selected_cell(xy)
-        
-    def get_selected_creature(self):
-        creature = self.game.world.get_selected_creature(self.selected_creature)
-        if creature is None:
-            self.set_selected_creature(None)
-        self.contig_creature = creature
-        return creature
         
     def mouse_press_event_func(self, x, y, button):
         # need to store everything in pixel coords so that we are closest to the actual input 

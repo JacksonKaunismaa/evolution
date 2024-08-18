@@ -33,6 +33,8 @@ class GWorld():
         self.outputs = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions = None   # the set of ray collisions for each creature
         self._selected_cell = None
+        self._selected_creature = None
+        self.dead_updated = False
         self.time = 0
         self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
 
@@ -118,7 +120,33 @@ class GWorld():
         self._selected_cell = (int(cell.x), int(cell.y))
         print("Init Cell food:", self.get_selected_cell_food())
         # print(self.central_food_grid)
-
+        
+    def set_selected_creature(self, creature):
+        self._selected_creature = creature
+        
+        
+    def get_selected_creature(self):
+        if not self.dead_updated:
+            creature = self.creatures.get_selected_creature(self._selected_creature)
+            self._selected_creature = creature
+        self.dead_updated = True
+        return self._selected_creature
+    
+    
+    def click_creature(self, mouse_pos) -> int:
+        """Return the index of the creature clicked on, or None if no creature was clicked."""
+        mouse_pos = torch.tensor(mouse_pos, device='cuda')   # [2]
+        # print('mouse_pos', mouse_pos)
+        dists = torch.norm(self.creatures.positions - mouse_pos, dim=1)   # [N, 2] - [1, 2] = [N, 2]
+        # print('dists', dists)
+        close_enough = dists < self.creatures.sizes
+        # print('close_enough', close_enough)
+        nonzero = torch.nonzero(close_enough)
+        # print('nonzero', nonzero)
+        creature = nonzero[0].item() if nonzero.shape[0] != 0 else None
+        # print(contig_index)
+        # print(discontig_index)
+        return creature
 
     @cuda_utils.cuda_profile
     def collect_stimuli(self, collisions):
@@ -138,7 +166,7 @@ class GWorld():
     @cuda_utils.cuda_profile
     def only_move_creatures(self, outputs):
         """Rotate and move all creatures"""
-        self.creatures.move_creatures(outputs)
+        self.creatures.move_creatures(outputs, self._selected_creature)
 
     def move_creatures(self, outputs):
         """Rotate and move all creatures"""
@@ -243,32 +271,11 @@ class GWorld():
             self.creatures = checkpoint['creatures']
             self.cfg = checkpoint['cfg']
             self.time = checkpoint.get('time', 0)
-
-
-    def click_creature(self, mouse_pos) -> int:
-        """Return the index of the creature clicked on, or None if no creature was clicked."""
-        mouse_pos = torch.tensor(mouse_pos, device='cuda')   # [2]
-        # print('mouse_pos', mouse_pos)
-        dists = torch.norm(self.creatures.positions - mouse_pos, dim=1)   # [N, 2] - [1, 2] = [N, 2]
-        # print('dists', dists)
-        close_enough = dists < self.creatures.sizes
-        # print('close_enough', close_enough)
-        nonzero = torch.nonzero(close_enough)
-        # print('nonzero', nonzero)
-        contig_index = nonzero[0].item() if nonzero.shape[0] != 0 else None
-        # print(contig_index)
-        discontig_index = self.creatures.alive.nonzero()[contig_index].item() if contig_index is not None else None
-        # print(discontig_index)
-        return discontig_index
-    
-    def get_selected_creature(self, creature_id):
-        """Given a discontiguous creature_id, retrieve the contiguous index."""
-        return self.creatures.get_selected_creature(creature_id)
     
     @cuda_utils.cuda_profile
     def fused_kill_reproduce(self):
         self.creatures.fused_kill_reproduce(self.central_food_grid)
-    
+        self.dead_updated = False
 
     def update_creatures(self):
         """Move creatures, update health and energy, reproduce, eat, grow food. Update all the states of the creatures
@@ -276,7 +283,7 @@ class GWorld():
         if self.outputs == None:   # skip updating if we haven't computed the outputs yet
             return
 
-        self.move_creatures(self.outputs)   # move creatures, update health and energy
+        self.move_creatures(self.outputs, )   # move creatures, update health and energy
         
         celled_world = self.compute_grid_setup()
         # print(celled_world)

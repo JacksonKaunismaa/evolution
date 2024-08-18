@@ -42,6 +42,7 @@ class Creatures(CreatureArray):
 
     def fused_kill_reproduce(self, central_food_grid):
         """Kill the dead creatures and reproduce the living ones."""
+        print(torch.topk(self.energies, 20).values.sum().item())
         alive, num_dead = self._kill_dead(central_food_grid)
         updated = self._reproduce(alive, num_dead)
         if not updated and num_dead > 0:
@@ -94,7 +95,6 @@ class Creatures(CreatureArray):
             non_reproducers = reproducer_indices[perm[num_reproducers:]]
             reproducers[non_reproducers] = False
 
-
         # could fuse this
         self.energies[reproducers] -= self.sizes[reproducers]  # subtract off the energy that you've put into the world
         self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
@@ -137,7 +137,8 @@ class Creatures(CreatureArray):
                      self.population, food_grid.shape[0], self.cfg.food_cover_decr, 1. / self.cfg.eat_pct)
         
         # grow food, apply eating costs
-        step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
+        # step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
+        step_size = (self.cfg.max_food / (self.cfg.size**2))#.item()
         threads_per_block = (16, 16)
         blocks_per_grid = (food_grid.shape[0] // threads_per_block[0] + 1, 
                            food_grid.shape[1] // threads_per_block[1] + 1)
@@ -227,7 +228,7 @@ class Creatures(CreatureArray):
         self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
         self.head_dirs = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
 
-    def move_creatures(self, outputs):
+    def move_creatures(self, outputs, selected_creature):
         """Given the neural network outputs `outputs`, move each creature accordingly.
         Moving forward is a scalar between -1 and 1, which is combined with the creatures' size
         to compute the distance that is moved. Positive scalars are movement forward, and negative
@@ -236,6 +237,7 @@ class Creatures(CreatureArray):
         movement anyway."""
         # move => need to move the object's position
         # maybe add some acceleration/velocity thing instead
+        
         move = self.cfg.move_amt(outputs[:,0], self.sizes)
         move_cost = self.cfg.move_cost(move, self.sizes)
         #logging.info(f"Move amt: {move}")
@@ -243,6 +245,11 @@ class Creatures(CreatureArray):
         self.energies -= move_cost
         self.positions += self.head_dirs * move.unsqueeze(1)   # move the object's to new position
         self.positions = torch.clamp(self.positions, *self.posn_bounds)  # don't let it go off the edge
+        if selected_creature is not None:
+            print(f"Move Logit: {outputs[selected_creature, 0].item()}"
+                  f"\n\tMove Amt: {move[selected_creature].item()}"
+                  f"\n\tMove Cost: {move_cost[selected_creature].item()}")
+            
 
     def do_attacks(self, attacks):
         """Attacks is [N, 2], where the 1st coordinate is an integer indicating how many things the 
@@ -266,9 +273,12 @@ class Creatures(CreatureArray):
         if creature_id is None:
             return None
         
-        if self.dead_idxs is not None and creature_id in self.dead_idxs:
+        if self.dead is not None and self.dead[creature_id]:
             return None
         
-        contig_creature = self.alive[:creature_id].sum().item()
-        return contig_creature
+        if self.dead is None:
+            return creature_id
+        
+        dead_before = self.dead[:creature_id].sum().item()
+        return creature_id - dead_before
             

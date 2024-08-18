@@ -58,7 +58,6 @@ class Game:
 
         self.paused = False
         self.game_speed = 1
-        self.dead_updated = False
 
     def save(self):
         self.world.write_checkpoint('game.ckpt')
@@ -66,7 +65,6 @@ class Game:
     def step(self, n=None, force=False) -> bool:
         if self.paused and not force:
             return True
-        self.dead_updated = False
         if n is None:
             n = self.game_speed
         for _ in range(n):
@@ -104,11 +102,13 @@ class Game:
         self.paused = not self.paused
 
     def selected_creature_updates(self):
-        creature = self.controller.get_selected_creature()
+        creature = self.world.get_selected_creature()
         self.rays.update(creature)
         self.camera.update(creature)
         # self.brain_visual.update(creature)
         self.thoughts_visual.update(creature)
+        # if self.controller.selected_creature is not None:
+        #     print('energy', self.world.creatures.energies[self.controller.selected_creature])
         
 
     def render(self):
@@ -132,7 +132,7 @@ class Game:
         
 
 def main():
-    torch.random.manual_seed(11)
+    torch.random.manual_seed(0)
     settings.WINDOW['class'] = 'moderngl_window.context.sdl2.Window'
     settings.WINDOW['gl_version'] = (4, 6)
     settings.WINDOW['title'] = 'Evolution'
@@ -143,7 +143,7 @@ def main():
     # settings.WINDOW['fullscreen'] = True
     window = mglw.create_window_from_settings()
     # print(sdl2_window.SDL_)
-    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
+    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0, immortal=True)
     print(cfg.food_cover_decr)
     # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
     #                     init_size_range=(0.2, 0.2), num_rays=32, immortal=True)
