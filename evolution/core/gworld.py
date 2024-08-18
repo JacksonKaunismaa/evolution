@@ -13,7 +13,7 @@ from evolution.cuda import cu_algorithms
 from evolution.cuda import cuda_utils
 
 from .config import Config, simple_cfg
-from .creature_array import CreatureArray
+from .creatures import Creatures
 
 class GWorld():
     def __init__(self, cfg: Config):
@@ -22,7 +22,8 @@ class GWorld():
         # pad with -inf on all sides
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
         self.kernels = cu_algorithms.CUDAKernelManager(cfg)
-        self.creatures: CreatureArray = CreatureArray(cfg, self.kernels)
+        self.creatures: Creatures = Creatures(cfg, self.kernels)
+        self.creatures.generate_from_cfg()
         self.n_maxxed = 0
 
 

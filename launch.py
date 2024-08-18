@@ -40,12 +40,13 @@ import os.path as osp
 #             with open("benchmark.pkl", "wb") as f:
 #                 pickle.dump(full_results, f)
 
+
 # cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
 #                     cell_size=2.0, cache_size=128, max_per_cell=128)
 # torch.random.manual_seed(0)
 # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
-#                 init_size_range=(0.2, 0.2), num_rays=32, immortal=True, init_food_scale=15.)
-# print(evolution.gworld.benchmark(cfg, max_steps=2500))
+#                 init_size_range=(0.2, 0.2), num_rays=32, immortal=False, init_food_scale=15.)
+# print(evolution.core.gworld.benchmark(cfg, max_steps=2500))
 
 # from collections import defaultdict
 # total_times = defaultdict(list)
@@ -53,7 +54,7 @@ import os.path as osp
 # for i in range(N):
 #     cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
 #                         cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0)
-#     bmarks = evolution.gworld.benchmark(cfg, max_steps=2500)
+#     bmarks = evolution.core.gworld.benchmark(cfg, max_steps=2500)
 #     # if i == 0:  # skip first iteration for compilation weirdness
 #     #     continue
 #     for k, v in bmarks.items():
@@ -78,5 +79,22 @@ _kill_dead 1703.6854702923447 +- 3.4499792726779934
 _reproduce 4156.490024921298 +- 6.89442924056734
 fused_kill_reproduce 7490.299363550544 +- 12.059096895927329
 creatures_eat_grow 884.3601694256067 +- 0.5502520483596781
+n_maxxed 0.0 +- 0.0
+"""
+
+
+""" refactored
+compute_grid_setup 470.1475288461894 +- 4.142590736994931
+trace_rays_grid 532.3615250043571 +- 1.906800252167498
+collect_stimuli 264.5651738656685 +- 0.5916395434025206
+think 1102.3577881030737 +- 5.052401685092371
+rotate_creatures 896.995627734065 +- 3.5783934050631583
+only_move_creatures 392.21322349179536 +- 1.104663640927039
+compute_gridded_attacks 252.21232261601835 +- 2.4036518553956294
+only_do_attacks 181.73948060385882 +- 0.174596075457209
+_kill_dead 1856.5456350415946 +- 6.0402589089193475
+_reproduce 4246.70085051544 +- 14.025561641498205
+fused_kill_reproduce 7640.3123897664245 +- 27.857600815756605
+creatures_eat_grow 626.0984256379306 +- 1.8549017252323483
 n_maxxed 0.0 +- 0.0
 """

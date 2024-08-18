@@ -143,7 +143,7 @@ def main():
     # settings.WINDOW['fullscreen'] = True
     window = mglw.create_window_from_settings()
     # print(sdl2_window.SDL_)
-    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.04)
+    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0)
     print(cfg.food_cover_decr)
     # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
     #                     init_size_range=(0.2, 0.2), num_rays=32, immortal=True)
