@@ -120,7 +120,7 @@ class GWorld():
     def set_selected_cell(self, cell):
         self._selected_cell = (int(cell.x), int(cell.y))
         print("Init Cell food:", self.central_food_grid[self._selected_cell[1], self._selected_cell[0]].item())
-        print(self.central_food_grid)
+        # print(self.central_food_grid)
 
 
     @cuda_utils.cuda_profile
@@ -211,8 +211,8 @@ class GWorld():
         # self.kill_dead()
 
     @cuda_utils.cuda_profile
-    def creatures_eat(self):
-        self.creatures.eat(self.food_grid)
+    def creatures_eat_grow(self):
+        self.creatures.eat_grow(self.food_grid)
 
     @cuda_utils.cuda_profile
     def creatures_reproduce(self):
@@ -223,34 +223,6 @@ class GWorld():
     def central_food_grid(self):
         pad = self.cfg.food_sight
         return self.food_grid[pad:-pad, pad:-pad]
-
-    @cuda_utils.cuda_profile
-    def grow_food(self):
-        """The higher step_size is, the faster food grows (and the faster corpses decay)."""
-        # don't grow on squares that are occupied by creatures
-
-        # maximum growth in a single step is step_size*max_food roughly (ignoring negatives, which are rare)
-        # creatures lose alive_cost energy per step at least. so the energy leaving the system is the sum of this amount
-        # energy entering is step_size*max_food*(grid_size**2), so we should set step size to sum(size**2)/max_food/(grid_size**2)/10
-    
-        step_size = torch.sum(self.cfg.alive_cost(self.creatures.sizes))/self.cfg.max_food/(self.cfg.size**2)
-        #logging.info(f"Food growth step size: {step_size}")
-
-        posns = self.creatures.positions.long()
-        growing = self.central_food_grid
-        # print('growing', growing, self.creatures.positions)
-        # this allows negative food. We can think of this as "overfeeding" -> toxicity.
-        # growing[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
-        growing.index_put_((posns[:, 1], posns[:, 0]),
-                           torch.full((self.population,), -self.cfg.food_cover_decr, device='cuda'),
-                           accumulate=True)
-
-        # don't bother growing food in the padding/inaccesible area
-        # grow food and decay dead corpses slowly
-        torch.where(growing < self.cfg.max_food, 
-                    growing - step_size*(growing-self.cfg.max_food)*self.cfg.food_growth_rate, 
-                    growing - step_size*(growing-self.cfg.max_food)*self.cfg.food_decay_rate, 
-                    out=growing)
         
     
     @property
@@ -318,8 +290,8 @@ class GWorld():
         self.do_attacks(attacks2)  # update health and energy of creatures
         # self.creatures_reproduce()    # allow high energy individuals to reproduce
         self.fused_kill_reproduce()
-        self.creatures_eat()   # give energy for being in a square, and then reduce that energy
-        self.grow_food()   # give food time to grow
+        self.creatures_eat_grow()   # give energy for being in a square, and then reduce that energy
+        # self.grow_food()   # give food time to grow
 
 
     def compute_decisions(self):

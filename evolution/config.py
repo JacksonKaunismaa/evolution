@@ -133,7 +133,8 @@ class Config:
 
     ### Energy/Movement costs
     # func(size) that determines the cost of being alive at each step
-    alive_cost: ConfigFunction = ConfigFunction('linear', 0.03)  
+    # alive_cost: ConfigFunction = ConfigFunction('linear', 0.03)  
+    alive_cost: FunctionExpression = FunctionExpression(['x'], '0.03f * x')
     # func(out, size) that determines the amt to rotate
     # rotate_amt: ConfigFunction = ConfigFunction('linear_frac', torch.pi/10)  
     rotate_amt: FunctionExpression = FunctionExpression(['x', 'y'], '(x / (1.0f + y)) * 0.314159f')

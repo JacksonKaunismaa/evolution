@@ -14,7 +14,7 @@ torch.set_grad_enabled(False)
 # Blocking call entering rendering/event loop
 # mglw.run_window_config(evolution.visual.Game)
 
-# evolution.visual.main.main()
+evolution.visual.main.main()
 
 from evolution import config
 import pickle
@@ -42,40 +42,41 @@ import os.path as osp
 
 # cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
 #                     cell_size=2.0, cache_size=128, max_per_cell=128)
+# torch.random.manual_seed(0)
+# cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
+#                 init_size_range=(0.2, 0.2), num_rays=32, immortal=True, init_food_scale=15.)
 # print(evolution.gworld.benchmark(cfg, max_steps=2500))
 
-from collections import defaultdict
-total_times = defaultdict(list)
-N = 20
-for i in range(N):
-    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
-                        cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0)
-    bmarks = evolution.gworld.benchmark(cfg, max_steps=2500)
-    # if i == 0:  # skip first iteration for compilation weirdness
-    #     continue
-    for k, v in bmarks.items():
-        total_times[k].append(v)
+# from collections import defaultdict
+# total_times = defaultdict(list)
+# N = 20
+# for i in range(N):
+#     cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
+#                         cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0)
+#     bmarks = evolution.gworld.benchmark(cfg, max_steps=2500)
+#     # if i == 0:  # skip first iteration for compilation weirdness
+#     #     continue
+#     for k, v in bmarks.items():
+#         total_times[k].append(v)
 
-for k, v in total_times.items():
-    # compute mean and sample standard deviation
-    mean = np.mean(v)
-    std = np.std(v, ddof=1) / np.sqrt(len(v))
-    print(k, mean, '+-', std)
+# for k, v in total_times.items():
+#     # compute mean and sample standard deviation
+#     mean = np.mean(v)
+#     std = np.std(v, ddof=1) / np.sqrt(len(v))
+#     print(k, mean, '+-', std)
     
-
 """
-compute_grid_setup 735.4816209129989 +- 2.9475672066372063
-trace_rays_grid 382.1047769848257 +- 0.6659491256059795
-collect_stimuli 359.2628526508808 +- 1.2570186312897107
-think 1122.200986341387 +- 2.8981567554656746
-rotate_creatures 1142.5258647695184 +- 1.359790614698702
-only_move_creatures 418.1067409504205 +- 2.607459955029635
-compute_gridded_attacks 407.9113952383399 +- 0.4744203299946343
-only_do_attacks 188.8393968731165 +- 0.2797034819583504
-_kill_dead 1842.5515991400928 +- 5.656057938812128
-_reproduce 4479.234886916727 +- 7.777394625255884
-fused_kill_reproduce 7917.413489667326 +- 14.325337994053912
-creatures_eat 1611.95025011003 +- 8.368854853301821
-grow_food 1052.3607590228319 +- 1.6071112410528354
+compute_grid_setup 764.1916149377823 +- 3.2383586987344666
+trace_rays_grid 611.8303262654692 +- 3.673799606921044
+collect_stimuli 336.2895743921399 +- 0.3240023653903362
+think 1100.118756171316 +- 2.6005534543299813
+rotate_creatures 1115.2860229305923 +- 1.6630199949508853
+only_move_creatures 379.9413187041879 +- 0.5163189904907349
+compute_gridded_attacks 479.75453137233853 +- 3.666007786101306
+only_do_attacks 179.75919150598347 +- 0.10734763266403956
+_kill_dead 1703.6854702923447 +- 3.4499792726779934
+_reproduce 4156.490024921298 +- 6.89442924056734
+fused_kill_reproduce 7490.299363550544 +- 12.059096895927329
+creatures_eat_grow 884.3601694256067 +- 0.5502520483596781
 n_maxxed 0.0 +- 0.0
 """

@@ -110,41 +110,101 @@ class CreatureArray():
         self.biases = [b[self.alive] for b in self._biases]
         
     
-    @property
-    def food_grid_pos(self):
-        return self.positions.long() + self.pad
+    # @property
+    # def food_grid_pos(self):
+    #     return self.positions.long() #+ self.pad
     
     @property
     def population(self):
         return self.alive.sum().item()
 
-    def eat(self, food_grid: torch.Tensor):
+    def eat_grow(self, food_grid: torch.Tensor):
         """Eat the food in the creatures' vicinity."""
-        pos = self.food_grid_pos
-        # print('pos', pos)
-        posn_counts = torch.zeros_like(food_grid, dtype=torch.int, device='cuda')
-        posn_counts.index_put_((pos[:,1], pos[:,0]), torch.ones(self.population, device='cuda', dtype=torch.int), 
-                               accumulate=True)   # how many creatures are in each position
-        # print('count', posn_counts)
         
-        food_per_creature = torch.where(posn_counts > 1. / self.cfg.eat_pct,
-                          1. / posn_counts.float() * food_grid,
-                          self.cfg.eat_pct * food_grid)
-        # print('food_per_creat', food_per_creature)
-        food = food_per_creature[pos[:, 1], pos[:, 0]]
-        # print('food', food)
+        pos = self.positions.int() + self.pad
+        # how many creatures are in each position
+        pos_counts = torch.zeros_like(food_grid, dtype=torch.int, device='cuda') 
+        threads_per_block = 512
+        blocks_per_grid = self.population // threads_per_block + 1
+        
+        # print(food_grid.shape, threads_per_block, blocks_per_grid)
+        self.kernels('setup_eat_grid', blocks_per_grid, threads_per_block,
+                     pos, pos_counts, self.population, food_grid.shape[0])
+        
+        food_grid_updates = torch.zeros_like(food_grid, device='cuda')
+        alive_costs = torch.zeros(self.population, device='cuda', dtype=torch.float32)
+        # # print('positions', self.positions)
+        # energies_before = torch.clone(self.energies)
+        self.kernels('eat', blocks_per_grid, threads_per_block,
+                     pos, pos_counts, self.sizes, food_grid,
+                     food_grid_updates, alive_costs, self.energies, self.ages,
+                     self.population, food_grid.shape[0], self.cfg.food_cover_decr, 1. / self.cfg.eat_pct)
+        
+        # food_per_creature = torch.where(pos_counts > 1. / self.cfg.eat_pct,
+        #                   1. / pos_counts.float() * food_grid,
+        #                   self.cfg.eat_pct * food_grid)
+        # # print('food_per_creat', food_per_creature)
+        # food = food_per_creature[pos[:, 1], pos[:, 0]]
+        # # print('food', food)
                     
-        # print('food @ pos', (food_grid[pos[..., 1], pos[..., 0]]*100).int())
-        # food = food_grid[pos[:, 1], pos[:, 0]] * self.cfg.eat_pct
-        # gain food for eating and lose food for staying alive
-        alive_cost =  self.cfg.alive_cost(self.sizes)
-        #logging.info(f"Food: {food}")
-        #logging.info(f"Alive cost: {alive_cost}")
-        self.energies += food - alive_cost
-        food_grid.index_put_((pos[:,1], pos[:,0]), -food, accumulate=True)
+        # # print('food @ pos', (food_grid[pos[..., 1], pos[..., 0]]*100).int())
+        # # food = food_grid[pos[:, 1], pos[:, 0]] * self.cfg.eat_pct
+        # # gain food for eating and lose food for staying alive
+        # alive_cost =  (self.sizes)*0.03
+        # food_kernel = (self.energies - energies_before) + alive_cost
+        # #logging.info(f"Food: {food}")
+        # #logging.info(f"Alive cost: {alive_cost}")
+        # # print('food', food, food_kernel)
+        # print('alive_cost', abs(alive_cost -alive_costs).max(), abs(alive_cost -alive_costs).argmax())
+        # updates2 = torch.zeros_like(food_grid, device='cuda')
+        # updates2.index_put_((pos[:,1], pos[:,0]), -food, accumulate=True)
+        
         # print('after rm food', food_grid)
-        self.ages += 1  # if they've eaten, then they've made it to the next step
+        # self.ages += 1  # if they've eaten, then they've made it to the next step
         # print('food @ pos after', (food_grid[pos[..., 1], pos[..., 0]]*100).int())
+        
+        """The higher step_size is, the faster food grows (and the faster corpses decay)."""
+        # don't grow on squares that are occupied by creatures
+
+        # maximum growth in a single step is step_size*max_food roughly (ignoring negatives, which are rare)
+        # creatures lose alive_cost energy per step at least. so the energy leaving the system is the sum of this amount
+        # energy entering is step_size*max_food*(grid_size**2), so we should set step size to sum(size**2)/max_food/(grid_size**2)/10
+    
+        step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
+        # # print(step_size)
+        # #logging.info(f"Food growth step size: {step_size}")
+
+        # # print('growing', growing, self.creatures.positions)
+        # # this allows negative food. We can think of this as "overfeeding" -> toxicity.
+        # # growing[posns[:, 1], posns[:, 0]] -= self.cfg.food_cover_decr
+        # updates2.index_put_((pos[:, 1], pos[:, 0]),
+        #                    torch.full((self.population,), -self.cfg.food_cover_decr, device='cuda'),
+        #                    accumulate=True)
+        # print('updates', abs(updates2 - food_grid_updates).max(), abs(updates2 - food_grid_updates).argmax())
+
+        # # don't bother growing food in the padding/inaccesible area
+        # # grow food and decay dead corpses slowly
+        
+        # fgrid_copy = torch.clone(food_grid)
+        # fgrid_copy += updates2
+        # fgrid_central = fgrid_copy[self.pad:-self.pad, self.pad:-self.pad]
+        # torch.where(fgrid_central < self.cfg.max_food, 
+        #             fgrid_central - step_size*(fgrid_central-self.cfg.max_food)*self.cfg.food_growth_rate, 
+        #             fgrid_central - step_size*(fgrid_central-self.cfg.max_food)*self.cfg.food_decay_rate, 
+        #             out=fgrid_central)
+        
+        threads_per_block = (16, 16)
+        blocks_per_grid = (food_grid.shape[0] // threads_per_block[0] + 1, 
+                           food_grid.shape[1] // threads_per_block[1] + 1)
+        # print(food_grid.shape, threads_per_block, blocks_per_grid)
+        self.kernels('grow', blocks_per_grid, threads_per_block,
+                     food_grid_updates, food_grid, food_grid.shape[0], self.pad, step_size)
+        
+        # print('food_growth', abs(fgrid_copy - food_grid).max(), abs(fgrid_copy - food_grid).argmax())
+        # print('max posn', pos_counts.max(), pos_counts.argmax())
+        # input()
+        # print(fgrid_copy, food_grid)
+        
 
 
     def extract_food_windows(self, indices, food_grid):
@@ -157,9 +217,12 @@ class CreatureArray():
     def collect_stimuli(self, collisions, food_grid):
         """Collisions: [N, 3], food_grid: [N, 3, 3] -> [N, F] where F is the number of features."""
         # get the food in the creature's vicinity
-        food = self.extract_food_windows(self.food_grid_pos, food_grid)  # [N, 9]
+        # we must add self.pad, because positions are stored in central_food_grid coordinates,
+        # but we need to index into food_grid with food_grid coordinates (which includes padding)
+        posn = self.positions.long() + self.pad
+        food = self.extract_food_windows(posn, food_grid)  # [N, 9]
         rays_results = collisions.view(self.population, -1)  # [N, 3*num_rays]
-
+        
         return torch.cat([rays_results, 
                           self.memories, 
                           food, 
@@ -261,16 +324,16 @@ class CreatureArray():
         # print("contig_creature", contig_creature, 'discontig_creature', creature_id)
         return contig_creature
             
-    def fused_kill_reproduce(self, food_grid):
+    def fused_kill_reproduce(self, central_food_grid):
         """Kill the dead creatures and reproduce the living ones."""
-        deads = self._kill_dead(food_grid)
+        deads = self._kill_dead(central_food_grid)
         # print('deads is', deads)
         any_reproduced = self._reproduce(deads)
         if deads is not None or any_reproduced:
             self.reindex()
         
     @cuda_utils.cuda_profile
-    def _kill_dead(self, food_grid: torch.Tensor):
+    def _kill_dead(self, central_food_grid: torch.Tensor):
         """Update self.alive, contiguous memory storage (_attrs), and food_grid for all creatures that have been killed. 
         Returns contiguous boolean indices of creatures that have died."""
         if self.cfg.immortal:
@@ -282,7 +345,7 @@ class CreatureArray():
             return
         dead_posns = self.positions[self.dead].long()
         # food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
-        food_grid.index_put_((dead_posns[..., 1], dead_posns[..., 0]), 
+        central_food_grid.index_put_((dead_posns[..., 1], dead_posns[..., 0]), 
                              self.cfg.dead_drop_food(self.sizes[self.dead]), 
                              accumulate=True)
         
