@@ -132,7 +132,7 @@ class Game:
         
 
 def main():
-    torch.random.manual_seed(0)
+    torch.random.manual_seed(11)
     settings.WINDOW['class'] = 'moderngl_window.context.sdl2.Window'
     settings.WINDOW['gl_version'] = (4, 6)
     settings.WINDOW['title'] = 'Evolution'

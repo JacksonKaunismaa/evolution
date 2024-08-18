@@ -84,7 +84,6 @@ class Creatures(CreatureArray):
         
         # limit reproducers so we don't exceed max size
         num_reproducers = torch.sum(reproducers)
-        print(num_reproducers, num_dead)
         if num_reproducers == 0:  # no one can reproduce
             return False
         
