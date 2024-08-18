@@ -6,10 +6,9 @@ from matplotlib import cm
 from OpenGL.GL import *
 
 
-from ..cuda_utils import checkCudaErrors
-from .. import cuda_utils
-from .. import config
-from .. import gworld
+from evolution.cuda import cuda_utils
+from evolution.core import config
+from evolution.core import gworld
 
 class Heatmap:
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: gworld.GWorld, shaders: Dict[str, str]):

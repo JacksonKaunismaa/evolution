@@ -3,13 +3,13 @@ import moderngl as mgl
 import numpy as np
 import torch
 
-from .. import config
-from .. import cuda_utils
-from .. import loading_utils
+from evolution.core import config
+from evolution.cuda import cuda_utils
+from evolution.utils import loading
 
 
 if TYPE_CHECKING:
-    from .main import Game
+    from evolution.visual.main import Game
 
 class ThoughtsVisualizer:
     """Display memories and current outputs of a creature's thoughts."""
@@ -25,8 +25,8 @@ class ThoughtsVisualizer:
         self.height = 0.1
         self.neuron_size = 0.02
 
-        self.thoughts_tex = loading_utils.load_image_as_texture(self.ctx, 
-                                                                'assets/circle_outline_faded.png')
+        self.thoughts_tex = loading.load_image_as_texture(self.ctx, 
+                                                          'assets/circle_outline_faded.png')
         self.thoughts_sampler = self.ctx.sampler(texture=self.thoughts_tex)
         filter_type = self.ctx.LINEAR
         self.thoughts_sampler.filter = (filter_type, filter_type)

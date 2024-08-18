@@ -3,10 +3,9 @@ import moderngl as mgl
 import numpy as np
 import torch
 
-from .. import config
-from .. import gworld
-from .. import cuda_utils
-from .. import loading_utils
+from evolution.core import config
+from evolution.core import gworld
+from evolution.cuda import cuda_utils
 
 
 class BrainVisualizer:

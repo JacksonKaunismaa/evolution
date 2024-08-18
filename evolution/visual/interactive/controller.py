@@ -6,7 +6,7 @@ import moderngl_window as mglw
 from .camera import Camera
 
 if TYPE_CHECKING:
-    from .main import Game
+    from evolution.visual.main import Game
 
 class Controller:
     def __init__(self, window: mglw.BaseWindow, camera: Camera, game: 'Game'):
@@ -119,6 +119,8 @@ class Controller:
                 self.set_selected_creature(creature_id)
             elif self.camera.click_in_bounds(game_click):
                 self.set_selected_cell(game_click)
+            else:
+                self.set_selected_cell(None)
         # print(self.camera.cfg.food_cover_decr)
         
         # print(self.game.world.creatures.positions)

@@ -1,10 +1,9 @@
 import moderngl as mgl
 import numpy as np
 
-from .. import config
-from .. import gworld
-from .. import cuda_utils
-from .. import loading_utils
+from evolution.core import config
+from evolution.core import gworld
+from evolution.cuda import cuda_utils
 
 
 class CreatureRays:
@@ -21,12 +20,6 @@ class CreatureRays:
 
         self.cuda_rays = cuda_utils.register_cuda_buffer(self.rays)
         self.cuda_ray_colors = cuda_utils.register_cuda_buffer(self.ray_colors)
-        
-        # self.ray_tex = loading_utils.load_image_as_texture(self.ctx,
-        #                                                         './assets/arrowhead.png')
-        # self.sampler = self.ctx.sampler(texture=self.ray_tex)
-        # filter_type = self.ctx.LINEAR
-        # self.sampler.filter = (filter_type, filter_type)
 
         ray_width = 0.01
         hbox_vertices = np.asarray([

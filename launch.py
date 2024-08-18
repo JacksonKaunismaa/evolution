@@ -4,7 +4,7 @@ import evolution
 import moderngl as mgl
 import moderngl_window as mglw
 
-import evolution.gworld
+import evolution.core.gworld
 import evolution.visual.main
 import torch
 import numpy as np
@@ -16,7 +16,7 @@ torch.set_grad_enabled(False)
 
 evolution.visual.main.main()
 
-from evolution import config
+from evolution.core import config
 import pickle
 import os.path as osp
 

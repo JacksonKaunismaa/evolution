@@ -5,8 +5,8 @@ import moderngl_window as mglw
 import numpy as pn
 
 
-from .. import config
-from .. import gworld
+from evolution.core import config
+from evolution.core import gworld
 
 class Camera:
     def __init__(self, ctx: mgl.Context, cfg: config.Config, window: mglw.BaseWindow, world: gworld.GWorld):

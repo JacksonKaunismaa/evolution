@@ -56,6 +56,6 @@ void eat(int* positions, int* cell_counts, float* sizes,  float* food_grid,  // 
 
     alive_costs[creature] = alive_cost;
     energies[creature] += food - alive_cost;
-    atomicAdd(&food_grid_updates[cell_idx], -food-food_decr);
+    atomicAdd(&food_grid_updates[cell_idx], food+food_decr);
     ages[creature] += 1;
 }

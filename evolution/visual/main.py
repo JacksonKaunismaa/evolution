@@ -9,6 +9,10 @@ import os.path as osp
 from cuda import cuda
 import torch
 
+from ..core import config
+
+from ..utils import loading
+
 torch.set_grad_enabled(False)
 import PIL.Image
 import time
@@ -17,16 +21,16 @@ from sdl2.ext import window as sdl2_window
 import sdl2.video
 
 
-from .controller import Controller
-from .heatmap import Heatmap
-from .instanced_creatures import InstancedCreatures
-from .creature_rays import CreatureRays
-from .brain import BrainVisualizer
-from .thoughts import ThoughtsVisualizer
+from .interactive.controller import Controller
+from .interactive.camera import Camera
+from .graphics.heatmap import Heatmap
+from .graphics.instanced_creatures import InstancedCreatures
+from .graphics.creature_rays import CreatureRays
+from .graphics.brain import BrainVisualizer
+from .graphics.thoughts import ThoughtsVisualizer
 
-from .camera import Camera
-from .. import gworld, config, loading_utils
-from ..cu_algorithms import checkCudaErrors
+from evolution.core import gworld
+from evolution.cuda.cu_algorithms import checkCudaErrors
 
 
 class Game:
@@ -41,7 +45,7 @@ class Game:
         self.cfg = cfg
         self.ctx: mgl.Context = window.ctx
         self.ctx.enable(mgl.BLEND)
-        self.shaders = loading_utils.load_shaders(shader_path)
+        self.shaders = loading.load_shaders(shader_path)
         self.heatmap = Heatmap(self.cfg, self.ctx, self.world, self.shaders)
         self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
         self.rays = CreatureRays(self.cfg, self.ctx, self.world, self.shaders)

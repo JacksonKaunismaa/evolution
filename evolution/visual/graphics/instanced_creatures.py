@@ -1,10 +1,10 @@
 import moderngl as mgl
 import numpy as np
 
-from .. import config
-from .. import gworld
-from .. import cuda_utils
-from .. import loading_utils
+from evolution.core import config
+from evolution.core import gworld
+from evolution.cuda import cuda_utils
+from evolution.utils import loading
 
 
 class InstancedCreatures:
@@ -24,10 +24,10 @@ class InstancedCreatures:
         self.cuda_head_dirs = cuda_utils.register_cuda_buffer(self.head_dirs)
         self.cuda_colors = cuda_utils.register_cuda_buffer(self.colors)
 
-        self.creature_tex = loading_utils.load_image_as_texture(self.ctx,
-                                                                './assets/circle_creature_spiky.png')
-        self.circle_tex = loading_utils.load_image_as_texture(self.ctx,
-                                                              './assets/circle_outline.png')
+        self.creature_tex = loading.load_image_as_texture(self.ctx,
+                                                          './assets/circle_creature_spiky.png')
+        self.circle_tex = loading.load_image_as_texture(self.ctx,
+                                                        './assets/circle_outline.png')
         self.creature_sampler = self.ctx.sampler(texture=self.creature_tex)
         self.circle_sampler = self.ctx.sampler(texture=self.circle_tex)
         filter_type = self.ctx.NEAREST

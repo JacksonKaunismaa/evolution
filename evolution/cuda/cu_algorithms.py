@@ -6,10 +6,9 @@ from cuda import cuda, nvrtc
 from typing import Dict, List
 import numpy as np
 
-from evolution.cuda_utils import checkCudaErrors
+from evolution.core import config
 
-from . import config
-
+from .cuda_utils import checkCudaErrors
     
 
 class CUDAKernelManager:

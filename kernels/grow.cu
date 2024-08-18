@@ -24,7 +24,7 @@ void grow(float* food_grid_updates, float* food_grid, int num_cells, int pad, fl
 
     int cell_idx = cell_y * num_cells + cell_x;
     float food = food_grid[cell_idx];
-    food += food_grid_updates[cell_idx];  // apply eating update
+    food -= food_grid_updates[cell_idx];  // apply eating update
 
     float growth_amt = step_size * (CFG_max_food - food);
 
