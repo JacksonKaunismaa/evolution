@@ -103,8 +103,6 @@ class CreatureArray:
         # need to initialize these weird as well because they depend on sizes
         children.energies = self.cfg.init_energy(children.sizes)
         children.healths = self.cfg.init_health(children.sizes)
-        # need to initialize these weird because they are immutable
-        children.head_dirs = self.head_dirs.reproduce_randn(self.rng)
         return children
             
     @property

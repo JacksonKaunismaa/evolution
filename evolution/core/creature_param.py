@@ -39,8 +39,10 @@ class CreatureParam:
             self.reproduce_type = 'mutable'
         elif init is not None and init[0] == 'zero_':
             self.reproduce_type = 'zeros'
+        elif init is not None and init[0] == 'randn_':
+            self.reproduce_type = 'randn'
         else:
-            self.reproduce_type = 'other'
+            self.reproduce_type = 'none'
         
     @property
     def population(self):
@@ -110,6 +112,8 @@ class CreatureParam:
             return self.reproduce_zeros(num_reproducers)
         elif self.reproduce_type == 'mutable':
             return self.reproduce_mutable(rng, reproducers, mut, force_mutable)
+        elif self.reproduce_type == 'randn':
+            return self.reproduce_randn(rng)
             
     def normalize(self):  # technically we should add support for list-type CreatureParams, but we don't use that
         if self.normalize_func is not None:
