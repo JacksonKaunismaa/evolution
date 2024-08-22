@@ -52,11 +52,10 @@ class Creatures(CreatureArray):
 
     def fused_kill_reproduce(self, central_food_grid):
         """Kill the dead creatures and reproduce the living ones."""
-        # print(torch.topk(self.energies, 20).values.sum().item())
-        dead, num_dead = self._kill_dead(central_food_grid)
+        dead, num_dead = self._kill_dead(central_food_grid)  # determine who is dead
         alive = ~dead
-        new_creatures = self._reproduce(alive, num_dead)
-        if new_creatures or num_dead > 0:
+        new_creatures = self._reproduce(alive, num_dead)  # determine who is reproducing
+        if new_creatures or num_dead > 0:   # rearrange memory and update current data
             self._selected_creature = self.add_with_deaths(dead, alive, num_dead, new_creatures, 
                                                            self._selected_creature)        
                     

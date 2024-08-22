@@ -10,17 +10,21 @@ if TYPE_CHECKING:
 
 from .config import Config
 
-import functools
-def implements(torch_function):
-    """Register a torch function override for ScalarTensor"""
-    def decorator(func):
-        functools.update_wrapper(func, torch_function)
-        # HANDLED_FUNCTIONS[torch_function] = func
-        return func
-    return decorator
 
 
 class CreatureParam:
+    """A single trait of a CreatureArray, such as size. This class manages two Tensors, one
+    which is referred to as the 'underlying' memory (_data) and the other which is the 
+    'current' memory (data). The current memory is a slice of the underlying memory that 
+    corresponds to the traits of creatures that are currently alive. We use this schema as it
+    minimizes unnecessary copying of traits when creatures die or are born. The CreatureParam
+    class also manages the initialization of the underlying memory, the normalization of
+    the current memory (although some normalization schemes currently depend on other
+    CreatureParams, so they can't be managed by a single instance of this class), the
+    generation of child traits from parent traits, and the reindexing of traits when the
+    population changes. It also supports lists of Tensors, which function the exact same
+    as single Tensors, but every operation is applied to each Tensor in the list. This is useful
+    e.g. for the weights of a neural network, where each layer has its own weight matrix."""
     def __init__(self, name: str, shape: Union[List[tuple], tuple], 
                  init: Union[List[Tuple[str,...]], Tuple[str,...], None], 
                  normalize_func: Callable, device: str,
@@ -57,6 +61,8 @@ class CreatureParam:
         return self.data.shape
         
     def init_base(self, cfg: Config):
+        """Initialize underlying memory and current memory. This should only be called
+        for root CreatureParams, and not for any offspring/children CreatureParams."""
         self.max_size = cfg.max_creatures
         if self.is_list:
             self._data = [torch.empty(cfg.max_creatures, *shape, device=self.device) for shape in self._shape]
@@ -72,16 +78,21 @@ class CreatureParam:
         self.normalize()
             
     def init_base_from_data(self, data: Tensor):
+        """Initialize underlying memory and current memory from a given Tensor. This is useful
+        for e.g. energy and health, which are initialized as a function of the size. This should
+        only be called for root CreatureParams, and not for any offspring/children CreatureParams."""
         self._data[:data.shape[0]] = data  # copy the data in to the appropriate spot
         self.data = self._data[:data.shape[0]]  # set the view to the underlying data
               
     def reproduce_randn(self, rng: 'BatchedRandom'):
+        """Generate child traits from the current CreatureParam by sampling random noise."""
         child = CreatureParam(self.name, self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
         child.data = rng.get(self.name)
         child.normalize()
         return child
     
     def reproduce_zeros(self, num_reproducers):
+        """Generate child traits from the current CreatureParam by setting them to zero."""
         child = CreatureParam(self.name, self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
         if self.is_list:
             child.data = [torch.zeros(num_reproducers, *shape, device=self.device) for shape in self._shape]
@@ -91,6 +102,18 @@ class CreatureParam:
             
     def reproduce_mutable(self, rng: 'BatchedRandom', reproducers: Tensor,
                           mut: Tensor, force_mutable=False):
+        """Generate child traits from the current CreatureParam by adding random noise to the
+        parent's traits, and then normalizing. The noise is scaled by the mut Tensor, which is
+        the mutation rate of that particular trait. If force_mutable is True, then the trait
+        is treated as mutable even if isn't (e.g. for position this is useful, since we can consider
+        a child's position to be a 'mutation' of the parent's position).
+        
+        Args:
+            rng: BatchedRandom object for generating random noise.
+            reproducers: boolean Tensor (size of current memory) of the creatures that are reproducing.
+            mut: Tensor of mutation rates for each trait.
+            force_mutable: If True, treat the trait as mutable even if it isn't.
+        """
         if self.mut_idx is None and not force_mutable:
             return
         if self.mut_idx is not None:
@@ -106,20 +129,36 @@ class CreatureParam:
         child.normalize()
         return child
             
-    def reproduce(self, rng: 'BatchedRandom', reproducers: Tensor,  num_reproducers: int,
-                  mut: Tensor, force_mutable=False):
+    def reproduce(self, rng: 'BatchedRandom', reproducers: Tensor,  num_reproducers: int, mut: Tensor):
+        """Select the appropriate reproduction method based on the reproduce_type attribute to
+        generate the child traits.
+        
+        Args: 
+            rng: BatchedRandom object for generating random noise.
+            reproducers: boolean Tensor (size of current memory) of the creatures that are reproducing.
+            num_reproducers: Number of creatures that are reproducing.
+            mut: Tensor of mutation rates for each trait.
+        """
         if self.reproduce_type == 'zeros':
             return self.reproduce_zeros(num_reproducers)
         elif self.reproduce_type == 'mutable':
-            return self.reproduce_mutable(rng, reproducers, mut, force_mutable)
+            return self.reproduce_mutable(rng, reproducers, mut)
         elif self.reproduce_type == 'randn':
             return self.reproduce_randn(rng)
             
     def normalize(self):  # technically we should add support for list-type CreatureParams, but we don't use that
+        """Apply normalization function to the trait."""
         if self.normalize_func is not None:
             self.normalize_func(self)
             
     def write_new(self, idxs: Tensor, other: 'CreatureParam'):
+        """Write data from child CreatureParam (other) to the parent CreatureParam (self). We write
+        to the underlying memory here, and then update the current memory later when we call self.reindex.
+        
+        Args:
+            idxs: Tensor of indices (into underlying memory) where we want to write the new creatures.
+            other: Child CreatureParam whose data we want to write to the parent CreatureParam.
+        """
         if self.is_list:
             for d, od in zip(self._data, other.data):
                 try:
@@ -133,9 +172,15 @@ class CreatureParam:
                 print(self._data.shape, idxs.shape, other.data.shape)
             
     def rearrange_old_data(self, outer_idxs: Tensor, inner_idxs: Tensor):
-        # outer_idxs are the indices of creatures that are outside the best window
-        # inner_idxs are the indices where we want to move them to, inside the best window
-        # this operation is expensive, so we try to call it as few times as possible
+        """Move creatures that are outside the best window to the inside of the best window.
+        We write to the underlying memory here, and then update the current memory later
+        when we call self.reindex.
+        
+        Args:
+            outer_idxs: Tensor of indices (into underlying memory) of creatures that are outside the best window.
+            inner_idxs: Tensor of indices (into underlying memory) where we want to move them to, inside 
+                        the best window
+        """
         if self.is_list:
             for d in self._data:
                 d[inner_idxs] = d[outer_idxs]
@@ -143,7 +188,13 @@ class CreatureParam:
             self._data[inner_idxs] = self._data[outer_idxs]
             
     def reindex(self, start, new_size):
-        if new_size == self.max_size:
+        """Slice underlying memory to set current memory to the current set of active creatures.
+        
+        Args:
+            start: Index of the first creature in the current set of active creatures.
+            new_size: Number of active creatures.
+        """
+        if new_size == self.max_size:  # optimization when the population is at max size, we don't have to slice
             self.data = self._data
         else:
             sl = slice(start, start + new_size)
