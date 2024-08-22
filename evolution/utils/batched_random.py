@@ -4,7 +4,7 @@ from operator import mul
 from functools import reduce
 
 
-from evolution.core.creature_param import CreatureParam
+from evolution.core.creatures.creature_param import CreatureParam
 
 class BatchedRandom:
     def __init__(self, params: List[CreatureParam]):

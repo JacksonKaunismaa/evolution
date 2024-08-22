@@ -8,7 +8,7 @@ if TYPE_CHECKING:
     from evolution.utils.batched_random import BatchedRandom
 
 
-from .config import Config
+from ..config import Config
 
 
 
@@ -43,7 +43,7 @@ class CreatureParam:
             self.reproduce_type = 'mutable'
         elif init is not None and init[0] == 'zero_':
             self.reproduce_type = 'zeros'
-        elif init is not None and init[0] == 'randn_':
+        elif init is not None and init[0] == 'normal_':
             self.reproduce_type = 'randn'
         else:
             self.reproduce_type = 'none'

@@ -14,7 +14,7 @@ from evolution.cuda import cu_algorithms
 from evolution.cuda import cuda_utils
 
 from .config import Config, simple_cfg
-from .creatures import Creatures
+from .creatures.creatures import Creatures
 
 class GWorld():
     def __init__(self, cfg: Config):

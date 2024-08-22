@@ -7,7 +7,7 @@ from typing import Dict, List
 import numpy as np
 
 from evolution.core import config
-from evolution.core.creature_param import CreatureParam
+from evolution.core.creatures.creature_param import CreatureParam
 
 from .cuda_utils import checkCudaErrors
     

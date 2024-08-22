@@ -8,7 +8,7 @@ from torch import Tensor
 
 from evolution.utils.batched_random import BatchedRandom
 
-from .config import Config
+from ..config import Config
 from .creature_param import CreatureParam
 
 def normalize_rays(rays: 'CreatureParam', sizes: 'CreatureParam', cfg: Config):

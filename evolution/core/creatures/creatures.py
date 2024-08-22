@@ -9,7 +9,7 @@ from evolution.utils.batched_random import BatchedRandom
 from evolution.cuda import cuda_utils
 from evolution.cuda.cu_algorithms import CUDAKernelManager
 
-from .config import Config
+from ..config import Config
 from .creature_array import CreatureArray
 
 
