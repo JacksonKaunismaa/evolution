@@ -8,10 +8,8 @@ import numpy as np
 
 def load_shaders(shader_path) -> Dict[str, str]:
     shaders = {}
-    # file_path = osp.dirname(osp.abspath(__file__))
     for path in glob.glob(osp.join(shader_path, '*')):
         fname = osp.basename(path)
-        print(f'Loading shader {fname}')
         with open(path, 'r') as f:
             shaders[fname] = f.read()
     return shaders

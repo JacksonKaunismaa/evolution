@@ -149,9 +149,11 @@ class Creatures(CreatureArray):
                      food_grid_updates, alive_costs, self.energies, self.ages,
                      self.population, food_grid.shape[0], self.cfg.food_cover_decr, 1. / self.cfg.eat_pct)
         if self.get_selected_creature() is not None:
-            print(f"\tAlive Costs: {alive_costs[self.get_selected_creature()].item()}"
+            print(f"\tAge: {self.ages[self.get_selected_creature()].item()}"
+                  f"\n\tChildren: {self.n_children[self.get_selected_creature()].item()}"
+                  f"\n\tAlive Costs: {alive_costs[self.get_selected_creature()].item()}"
                   f"\n\tFood Eaten: {self.energies[self.get_selected_creature()].item() - prev_energy}"
-                  f"\n\tTotal Energy: {torch.sum(self.energies).item()}")
+                  f"\n\tEnergy: {self.energies[self.get_selected_creature()].item()}")
         
         # grow food, apply eating costs
         # step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
@@ -246,8 +248,8 @@ class Creatures(CreatureArray):
         if self.get_selected_creature() is not None:
             print(f"Creature {self.get_selected_creature()}:"
                   f"\n\tRotate Logit: {outputs[self.get_selected_creature(), 1].item()}"
-                  f"\n\tRotate Energy: {energy_before - self.energies[self.get_selected_creature()].item()}"
-                  f"\n\tRotate angle: {np.arccos(rotation_matrix[self.get_selected_creature(),0,0].item())}")
+                  f"\n\tRotate angle: {np.arccos(rotation_matrix[self.get_selected_creature(),0,0].item())}"
+                  f"\n\tRotate Energy: {energy_before - self.energies[self.get_selected_creature()].item()}\n")
         
 
         # rotate the rays and head directions
@@ -273,7 +275,7 @@ class Creatures(CreatureArray):
         if self.get_selected_creature() is not None:
             print(f"\tMove Logit: {outputs[self.get_selected_creature(), 0].item()}"
                   f"\n\tMove Amt: {move[self.get_selected_creature()].item()}"
-                  f"\n\tMove Cost: {move_cost[self.get_selected_creature()].item()}")
+                  f"\n\tMove Energy: {move_cost[self.get_selected_creature()].item()}\n")
             
 
     def do_attacks(self, attacks):
@@ -293,7 +295,7 @@ class Creatures(CreatureArray):
         
         if self.get_selected_creature() is not None:
             print(f"\tNum attacking: {attacks[self.get_selected_creature(), 0].item()}"
-                  f"\n\tAttack Energy: {attack_cost[self.get_selected_creature()].item()}"
                   f"\n\tDamage Taken: {attacks[self.get_selected_creature(), 1].item()}"
-                  f"\n\tHealth: {self.healths[self.get_selected_creature()].item()}")
+                  f"\n\tHealth: {self.healths[self.get_selected_creature()].item()}"
+                  f"\n\tAttack Energy: {attack_cost[self.get_selected_creature()].item()}\n")
             

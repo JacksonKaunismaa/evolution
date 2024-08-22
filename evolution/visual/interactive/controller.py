@@ -67,7 +67,11 @@ class Controller:
                 self.set_selected_creature(0)
 
             if key == self.wnd.keys.P:     # increase id of followed creature by 1
-                self.set_selected_creature(self.game.world._selected_creature + 1)
+                self.set_selected_creature(self.game.world.creatures._selected_creature + 1)
+                
+            if key == self.wnd.keys.G:    # jump to Genghis Khan (guy with most offspring)
+                most_kids = self.game.world.creatures.n_children.argmax()
+                self.set_selected_creature(most_kids)
 
             if key == self.wnd.keys.UP:    # speed up simulation so that we do 1 more step per frame
                 self.game.game_speed += 1
@@ -103,17 +107,16 @@ class Controller:
     def mouse_press_event_func(self, x, y, button):
         # need to store everything in pixel coords so that we are closest to the actual input 
         # this avoids jittering and weird camera behavior when dragging the map
-        print('posn', self.game.world.creatures.positions)
-        print('size', self.game.world.creatures.sizes)
-        print('color', self.game.world.creatures.colors)
-        print('head_dir', self.game.world.creatures.head_dirs)
-        print('rays', self.game.world.creatures.rays)
+        # print('posn', self.game.world.creatures.positions)
+        # print('size', self.game.world.creatures.sizes)
+        # print('color', self.game.world.creatures.colors)
+        # print('head_dir', self.game.world.creatures.head_dirs)
+        # print('rays', self.game.world.creatures.rays)
         if button == self.wnd.mouse.left:
             self.click_pos = glm.vec2(x, y)
             self.camera_pos = self.camera.position.xy
             self.mouse_pressed = True
             game_click = self.camera.pixel_to_game_coords(*self.click_pos).xy
-            print(game_click)
             creature_id = self.game.world.click_creature(game_click) if self.game.creatures.visible else None
             if creature_id is not None:
                 self.set_selected_creature(creature_id)

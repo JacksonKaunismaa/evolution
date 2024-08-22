@@ -51,6 +51,7 @@ class CreatureArray:
         self.memories: CreatureParam = CreatureParam('memories', (self.cfg.mem_size,), ('zero_',), None, 
                                                      self.device, None)
         self.ages: CreatureParam = CreatureParam('ages', tuple(), ('zero_',), None, self.device, None)
+        self.n_children: CreatureParam = CreatureParam('n_children', tuple(), ('zero_',), None, self.device, None)
         self.head_dirs: CreatureParam = CreatureParam('head_dirs', (2,), ('normal_', 0, 1), 
                                        normalize_head_dirs, self.device, None)
         
@@ -86,12 +87,13 @@ class CreatureArray:
     def reproduce(self, reproducers: torch.Tensor, num_reproducers: int) -> 'CreatureArray':
         mut = self.mutation_rates[reproducers]
         self.rng.generate(num_reproducers)
-
+        self.n_children[reproducers] += 1
         children = CreatureArray(self.cfg, self.device)
         
         for v in self.variables:   # handle mutable parameters
-            if v.mut_idx is not None:
-                setattr(children, v.name, v.reproduce_mutable(self.rng, reproducers, mut))
+            child_trait = v.reproduce(self.rng, reproducers, num_reproducers, mut)
+            if child_trait is not None:
+                setattr(children, v.name, child_trait)
         
         # we can pretend position is a mutable parameter since it is a random deviation from the parent
         children.positions = self.positions.reproduce_mutable(self.rng, reproducers, 
@@ -102,8 +104,6 @@ class CreatureArray:
         children.energies = self.cfg.init_energy(children.sizes)
         children.healths = self.cfg.init_health(children.sizes)
         # need to initialize these weird because they are immutable
-        children.ages = self.ages.reproduce_zeros(num_reproducers)
-        children.memories = self.memories.reproduce_zeros(num_reproducers)
         children.head_dirs = self.head_dirs.reproduce_randn(self.rng)
         return children
             

@@ -11,10 +11,10 @@ from evolution.core import config
 
 
 torch.random.manual_seed(0)
-# cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
-#                     cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0)
-cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
-                init_size_range=(0.2, 0.2), num_rays=3, immortal=False, init_food_scale=15.)
+cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
+                    cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0)
+# cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
+#                 init_size_range=(0.2, 0.2), num_rays=3, immortal=False, init_food_scale=15.)
 
 evolution.visual.main.main(cfg)
 

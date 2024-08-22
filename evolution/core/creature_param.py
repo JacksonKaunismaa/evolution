@@ -35,6 +35,13 @@ class CreatureParam:
         self.data = None   # the current view of the base data that we work with in a single generation
         self.mut_idx = mut_idx  # also indicates whether it's a mutable parameter or not
         
+        if mut_idx is not None:
+            self.reproduce_type = 'mutable'
+        elif init is not None and init[0] == 'zero_':
+            self.reproduce_type = 'zeros'
+        else:
+            self.reproduce_type = 'other'
+        
     @property
     def population(self):
         if self.data is None:
@@ -66,6 +73,12 @@ class CreatureParam:
         self._data[:data.shape[0]] = data  # copy the data in to the appropriate spot
         self.data = self._data[:data.shape[0]]  # set the view to the underlying data
               
+    def reproduce_randn(self, rng: 'BatchedRandom'):
+        child = CreatureParam(self.name, self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
+        child.data = rng.get(self.name)
+        child.normalize()
+        return child
+    
     def reproduce_zeros(self, num_reproducers):
         child = CreatureParam(self.name, self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
         if self.is_list:
@@ -74,13 +87,7 @@ class CreatureParam:
             child.data = torch.zeros(num_reproducers, *self._shape, device=self.device)
         return child
             
-    def reproduce_randn(self, rng: 'BatchedRandom'):
-        child = CreatureParam(self.name, self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
-        child.data = rng.get(self.name)
-        child.normalize()
-        return child
-            
-    def reproduce_mutable(self, rng: 'BatchedRandom', reproducers: Tensor, 
+    def reproduce_mutable(self, rng: 'BatchedRandom', reproducers: Tensor,
                           mut: Tensor, force_mutable=False):
         if self.mut_idx is None and not force_mutable:
             return
@@ -96,6 +103,13 @@ class CreatureParam:
             child.data = self[reproducers] + perturb
         child.normalize()
         return child
+            
+    def reproduce(self, rng: 'BatchedRandom', reproducers: Tensor,  num_reproducers: int,
+                  mut: Tensor, force_mutable=False):
+        if self.reproduce_type == 'zeros':
+            return self.reproduce_zeros(num_reproducers)
+        elif self.reproduce_type == 'mutable':
+            return self.reproduce_mutable(rng, reproducers, mut, force_mutable)
             
     def normalize(self):  # technically we should add support for list-type CreatureParams, but we don't use that
         if self.normalize_func is not None:
@@ -158,6 +172,9 @@ class CreatureParam:
     def max(self, *args, **kwargs) -> Tensor:
         return self.data.max(*args, **kwargs)
     
+    def argmax(self, *args, **kwargs) -> Tensor:
+        return self.data.argmax(*args, **kwargs)
+    
     def unsqueeze(self, *args, **kwargs) -> Tensor:
         return self.data.unsqueeze(*args, **kwargs)
     
@@ -202,7 +219,6 @@ class CreatureParam:
     def __itruediv__(self, other) -> 'CreatureParam':
         self.data /= other
         return self
-    
     
     @classmethod
     def __torch_function__(cls, func, types, args=(), kwargs=None):
