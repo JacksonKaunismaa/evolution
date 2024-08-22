@@ -3,3 +3,4 @@
 **/*.ckpt
 **/*.pkl
 **/*.ncu-rep
+**/.vscode

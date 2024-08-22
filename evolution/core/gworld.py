@@ -1,4 +1,3 @@
-
 import torch
 from torch.nn import functional as F
 torch.set_grad_enabled(False)
@@ -6,6 +5,8 @@ import time
 # import logging
 from tqdm import trange, tqdm
 import os.path as osp
+from collections import defaultdict
+import numpy as np
 
 # logging.basicConfig(level=logging.info, filename='game.log')
 
@@ -26,14 +27,12 @@ class GWorld():
         self.creatures.generate_from_cfg()
         self.n_maxxed = 0
 
-
         # we keep track of these objects so that we can visualize them
         self.celled_world = None    # array of grid cells for fast object clicking
         self.increasing_food_decr_enabled = False
         self.outputs = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions = None   # the set of ray collisions for each creature
         self._selected_cell = None
-        self._selected_creature = None
         self.dead_updated = False
         self.time = 0
         self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
@@ -136,16 +135,10 @@ class GWorld():
     def click_creature(self, mouse_pos) -> int:
         """Return the index of the creature clicked on, or None if no creature was clicked."""
         mouse_pos = torch.tensor(mouse_pos, device='cuda')   # [2]
-        # print('mouse_pos', mouse_pos)
         dists = torch.norm(self.creatures.positions - mouse_pos, dim=1)   # [N, 2] - [1, 2] = [N, 2]
-        # print('dists', dists)
         close_enough = dists < self.creatures.sizes
-        # print('close_enough', close_enough)
         nonzero = torch.nonzero(close_enough)
-        # print('nonzero', nonzero)
         creature = nonzero[0].item() if nonzero.shape[0] != 0 else None
-        # print(contig_index)
-        # print(discontig_index)
         return creature
 
     @cuda_utils.cuda_profile
@@ -161,7 +154,7 @@ class GWorld():
     @cuda_utils.cuda_profile
     def rotate_creatures(self, outputs):
         """Rotate all creatures based on their outputs."""
-        self.creatures.rotate_creatures(outputs)
+        self.creatures.rotate_creatures(outputs, self._selected_creature)
     
     @cuda_utils.cuda_profile
     def only_move_creatures(self, outputs):
@@ -186,12 +179,7 @@ class GWorld():
         # figure out who is attacking who
         block_size = (32, 32)
         grid_size = (self.population//block_size[0] + 1, self.population//block_size[0] + 1)
-        # blocks_per_grid (N/32, N/32), threads_per_block (32, 32)
-        # print(grid_size, block_size)
-        # print(posns.shape, sizes.shape, colors.shape, head_dirs.shape, nb_results.shape)
-        # print(posns.dtype, sizes.dtype, colors.dtype, head_dirs.dtype, nb_results.dtype)
-        # algorithms.is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, 
-        #                                                          head_dirs, tr_results)
+
         self.kernels('is_attacking', 
                      grid_size, block_size,  # threads
                      posns, sizes, colors, head_dirs, tr_results,
@@ -211,9 +199,7 @@ class GWorld():
         tr_results = torch.zeros((self.population, 2), device='cuda')
         block_size = 512
         grid_size = self.population // block_size + 1
-        # algorithms.gridded_is_attacking(self.cfg)[grid_size, block_size](posns, sizes, colors, head_dirs, 
-        #                                                                  cells, cell_counts, 
-        #                                                                  self.cfg.cell_size, tr_results)
+
         self.kernels('gridded_is_attacking', 
                      grid_size, block_size,  # threads
                      posns, sizes, colors, head_dirs, 
@@ -224,24 +210,15 @@ class GWorld():
     @cuda_utils.cuda_profile
     def only_do_attacks(self, tr_results):
         # update health and energy
-        self.creatures.do_attacks(tr_results)
-
-    # @cuda_utils.cuda_profile
-    # def kill_dead(self):
-    #     self.creatures.kill_dead(self.central_food_grid)
+        self.creatures.do_attacks(tr_results, self._selected_creature)
 
     def do_attacks(self, tr_results):
         # update health and energy
         self.only_do_attacks(tr_results)
-        # self.kill_dead()
 
     @cuda_utils.cuda_profile
     def creatures_eat_grow(self):
-        self.creatures.eat_grow(self.food_grid, self._selected_cell)        
-
-    @cuda_utils.cuda_profile
-    def creatures_reproduce(self):
-        self.creatures.reproduce()
+        self.creatures.eat_grow(self.food_grid, self._selected_cell, self._selected_creature)        
 
 
     @property
@@ -286,16 +263,11 @@ class GWorld():
         self.move_creatures(self.outputs, )   # move creatures, update health and energy
         
         celled_world = self.compute_grid_setup()
-        # print(celled_world)
         attacks2 = self.compute_gridded_attacks(*celled_world)
-        # print(attacks2)
 
-        # print('sizes', self.creatures.sizes)
         self.do_attacks(attacks2)  # update health and energy of creatures
-        # self.creatures_reproduce()    # allow high energy individuals to reproduce
         self.fused_kill_reproduce()
         self.creatures_eat_grow()   # give energy for being in a square, and then reduce that energy
-        # self.grow_food()   # give food time to grow
 
 
     def compute_decisions(self):
@@ -312,12 +284,7 @@ class GWorld():
         self.increasing_food_decr_enabled = not self.increasing_food_decr_enabled
         
 
-    def step(self, visualize=False, save=True) -> bool:
-        #logging.info(f"{self.population} creatures alive.")
-        #logging.info(f"Health:\n {self.creatures.healths}")
-        #logging.info(f"Energy:\n {self.creatures.energies}")
-        
-        
+    def step(self, visualize=False, save=True) -> bool:        
         # we do these steps in this (seemingly backwards) order, because we want vision and brain
         # information to be up to date when we visualize the scene, which happens after we exit from here
         self.update_creatures()   # move creatures, update health and energy, reproduce, eat, grow food
@@ -341,7 +308,7 @@ class GWorld():
         return True
 
 
-def benchmark(cfg=None, max_steps=512):
+def _benchmark(cfg=None, max_steps=512):
     # import cProfile
     # from pstats import SortKey
     # import io, pstats
@@ -367,6 +334,21 @@ def benchmark(cfg=None, max_steps=512):
     # ps.print_stats()
     # print(s.getvalue())
     return cuda_utils.times
+
+def multi_benchmark(cfg, max_steps=2500, N=20, skip_first=False):
+    total_times = defaultdict(list)
+    for i in range(N):
+        bmarks = _benchmark(cfg, max_steps=2500)
+        if i == 0 and skip_first:  # skip first iteration for compilation weirdness
+            continue
+        for k, v in bmarks.items():
+            total_times[k].append(v)
+
+    for k, v in total_times.items():
+        # compute mean and sample standard deviation
+        mean = np.mean(v)
+        std = np.std(v, ddof=1) / np.sqrt(len(v))
+        print(k, mean, '+-', std)
 
 
 def main(cfg=None, max_steps=99999):

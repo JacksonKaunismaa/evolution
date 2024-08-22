@@ -7,6 +7,7 @@ from typing import Dict, List
 import numpy as np
 
 from evolution.core import config
+from evolution.core.creature_param import CreatureParam
 
 from .cuda_utils import checkCudaErrors
     
@@ -127,6 +128,8 @@ class CUDAKernelManager:
                     value = np.array(value, dtype=np.float32)
                 elif isinstance(value, int):
                     value = np.array(value, dtype=np.uint64)
+                elif isinstance(value, CreatureParam):
+                    value = np.array(value.data.data_ptr(), dtype=np.uint64)
                 else:
                     raise ValueError(f"Unsupported type {type(value)} for kernel argument")
                 setattr(self, self.var_template.format(i), value)

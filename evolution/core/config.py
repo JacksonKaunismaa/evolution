@@ -140,9 +140,9 @@ class Config:
     rotate_amt: FunctionExpression = FunctionExpression(['x', 'y'], '(x / (1.0f + y)) * 0.314159f')
     # func(rotate_amt, size) to determine rotation cost
     # rotate_cost: ConfigFunction = ConfigFunction('abs_exp', 0.2)  
-    rotate_cost: FunctionExpression = FunctionExpression(['x', 'y'], '1.0f - (expf(-abs(x) * y))')
+    rotate_cost: FunctionExpression = FunctionExpression(['x', 'y'], '0.05f * (1.0f - (expf(-abs(x) * y)))')
     # func(output, size) to determine movement amount
-    move_amt: ConfigFunction = ConfigFunction('linear_frac', 0.13)
+    move_amt: ConfigFunction = ConfigFunction('linear_frac', 0.3)
     # func(move_amt, size) to determine movement cost  
     move_cost: ConfigFunction = ConfigFunction('abs_exp', 0.2)  
     

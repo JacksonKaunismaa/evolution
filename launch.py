@@ -1,70 +1,25 @@
 #!/usr/bin/env python3
-
-import evolution
-import moderngl as mgl
-import moderngl_window as mglw
-
-import evolution.core.gworld
-import evolution.visual.main
+# import os
+# os.environ['CUDA_LAUNCH_BLOCKING'] = '1'
 import torch
 import numpy as np
 torch.set_grad_enabled(False)
-# torch.random.manual_seed(0)
 
-# Blocking call entering rendering/event loop
-# mglw.run_window_config(evolution.visual.Game)
-
-evolution.visual.main.main()
-
+import evolution.core.gworld
+import evolution.visual.main
 from evolution.core import config
-import pickle
-import os.path as osp
-
-# full_results = {}
-# if osp.exists('benchmark.pkl'):
-#     with open("benchmark.pkl", "rb") as f:
-#         full_results = pickle.load(f)
 
 
-# for cell_size in [2.0, 3.0, 4.0]:
-#     for cache_size in [64, 128, 256]:
-#         for max_per_cell in [128, 256, 512]:
-#             if (cell_size, cache_size, max_per_cell) in full_results:
-#                 continue
-#             cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
-#                                 cell_size=cell_size, cache_size=cache_size, max_per_cell=max_per_cell)
-#             print(cell_size, cache_size, max_per_cell)
-#             benchmarks = evolution.gworld.benchmark(cfg, steps=2500)
-#             full_results[(cell_size, cache_size, max_per_cell)] = benchmarks.copy()
-
-#             with open("benchmark.pkl", "wb") as f:
-#                 pickle.dump(full_results, f)
+torch.random.manual_seed(0)
+evolution.visual.main.main()
 
 
 # cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
-#                     cell_size=2.0, cache_size=128, max_per_cell=128)
-# torch.random.manual_seed(0)
-# cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
-#                 init_size_range=(0.2, 0.2), num_rays=32, immortal=False, init_food_scale=15.)
-# print(evolution.core.gworld.benchmark(cfg, max_steps=2500))
+#                     cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0)
+# # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
+# #                 init_size_range=(0.2, 0.2), num_rays=32, immortal=False, init_food_scale=15.)
+# evolution.core.gworld.multi_benchmark(cfg, max_steps=2500, N=20)
 
-# from collections import defaultdict
-# total_times = defaultdict(list)
-# N = 20
-# for i in range(N):
-#     cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0,
-#                         cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0)
-#     bmarks = evolution.core.gworld.benchmark(cfg, max_steps=2500)
-#     # if i == 0:  # skip first iteration for compilation weirdness
-#     #     continue
-#     for k, v in bmarks.items():
-#         total_times[k].append(v)
-
-# for k, v in total_times.items():
-#     # compute mean and sample standard deviation
-#     mean = np.mean(v)
-#     std = np.std(v, ddof=1) / np.sqrt(len(v))
-#     print(k, mean, '+-', std)
     
 """
 compute_grid_setup 764.1916149377823 +- 3.2383586987344666
@@ -96,5 +51,20 @@ _kill_dead 1856.5456350415946 +- 6.0402589089193475
 _reproduce 4246.70085051544 +- 14.025561641498205
 fused_kill_reproduce 7640.3123897664245 +- 27.857600815756605
 creatures_eat_grow 626.0984256379306 +- 1.8549017252323483
+n_maxxed 0.0 +- 0.0
+"""
+"""
+compute_grid_setup 478.77917404286563 +- 2.586394785536291
+trace_rays_grid 574.3233335442841 +- 2.3889125017084964
+collect_stimuli 263.6030537366867 +- 1.8987749907826341
+think 1093.045412451774 +- 1.9604768590536599
+rotate_creatures 887.1171906992793 +- 1.8125863217793163
+only_move_creatures 385.56314977239816 +- 2.978466355979785
+compute_gridded_attacks 256.4626652345061 +- 1.3815362557752466
+only_do_attacks 179.1576996996999 +- 0.9463831132690869
+_kill_dead 867.8524613339454 +- 8.14396789911397
+_reproduce 9012.97521788641 +- 70.10486876560964
+fused_kill_reproduce 9077.576701232883 +- 70.36024678188393
+creatures_eat_grow 476.11893786713483 +- 3.5500289757295858
 n_maxxed 0.0 +- 0.0
 """

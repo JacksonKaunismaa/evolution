@@ -39,15 +39,18 @@ class Creatures(CreatureArray):
         self.activations = []
         self.dead = None   # [N] contiguous boolean tensor
         self.dead_idxs = None # [N] discontiguous index tensor of creatures that died on last step
+        self._selected_creature = None
 
     def fused_kill_reproduce(self, central_food_grid):
         """Kill the dead creatures and reproduce the living ones."""
-        print(torch.topk(self.energies, 20).values.sum().item())
-        alive, num_dead = self._kill_dead(central_food_grid)
-        updated = self._reproduce(alive, num_dead)
-        if not updated and num_dead > 0:
-            self.apply_deaths(alive)
-        
+        # print(torch.topk(self.energies, 20).values.sum().item())
+        dead, num_dead = self._kill_dead(central_food_grid)
+        alive = ~dead
+        new_creatures = self._reproduce(alive, num_dead)
+        if new_creatures or num_dead > 0:
+            self._selected_creature = self.add_with_deaths(dead, alive, num_dead, new_creatures, 
+                                                           self._selected_creature)        
+                    
     @cuda_utils.cuda_profile
     def _kill_dead(self, central_food_grid: torch.Tensor) -> Tuple[torch.Tensor, int]:
         """If any creature drops below 0 health or energy, kill it. Update the food grid by depositing an amount of food
@@ -66,17 +69,17 @@ class Creatures(CreatureArray):
                                 self.cfg.dead_drop_food(self.sizes[self.dead]), 
                                 accumulate=True)
         
-        return ~self.dead, num_dead
+        return self.dead, num_dead
 
     @cuda_utils.cuda_profile
-    def _reproduce(self, alive, num_dead) -> bool:
+    def _reproduce(self, alive, num_dead) -> Union[None, 'CreatureArray']:
         """For sufficiently high energy creatures, create a new creature with mutated genes. Updates self.alive,
         contiguous memory storage (_attrs) for old creatures if this wasn't already done by _kill_dead, writes
         to contiguous memory storage the new creature attributes. Returns True if at least 1 creature reproduces,
         otherwise False."""
         max_reproducers = self.cfg.max_creatures + num_dead - self.population # dont bother if none can reproduce anyway 
         if max_reproducers <= 0:
-            return False
+            return
         
         # 1 + so that really small creatures don't get unfairly benefitted
         reproducers = (self.ages >= self.sizes*self.cfg.mature_age_mul) & (self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes))  # contiguous boolean tensor
@@ -86,7 +89,7 @@ class Creatures(CreatureArray):
         # limit reproducers so we don't exceed max size
         num_reproducers = torch.sum(reproducers)
         if num_reproducers == 0:  # no one can reproduce
-            return False
+            return
         
         if num_reproducers > max_reproducers:  # this benefits older creatures because they 
             num_reproducers = max_reproducers  # are more likely to be in the num_reproducers window
@@ -94,17 +97,16 @@ class Creatures(CreatureArray):
             perm = torch.randperm(reproducer_indices.shape[0], device='cuda')
             non_reproducers = reproducer_indices[perm[num_reproducers:]]
             reproducers[non_reproducers] = False
+        # print(int(num_reproducers), num_dead)
 
         # could fuse this
         self.energies[reproducers] -= self.sizes[reproducers]  # subtract off the energy that you've put into the world
         self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
         
-        new_creatures = CreatureArray(self.cfg)
-        new_creatures.generate_from_parents(reproducers, num_reproducers, self)
-        self.add_with_deaths(alive, num_dead, new_creatures)        
-        return True
+        new_creatures = self.reproduce(reproducers, num_reproducers)
+        return new_creatures
 
-    def eat_grow(self, food_grid: torch.Tensor, selected_cell: Union[None, Tuple[int, int]]):
+    def eat_grow(self, food_grid: torch.Tensor, selected_cell: Union[None, Tuple[int, int]], selected_creature: Union[None, int]):
         """Compute how much food each creature eats, by taking a fixed percentage of the available
         food in the cell it is in. If there are more creatures in a cell than the reciprocal of 
         this fixed percentage (i.e. there isn't enough food to go around), then each creature 
@@ -135,6 +137,8 @@ class Creatures(CreatureArray):
                      pos, pos_counts, self.sizes, food_grid,
                      food_grid_updates, alive_costs, self.energies, self.ages,
                      self.population, food_grid.shape[0], self.cfg.food_cover_decr, 1. / self.cfg.eat_pct)
+        if selected_creature is not None:
+            print(f"Alive Costs: {alive_costs[selected_creature].item()}")
         
         # grow food, apply eating costs
         # step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
@@ -206,15 +210,18 @@ class Creatures(CreatureArray):
             inputs = torch.tanh(inputs @ w + b)
         outputs = inputs.squeeze(dim=1)  # [N, O]
         self.activations.append(inputs)
-        self.memories = outputs[:, 2:]  # only 2 outputs actually do something, so the rest are memory
+        self.memories[:] = outputs[:, 2:]  # only 2 outputs actually do something, so the rest are memory
         return outputs
     
-    def rotate_creatures(self, outputs):
+    def rotate_creatures(self, outputs, creature_id: Union[None, int]):
         """Given the neural network outputs `outputs`, rotate each creature accordingly.
         Rotation is a scalar between -1 and 1, which is combined with the creatures' size
         to compute the number of radians that are rotated. Negative rotation is rightwards, 
         positive is leftwards. We also take a small energy penalty for rotating."""
         # rotation => need to rotate the rays and the object's direction
+        
+        if creature_id is not None:
+            energy_before = self.energies[creature_id].item()
         
         block_size = 512
         grid_size = self.population // block_size + 1
@@ -223,10 +230,15 @@ class Creatures(CreatureArray):
                      outputs, self.sizes, self.energies, self.population, outputs.shape[1],
                      rotation_matrix)
         
+        if creature_id is not None:
+            print(f"Rotate Logit: {outputs[creature_id, 1].item()}"
+                  f"\n\tRotate Energy: {energy_before - self.energies[creature_id].item()}"
+                  f"\n\tRotate angle: {np.arccos(rotation_matrix[creature_id,0,0].item())}")
+        
 
         # rotate the rays and head directions
         self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
-        self.head_dirs = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
+        self.head_dirs[:] = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
 
     def move_creatures(self, outputs, selected_creature):
         """Given the neural network outputs `outputs`, move each creature accordingly.
@@ -237,21 +249,20 @@ class Creatures(CreatureArray):
         movement anyway."""
         # move => need to move the object's position
         # maybe add some acceleration/velocity thing instead
-        
         move = self.cfg.move_amt(outputs[:,0], self.sizes)
         move_cost = self.cfg.move_cost(move, self.sizes)
         #logging.info(f"Move amt: {move}")
         #logging.info(f"Move cost: {move_cost}")
         self.energies -= move_cost
         self.positions += self.head_dirs * move.unsqueeze(1)   # move the object's to new position
-        self.positions = torch.clamp(self.positions, *self.posn_bounds)  # don't let it go off the edge
+        self.positions.normalize()# = torch.clamp(self.positions, *self.posn_bounds)  # don't let it go off the edge
         if selected_creature is not None:
             print(f"Move Logit: {outputs[selected_creature, 0].item()}"
                   f"\n\tMove Amt: {move[selected_creature].item()}"
                   f"\n\tMove Cost: {move_cost[selected_creature].item()}")
             
 
-    def do_attacks(self, attacks):
+    def do_attacks(self, attacks, creature_id: Union[None, int]):
         """Attacks is [N, 2], where the 1st coordinate is an integer indicating how many things the 
         organism is attacking, and the 2nd coordinate is a float indicating the amount of damage the 
         organism is taking from other things attacking it. We update each 
@@ -265,6 +276,11 @@ class Creatures(CreatureArray):
         self.energies -= attack_cost
         #logging.info(f"Attack energy: {attack_cost}")
         self.healths -= attacks[:,1]
+        
+        if creature_id is not None:
+            print(f"Num attacking: {attacks[creature_id, 0].item()}"
+                  f"\n\tAttack Energy: {attack_cost[creature_id].item()}"
+                  f"\n\tDamage Taken: {attacks[creature_id, 1].item()}")
     
     def get_selected_creature(self, creature_id):
         """Given a discontiguous creature_id, retrieve the contiguous index. Useful
