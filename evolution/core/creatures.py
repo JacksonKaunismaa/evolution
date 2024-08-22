@@ -40,6 +40,15 @@ class Creatures(CreatureArray):
         self.dead = None   # [N] contiguous boolean tensor
         self.dead_idxs = None # [N] discontiguous index tensor of creatures that died on last step
         self._selected_creature = None
+        
+    def set_selected_creature(self, creature_id):
+        self._selected_creature = creature_id
+        
+    def get_selected_creature(self):
+        """Given a discontiguous creature_id, retrieve the contiguous index. Useful
+        for the interactive component, since contiguous creature ids can change their meaning
+        rapidly, but discontiguous ids always mean the same thing."""
+        return self._selected_creature
 
     def fused_kill_reproduce(self, central_food_grid):
         """Kill the dead creatures and reproduce the living ones."""
@@ -106,7 +115,7 @@ class Creatures(CreatureArray):
         new_creatures = self.reproduce(reproducers, num_reproducers)
         return new_creatures
 
-    def eat_grow(self, food_grid: torch.Tensor, selected_cell: Union[None, Tuple[int, int]], selected_creature: Union[None, int]):
+    def eat_grow(self, food_grid: torch.Tensor, selected_cell: Union[None, Tuple[int, int]]):
         """Compute how much food each creature eats, by taking a fixed percentage of the available
         food in the cell it is in. If there are more creatures in a cell than the reciprocal of 
         this fixed percentage (i.e. there isn't enough food to go around), then each creature 
@@ -129,6 +138,8 @@ class Creatures(CreatureArray):
         self.kernels('setup_eat_grid', blocks_per_grid, threads_per_block,
                      pos, pos_counts, self.population, food_grid.shape[0])
         
+        if self.get_selected_creature() is not None:
+            prev_energy = self.energies[self.get_selected_creature()].item()
         
         # calculate how much food each creature eats, add 1 to ages, update energies, take away living costs
         food_grid_updates = torch.zeros_like(food_grid, device='cuda')
@@ -137,8 +148,10 @@ class Creatures(CreatureArray):
                      pos, pos_counts, self.sizes, food_grid,
                      food_grid_updates, alive_costs, self.energies, self.ages,
                      self.population, food_grid.shape[0], self.cfg.food_cover_decr, 1. / self.cfg.eat_pct)
-        if selected_creature is not None:
-            print(f"Alive Costs: {alive_costs[selected_creature].item()}")
+        if self.get_selected_creature() is not None:
+            print(f"\tAlive Costs: {alive_costs[self.get_selected_creature()].item()}"
+                  f"\n\tFood Eaten: {self.energies[self.get_selected_creature()].item() - prev_energy}"
+                  f"\n\tTotal Energy: {torch.sum(self.energies).item()}")
         
         # grow food, apply eating costs
         # step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
@@ -213,15 +226,15 @@ class Creatures(CreatureArray):
         self.memories[:] = outputs[:, 2:]  # only 2 outputs actually do something, so the rest are memory
         return outputs
     
-    def rotate_creatures(self, outputs, creature_id: Union[None, int]):
+    def rotate_creatures(self, outputs):
         """Given the neural network outputs `outputs`, rotate each creature accordingly.
         Rotation is a scalar between -1 and 1, which is combined with the creatures' size
         to compute the number of radians that are rotated. Negative rotation is rightwards, 
         positive is leftwards. We also take a small energy penalty for rotating."""
         # rotation => need to rotate the rays and the object's direction
         
-        if creature_id is not None:
-            energy_before = self.energies[creature_id].item()
+        if self.get_selected_creature() is not None:
+            energy_before = self.energies[self.get_selected_creature()].item()
         
         block_size = 512
         grid_size = self.population // block_size + 1
@@ -230,17 +243,18 @@ class Creatures(CreatureArray):
                      outputs, self.sizes, self.energies, self.population, outputs.shape[1],
                      rotation_matrix)
         
-        if creature_id is not None:
-            print(f"Rotate Logit: {outputs[creature_id, 1].item()}"
-                  f"\n\tRotate Energy: {energy_before - self.energies[creature_id].item()}"
-                  f"\n\tRotate angle: {np.arccos(rotation_matrix[creature_id,0,0].item())}")
+        if self.get_selected_creature() is not None:
+            print(f"Creature {self.get_selected_creature()}:"
+                  f"\n\tRotate Logit: {outputs[self.get_selected_creature(), 1].item()}"
+                  f"\n\tRotate Energy: {energy_before - self.energies[self.get_selected_creature()].item()}"
+                  f"\n\tRotate angle: {np.arccos(rotation_matrix[self.get_selected_creature(),0,0].item())}")
         
 
         # rotate the rays and head directions
         self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
         self.head_dirs[:] = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
 
-    def move_creatures(self, outputs, selected_creature):
+    def move_creatures(self, outputs):
         """Given the neural network outputs `outputs`, move each creature accordingly.
         Moving forward is a scalar between -1 and 1, which is combined with the creatures' size
         to compute the distance that is moved. Positive scalars are movement forward, and negative
@@ -256,13 +270,13 @@ class Creatures(CreatureArray):
         self.energies -= move_cost
         self.positions += self.head_dirs * move.unsqueeze(1)   # move the object's to new position
         self.positions.normalize()# = torch.clamp(self.positions, *self.posn_bounds)  # don't let it go off the edge
-        if selected_creature is not None:
-            print(f"Move Logit: {outputs[selected_creature, 0].item()}"
-                  f"\n\tMove Amt: {move[selected_creature].item()}"
-                  f"\n\tMove Cost: {move_cost[selected_creature].item()}")
+        if self.get_selected_creature() is not None:
+            print(f"\tMove Logit: {outputs[self.get_selected_creature(), 0].item()}"
+                  f"\n\tMove Amt: {move[self.get_selected_creature()].item()}"
+                  f"\n\tMove Cost: {move_cost[self.get_selected_creature()].item()}")
             
 
-    def do_attacks(self, attacks, creature_id: Union[None, int]):
+    def do_attacks(self, attacks):
         """Attacks is [N, 2], where the 1st coordinate is an integer indicating how many things the 
         organism is attacking, and the 2nd coordinate is a float indicating the amount of damage the 
         organism is taking from other things attacking it. We update each 
@@ -277,24 +291,9 @@ class Creatures(CreatureArray):
         #logging.info(f"Attack energy: {attack_cost}")
         self.healths -= attacks[:,1]
         
-        if creature_id is not None:
-            print(f"Num attacking: {attacks[creature_id, 0].item()}"
-                  f"\n\tAttack Energy: {attack_cost[creature_id].item()}"
-                  f"\n\tDamage Taken: {attacks[creature_id, 1].item()}")
-    
-    def get_selected_creature(self, creature_id):
-        """Given a discontiguous creature_id, retrieve the contiguous index. Useful
-        for the interactive component, since contiguous creature ids can change their meaning
-        rapidly, but discontiguous ids always mean the same thing."""
-        if creature_id is None:
-            return None
-        
-        if self.dead is not None and self.dead[creature_id]:
-            return None
-        
-        if self.dead is None:
-            return creature_id
-        
-        dead_before = self.dead[:creature_id].sum().item()
-        return creature_id - dead_before
+        if self.get_selected_creature() is not None:
+            print(f"\tNum attacking: {attacks[self.get_selected_creature(), 0].item()}"
+                  f"\n\tAttack Energy: {attack_cost[self.get_selected_creature()].item()}"
+                  f"\n\tDamage Taken: {attacks[self.get_selected_creature(), 1].item()}"
+                  f"\n\tHealth: {self.healths[self.get_selected_creature()].item()}")
             

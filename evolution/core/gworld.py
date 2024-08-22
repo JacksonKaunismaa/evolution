@@ -120,16 +120,11 @@ class GWorld():
         print("Init Cell food:", self.get_selected_cell_food())
         # print(self.central_food_grid)
         
-    def set_selected_creature(self, creature):
-        self._selected_creature = creature
-        
-        
     def get_selected_creature(self):
-        if not self.dead_updated:
-            creature = self.creatures.get_selected_creature(self._selected_creature)
-            self._selected_creature = creature
-        self.dead_updated = True
-        return self._selected_creature
+        return self.creatures.get_selected_creature()
+    
+    def set_selected_creature(self, creature):  
+        self.creatures.set_selected_creature(creature)
     
     
     def click_creature(self, mouse_pos) -> int:
@@ -154,12 +149,12 @@ class GWorld():
     @cuda_utils.cuda_profile
     def rotate_creatures(self, outputs):
         """Rotate all creatures based on their outputs."""
-        self.creatures.rotate_creatures(outputs, self._selected_creature)
+        self.creatures.rotate_creatures(outputs)
     
     @cuda_utils.cuda_profile
     def only_move_creatures(self, outputs):
         """Rotate and move all creatures"""
-        self.creatures.move_creatures(outputs, self._selected_creature)
+        self.creatures.move_creatures(outputs)
 
     def move_creatures(self, outputs):
         """Rotate and move all creatures"""
@@ -210,7 +205,7 @@ class GWorld():
     @cuda_utils.cuda_profile
     def only_do_attacks(self, tr_results):
         # update health and energy
-        self.creatures.do_attacks(tr_results, self._selected_creature)
+        self.creatures.do_attacks(tr_results)
 
     def do_attacks(self, tr_results):
         # update health and energy
@@ -218,7 +213,7 @@ class GWorld():
 
     @cuda_utils.cuda_profile
     def creatures_eat_grow(self):
-        self.creatures.eat_grow(self.food_grid, self._selected_cell, self._selected_creature)        
+        self.creatures.eat_grow(self.food_grid, self._selected_cell)        
 
 
     @property

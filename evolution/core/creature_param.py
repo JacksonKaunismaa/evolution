@@ -151,6 +151,9 @@ class CreatureParam:
     def int(self) -> Tensor:
         return self.data.int()
     
+    def max(self, *args, **kwargs) -> Tensor:
+        return self.data.max(*args, **kwargs)
+    
     def unsqueeze(self, *args, **kwargs) -> Tensor:
         return self.data.unsqueeze(*args, **kwargs)
     

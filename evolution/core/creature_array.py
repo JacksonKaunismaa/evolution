@@ -75,6 +75,7 @@ class CreatureArray:
             v.init_base(self.cfg)
         self.energies.init_base_from_data(self.cfg.init_energy(self.sizes.data))
         self.healths.init_base_from_data(self.cfg.init_health(self.sizes.data))
+        print(self.sizes.max())
 
         self.start_idx = 0
         self.alive = torch.zeros(self.cfg.max_creatures, dtype=torch.float32, device='cuda')
