@@ -60,6 +60,7 @@ class CreatureParam:
             if self.init is None:
                 return
             self.data = getattr(self._data[:cfg.start_creatures], self.init[0])(*self.init[1:])
+        self.normalize()
             
     def init_base_from_data(self, data: Tensor):
         self._data[:data.shape[0]] = data  # copy the data in to the appropriate spot
@@ -98,7 +99,7 @@ class CreatureParam:
             
     def normalize(self):  # technically we should add support for list-type CreatureParams, but we don't use that
         if self.normalize_func is not None:
-            self.normalize_func(self.data)
+            self.normalize_func(self)
             
     def write_new(self, idxs: Tensor, other: 'CreatureParam'):
         if self.is_list:
@@ -144,6 +145,9 @@ class CreatureParam:
     
     def __setitem__(self, idxs: Tensor, val: Tensor):
         self.data[idxs] = val
+        
+    def __repr__(self):
+        return f"CreatureParam(name={self.name}, data={self.data})"
                 
     def long(self) -> Tensor:
         return self.data.long()
@@ -195,6 +199,10 @@ class CreatureParam:
         self.data -= other
         return self
     
+    def __itruediv__(self, other) -> 'CreatureParam':
+        self.data /= other
+        return self
+    
     
     @classmethod
     def __torch_function__(cls, func, types, args=(), kwargs=None):
@@ -204,7 +212,9 @@ class CreatureParam:
             args = [[a.data if isinstance(a, CreatureParam) else a for a in args[0]]]
             # print([type(t) for t in args], func)
         else:
+            # print(args, func)
             args = [a.data if isinstance(a, CreatureParam) else a for a in args]
+            # print('done', args, func, [type(t) for t in args])
         # print([type(t) for t in args], func)
         ret = func(*args, **kwargs)
         return ret

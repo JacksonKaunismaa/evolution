@@ -131,7 +131,7 @@ class Game:
         self.controller.tick()
         
 
-def main():
+def main(cfg=None):
     settings.WINDOW['class'] = 'moderngl_window.context.sdl2.Window'
     settings.WINDOW['gl_version'] = (4, 6)
     settings.WINDOW['title'] = 'Evolution'
@@ -142,8 +142,9 @@ def main():
     # settings.WINDOW['fullscreen'] = True
     window = mglw.create_window_from_settings()
     # print(sdl2_window.SDL_)
-    cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0, immortal=False)
-    print(cfg.food_cover_decr)
+    if cfg is None:
+        cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0, immortal=False)
+        print(cfg.food_cover_decr)
     # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
     #                     init_size_range=(0.2, 0.2), num_rays=32, immortal=True)
     game = Game(window, cfg, load_path='game.ckpt')

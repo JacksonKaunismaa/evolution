@@ -80,7 +80,11 @@ class Controller:
                 self.game.creatures.toggle_hitboxes()
 
     def set_selected_creature(self, creature):
-        print("Setting to creature", creature)
+        print(f"Setting to creature {creature}"
+              f"\n\tPos: {self.game.world.creatures.positions[creature]}"
+              f"\n\tSize: {self.game.world.creatures.sizes[creature]}"
+              f"\n\tHealth: {self.game.world.creatures.healths[creature]}"
+              f"\n\tEnergy: {self.game.world.creatures.energies[creature]}")
         self.camera.following = True
         self.game.world.set_selected_creature(creature)
         # if creature is not None:
@@ -99,11 +103,17 @@ class Controller:
     def mouse_press_event_func(self, x, y, button):
         # need to store everything in pixel coords so that we are closest to the actual input 
         # this avoids jittering and weird camera behavior when dragging the map
+        print('posn', self.game.world.creatures.positions)
+        print('size', self.game.world.creatures.sizes)
+        print('color', self.game.world.creatures.colors)
+        print('head_dir', self.game.world.creatures.head_dirs)
+        print('rays', self.game.world.creatures.rays)
         if button == self.wnd.mouse.left:
             self.click_pos = glm.vec2(x, y)
             self.camera_pos = self.camera.position.xy
             self.mouse_pressed = True
             game_click = self.camera.pixel_to_game_coords(*self.click_pos).xy
+            print(game_click)
             creature_id = self.game.world.click_creature(game_click) if self.game.creatures.visible else None
             if creature_id is not None:
                 self.set_selected_creature(creature_id)

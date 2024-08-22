@@ -48,6 +48,7 @@ class InstancedCreatures:
         scale_fudge_factor = 2#.05859534504
         creature_vertices[::4] *= scale_fudge_factor   # make it relative to the screen size
         creature_vertices[1::4] *= scale_fudge_factor
+        # print(creature_vertices)
 
         hbox_indices = np.array([0, 1, 2, 0, 2, 3], dtype='u4')
         self.creature_vbo = self.ctx.buffer(creature_vertices)

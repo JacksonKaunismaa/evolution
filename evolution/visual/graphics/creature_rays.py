@@ -29,6 +29,7 @@ class CreatureRays:
              1.0,   1.0,    # 1.0, 1.0,   # top right
         ], dtype='f4')
         hbox_vertices[1::2] *= ray_width
+        print(hbox_vertices)
         # print(hbox_vertices)
         # hbox_vertices[::4] /= self.cfg.size   # make it relative to the screen size
         # hbox_vertices[1::4] /= self.cfg.size

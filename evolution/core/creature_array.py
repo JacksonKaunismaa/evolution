@@ -10,17 +10,17 @@ from evolution.utils.batched_random import BatchedRandom
 from .config import Config
 from .creature_param import CreatureParam
 
-def normalize_rays(rays: torch.Tensor, sizes: torch.Tensor, cfg: Config):
+def normalize_rays(rays: 'CreatureParam', sizes: 'CreatureParam', cfg: Config):
     rays[..., :2] /= torch.norm(rays[..., :2], dim=2, keepdim=True)
     rays[..., 2] = torch.clamp(torch.abs(rays[..., 2]),
                 cfg.ray_dist_range[0]*sizes.unsqueeze(1),
                 cfg.ray_dist_range[1]*sizes.unsqueeze(1))
     
-def normalize_head_dirs(head_dirs: torch.Tensor):
+def normalize_head_dirs(head_dirs: 'CreatureParam'):
     head_dirs /= torch.norm(head_dirs, dim=1, keepdim=True)
     
 def clamp(x: torch.Tensor, min_: float, max_: float):
-    torch.clamp(x, min_, max_, out=x)
+    x[:] = torch.clamp(x, min_, max_)
 
 
 class CreatureArray:
@@ -75,7 +75,7 @@ class CreatureArray:
             v.init_base(self.cfg)
         self.energies.init_base_from_data(self.cfg.init_energy(self.sizes.data))
         self.healths.init_base_from_data(self.cfg.init_health(self.sizes.data))
-        print(self.sizes.max())
+        normalize_rays(self.rays, self.sizes, self.cfg)
 
         self.start_idx = 0
         self.alive = torch.zeros(self.cfg.max_creatures, dtype=torch.float32, device='cuda')
