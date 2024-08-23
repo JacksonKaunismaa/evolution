@@ -21,6 +21,10 @@ def normalize_rays(rays: 'CreatureParam', sizes: 'CreatureParam', cfg: Config):
 def normalize_head_dirs(head_dirs: 'CreatureParam'):
     head_dirs /= torch.norm(head_dirs, dim=1, keepdim=True)
     
+def eat_amt(sizes: CreatureParam, cfg: Config) -> Tensor:
+    size_pct = (sizes - cfg.size_range[0]) / (cfg.size_range[1] - cfg.size_range[0])
+    return cfg.eat_pct[0] + size_pct * (cfg.eat_pct[1] - cfg.eat_pct[0])
+    
 def clamp(x: Tensor, min_: float, max_: float):
     x[:] = torch.clamp(x, min_, max_)
 
@@ -56,6 +60,7 @@ class CreatureArray:
         
         self.energies: CreatureParam = CreatureParam('energies', tuple(), None, None, self.device, None)
         self.healths: CreatureParam = CreatureParam('healths', tuple(), None, None, self.device, None)
+        self.eat_pcts: CreatureParam = CreatureParam('eat_pcts', tuple(), None, None, self.device, None)
         self.memories: CreatureParam = CreatureParam('memories', (self.cfg.mem_size,), ('zero_',), None, 
                                                      self.device, None)
         self.ages: CreatureParam = CreatureParam('ages', tuple(), ('zero_',), None, self.device, None)
@@ -84,6 +89,7 @@ class CreatureArray:
             v.init_base(self.cfg)
         self.energies.init_base_from_data(self.cfg.init_energy(self.sizes.data))
         self.healths.init_base_from_data(self.cfg.init_health(self.sizes.data))
+        self.eat_pcts.init_base_from_data(eat_amt(self.sizes, self.cfg))
         normalize_rays(self.rays, self.sizes, self.cfg)
 
         self.start_idx = 0
@@ -108,6 +114,7 @@ class CreatureArray:
         # need to initialize these weird as well because they depend on sizes
         children.energies = self.cfg.init_energy(children.sizes)
         children.healths = self.cfg.init_health(children.sizes)
+        children.eat_pcts = eat_amt(children.sizes, self.cfg)*10.
         
 
     #@cuda_profile
@@ -312,7 +319,7 @@ class CreatureArray:
             # if it is outside the best window, find where it is being moved to
             move_idx = (outer_idxs == discontig_creature).nonzero().squeeze(1)
             if move_idx.shape[0] > 0:
-                discontig_creature = old_idxs[move_idx]
+                discontig_creature = old_idxs[move_idx].item()
             # turn it back into a contiguous index
             creature = discontig_creature - self.start_idx
         return creature

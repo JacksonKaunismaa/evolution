@@ -1,13 +1,15 @@
 extern "C" __global__ 
-void eat(int* positions, int* cell_counts, float* sizes,  float* food_grid,  // things we read from
-    float* food_grid_updates, float* alive_costs, float* energies, float* ages,  // things we write to
-    int num_creatures, int num_cells, float food_decr, float max_population   // constants
+void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes,  float* food_grid,  // read from
+    float* food_grid_updates, float* alive_costs, float* energies, float* ages,  // write to
+    int num_creatures, int num_cells, float food_decr   // constants
     ) {
     /* 
     Read from:
         Positions: [N, 2], where N = num_creatures, where the coordinates are the cell position of the creature.
 
-        cell_counts: [S, S], where S = num_cells, where the coordinate is the number of creatures in a given cell.
+        eat_pcts: [N], where the coordinate is the percentage of food that the creature eats in a cell.
+
+        pct_eaten: [S, S], where S = num_cells, where the coordinate is the percentage of food eaten in a cell.
 
         Sizes: [N], where the coordinate is the size of the creature.
 
@@ -31,7 +33,6 @@ void eat(int* positions, int* cell_counts, float* sizes,  float* food_grid,  // 
         num_cells: number of cells in the grid.
         food_decr: amount of food that a creature destroys just by being in a cell (doesn't get eaten) (we can't just use the CFG_eat_pct
                     because it changes mid simulation => preprocessor wouldn't work)
-        max_population: maximum number of creatures that can be in a cell and still get full food from eating. 
 */
     // Get the index of the current thread
     int creature = blockIdx.x * blockDim.x + threadIdx.x;
@@ -42,17 +43,19 @@ void eat(int* positions, int* cell_counts, float* sizes,  float* food_grid,  // 
     int x = positions[creature * 2 + 0];
     int y = positions[creature * 2 + 1];
     float size = sizes[creature];
+    float eat_pct = eat_pcts[creature];
 
     int cell_idx = y * num_cells + x;
-    int count = cell_counts[cell_idx];
+    float pct_claimed = pct_eaten[cell_idx];
 
     float food = food_grid[cell_idx];
-    if (count > max_population) {
-        food *= 1. / count;   // if there are too many creatures, they split it equally
+    if (pct_claimed > 1.) {
+        food *= eat_pct / pct_claimed;   // if more creatures trying to eat than there is food, it gets split
     } else {
-        food *= CFG_eat_pct;  // else, they get the full amount
+        food *= eat_pct;  // else, they get the full amount
     }
     float alive_cost = CFG_alive_cost(size);
+    float creature_food_decr = food_decr * eat_pct * CFG_food_cover_decr_pct;
 
     alive_costs[creature] = alive_cost;
     energies[creature] += food - alive_cost;

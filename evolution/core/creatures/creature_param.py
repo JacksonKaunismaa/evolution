@@ -84,6 +84,11 @@ class CreatureParam:
         only be called for root CreatureParams, and not for any offspring/children CreatureParams."""
         self._data[:data.shape[0]] = data  # copy the data in to the appropriate spot
         self.data = self._data[:data.shape[0]]  # set the view to the underlying data
+        
+    def init_from_data(self, data: Tensor):
+        """Initialize the current memory from a given Tensor. This is useful for e.g. energy and health,
+        which are initialized as a function of the size. Do this for offspring/children CreatureParams."""
+        self.data = data
               
     def reproduce_randn(self, rng: 'BatchedRandom'):
         """Generate child traits from the current CreatureParam by sampling random noise."""
@@ -256,6 +261,9 @@ class CreatureParam:
     
     def __add__(self, other) -> Tensor:
         return self.data + other
+    
+    def __sub__(self, other) -> Tensor:
+        return self.data - other
     
     def __radd__(self, other) -> Tensor:
         return other + self.data

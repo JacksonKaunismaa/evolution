@@ -98,11 +98,11 @@ class Controller:
                 self.game.creatures.toggle_hitboxes()
 
     def set_selected_creature(self, creature):
-        print(f"Setting to creature {creature}"
-              f"\n\tPos: {self.game.world.creatures.positions[creature]}"
-              f"\n\tSize: {self.game.world.creatures.sizes[creature]}"
-              f"\n\tHealth: {self.game.world.creatures.healths[creature]}"
-              f"\n\tEnergy: {self.game.world.creatures.energies[creature]}")
+        # print(f"Setting to creature {creature}"
+        #       f"\n\tPos: {self.game.world.creatures.positions[creature]}"
+        #       f"\n\tSize: {self.game.world.creatures.sizes[creature]}"
+        #       f"\n\tHealth: {self.game.world.creatures.healths[creature]}"
+        #       f"\n\tEnergy: {self.game.world.creatures.energies[creature]}")
         self.camera.following = True
         self.game.world.set_selected_creature(creature)
         # if creature is not None:

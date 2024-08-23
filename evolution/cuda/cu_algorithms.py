@@ -43,6 +43,12 @@ class CUDAKernelManager:
                 raise ValueError(f'Unknown attribute of config: {variable}')
             elif isinstance(value, config.FunctionExpression):
                 macros.add(f'--define-macro={match.group(0)}({", ".join(value.symbols)})={value.expr}'.encode(self.encoding))
+            elif isinstance(value, tuple):
+                macro = f"{match.group(0)}(n)=("  # function definition
+                for i, val in enumerate(value):
+                    macro += f"(n) == {i} ? {val} : "  # ternary operator for each value of the tuple
+                macro += "0)"   # default value
+                macros.add(f'--define-macro={macro}'.encode(self.encoding))
             else:
                 macros.add(f'--define-macro={match.group(0)}={value}'.encode(self.encoding))
         return list(macros)

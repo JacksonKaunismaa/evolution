@@ -136,11 +136,11 @@ class Creatures(CreatureArray):
         pos = self.positions.int() + self.pad
         
         # calculate how many creatures are in each position, useful for computng how much food each creature eats
-        pos_counts = torch.zeros_like(food_grid, dtype=torch.int, device='cuda') 
+        pct_eaten = torch.zeros_like(food_grid, dtype=torch.float32, device='cuda') 
         threads_per_block = 512
         blocks_per_grid = self.population // threads_per_block + 1
         self.kernels('setup_eat_grid', blocks_per_grid, threads_per_block,
-                     pos, pos_counts, self.population, food_grid.shape[0])
+                     pos, self.eat_pcts, pct_eaten, self.population, food_grid.shape[0])
         
         if self.get_selected_creature() is not None:
             prev_energy = self.energies[self.get_selected_creature()].item()
@@ -149,14 +149,18 @@ class Creatures(CreatureArray):
         food_grid_updates = torch.zeros_like(food_grid, device='cuda')
         alive_costs = torch.zeros(self.population, device='cuda', dtype=torch.float32)
         self.kernels('eat', blocks_per_grid, threads_per_block,
-                     pos, pos_counts, self.sizes, food_grid,
+                     pos, self.eat_pcts, pct_eaten, self.sizes, food_grid,
                      food_grid_updates, alive_costs, self.energies, self.ages,
-                     self.population, food_grid.shape[0], self.cfg.food_cover_decr, 1. / self.cfg.eat_pct)
+                     self.population, food_grid.shape[0], self.cfg.food_cover_decr)
         if self.get_selected_creature() is not None:
+            creat_pos = pos[self.get_selected_creature()]
+            # print(creat_pos, self.get_selected_creature())
             print(f"\tAge: {self.ages[self.get_selected_creature()].item()}"
                   f"\n\tChildren: {self.n_children[self.get_selected_creature()].item()}"
                   f"\n\tAlive Costs: {alive_costs[self.get_selected_creature()].item()}"
+                  f"\n\tEat pct: {self.eat_pcts[self.get_selected_creature()].item()}"
                   f"\n\tFood Eaten: {self.energies[self.get_selected_creature()].item() - prev_energy}"
+                  f"\n\tCell Energy: {food_grid[creat_pos[1], creat_pos[0]].item()}"
                   f"\n\tEnergy: {self.energies[self.get_selected_creature()].item()}")
         
         # grow food, apply eating costs

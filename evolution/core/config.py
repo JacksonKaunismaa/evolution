@@ -100,9 +100,12 @@ class Config:
 
     ### Food
     init_food_scale: float = 8.0    # food will be initialized uniformly to be in [0, init_food_scale]
-    eat_pct: float = 0.1       # what percentage of food in a given cell that creatures can eat in a turn
-    max_food: float = 15.     # maximum amount of food in a cell (decays past this value)
+    # (pct of food a min. size creature can in a cell, pct of food a max. size creature can eat in a cell)
+    eat_pct: float = (0.01, 0.1)
     food_cover_decr: float = 0.2  # if a creature occupies a cell, the food in that cell be decreased by this amount each step
+    # actual_food_decr = food_cover_decr * float_cover_decr_pct * creature_eat_pct
+    food_cover_decr_pct: float = 10.
+    max_food: float = 15.     # maximum amount of food in a cell (decays past this value)
     food_decay_rate: float = 0.05 # how fast food decays (when over max_food)
     food_growth_rate: float = 10.0  # scale to apply to food growth rate
 
@@ -134,7 +137,7 @@ class Config:
     ### Energy/Movement costs
     # func(size) that determines the cost of being alive at each step
     # alive_cost: ConfigFunction = ConfigFunction('linear', 0.03)  
-    alive_cost: FunctionExpression = FunctionExpression(['x'], '0.03f * x')
+    alive_cost: FunctionExpression = FunctionExpression(['x'], '0.01f * x')
     # func(out, size) that determines the amt to rotate
     # rotate_amt: ConfigFunction = ConfigFunction('linear_frac', torch.pi/10)  
     rotate_amt: FunctionExpression = FunctionExpression(['x', 'y'], '(x / (1.0f + y)) * 0.314159f')
