@@ -9,6 +9,10 @@ class ConfigFunction:   # for replacing functions in regular python code
         self.name = name
         self.mul = mul
         self.func = getattr(self, name)
+        
+    @staticmethod
+    def cube(x):
+        return x**3
 
     @staticmethod
     def square(x):
@@ -105,9 +109,12 @@ class Config:
     food_cover_decr: float = 0.2  # if a creature occupies a cell, the food in that cell be decreased by this amount each step
     # actual_food_decr = food_cover_decr * float_cover_decr_pct * creature_eat_pct
     food_cover_decr_pct: float = 10.
+    neg_food_eat_mul: float = 0.1  # if food is negative, creature eating is scaled by this amount
     max_food: float = 15.     # maximum amount of food in a cell (decays past this value)
     food_decay_rate: float = 0.05 # how fast food decays (when over max_food)
     food_growth_rate: float = 10.0  # scale to apply to food growth rate
+    food_recovery_rate: float = 30.0  # scale to apply to food growth rate when its negative
+    food_health_recovery: float = 0.1  # multiple of food eaten that creatures gain as health
 
 
     ### Creatures
@@ -155,7 +162,7 @@ class Config:
     # func(num_attacks, size) to determine attack cost
     attack_cost: ConfigFunction = ConfigFunction('bilinear', 0.05)  
     # func(size) to determine the amount of damage done in an attack
-    attack_dmg: FunctionExpression = FunctionExpression(['x'], 'x*x * 1.5f') 
+    attack_dmg: FunctionExpression = FunctionExpression(['x'], 'x*x*x * 0.1f') 
     attack_ignore_color_dist: float = 3.0 # if sum(abs(color1-color2)) < this, they don't hurt each other
     attack_dist_bonus: float = 0.0  # if creatures are within the dist_bonus, they can attack each other
     dead_drop_food: ConfigFunction = ConfigFunction('linear', 1.)  # func(size) to determine how much food a creature drops when it dies

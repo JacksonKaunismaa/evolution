@@ -29,11 +29,14 @@ void grow(float* food_grid_updates, float* food_grid, int num_cells, int pad, fl
     float growth_amt = step_size * (CFG_max_food - food);
 
     // grow the food
-    if (food < CFG_max_food){
-        food += growth_amt*CFG_food_growth_rate;
+    if (food < 0.0){
+        food += growth_amt*CFG_food_recovery_rate;
+    }
+    else if (food > CFG_max_food){
+        food += growth_amt*CFG_food_decay_rate;
     }
     else{
-        food += growth_amt*CFG_food_decay_rate;
+        food += growth_amt*CFG_food_growth_rate;
     }
     food_grid[cell_idx] = food;
 }

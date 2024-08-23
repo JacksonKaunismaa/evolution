@@ -75,7 +75,7 @@ class CreatureArray:
         weight_inits = []
         bias_inits = []
         for prev_layer, next_layer in weight_sizes:
-            w_norm = 0.5 / np.sqrt(15.0 / prev_layer)
+            w_norm = 0.5 * np.sqrt(15. / prev_layer)
             b_norm = 0.5 / np.sqrt(next_layer)
             weight_inits.append(('uniform_', -w_norm, w_norm))
             bias_inits.append(('uniform_', -b_norm, b_norm))

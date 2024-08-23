@@ -1,6 +1,6 @@
 extern "C" __global__ 
 void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes,  float* food_grid,  // read from
-    float* food_grid_updates, float* alive_costs, float* energies, float* ages,  // write to
+    float* food_grid_updates, float* alive_costs, float* energies, float* healths, float* ages,  // write to
     int num_creatures, int num_cells, float food_decr   // constants
     ) {
     /* 
@@ -25,6 +25,8 @@ void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes,  float
         (we store this so that we can do .sum() for computing the step size when we grow things)
 
         energies: [N], where the coordinate is the energy of the creature.
+
+        healths: [N], where the coordinate is the health of the creature.
 
         ages: [N], where the coordinate is the age of the creature.
 
@@ -54,11 +56,18 @@ void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes,  float
     } else {
         food *= eat_pct;  // else, they get the full amount
     }
+    if (food < 0.0){
+        healths[creature] += food * CFG_neg_food_eat_mul;
+        food = 0.0;
+    }
+    else{
+        healths[creature] += food * CFG_food_health_recovery;
+    }
     float alive_cost = CFG_alive_cost(size);
     float creature_food_decr = food_decr * eat_pct * CFG_food_cover_decr_pct;
 
-    alive_costs[creature] = alive_cost;
     energies[creature] += food - alive_cost;
+    alive_costs[creature] = alive_cost;
     atomicAdd(&food_grid_updates[cell_idx], food+food_decr);
     ages[creature] += 1;
 }

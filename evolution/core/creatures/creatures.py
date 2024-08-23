@@ -150,7 +150,7 @@ class Creatures(CreatureArray):
         alive_costs = torch.zeros(self.population, device='cuda', dtype=torch.float32)
         self.kernels('eat', blocks_per_grid, threads_per_block,
                      pos, self.eat_pcts, pct_eaten, self.sizes, food_grid,
-                     food_grid_updates, alive_costs, self.energies, self.ages,
+                     food_grid_updates, alive_costs, self.energies, self.healths, self.ages,
                      self.population, food_grid.shape[0], self.cfg.food_cover_decr)
         if self.get_selected_creature() is not None:
             creat_pos = pos[self.get_selected_creature()]
@@ -165,7 +165,7 @@ class Creatures(CreatureArray):
         
         # grow food, apply eating costs
         # step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
-        step_size = (self.cfg.max_food / (self.cfg.size**2))#.item()
+        step_size = (self.cfg.max_food / (self.cfg.size**(1.9)))#.item()
         threads_per_block = (16, 16)
         blocks_per_grid = (food_grid.shape[0] // threads_per_block[0] + 1, 
                            food_grid.shape[1] // threads_per_block[1] + 1)

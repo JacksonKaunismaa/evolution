@@ -66,7 +66,7 @@ class Camera:
         old_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
         # self.position += self.front * yoffset / 10
         self.zoom /= (1+yoffset/5) #* self.scroll_sensitivity
-        self.zoom = np.clip(self.zoom, 0.01, 20) # prevent zooming in/out too far
+        self.zoom = np.clip(self.zoom, 0.001, 100) # prevent zooming in/out too far
         # print(self.zoom)
         new_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
         self.position.xy -= (new_cursor_pos - old_cursor_pos).xy
