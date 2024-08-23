@@ -7,9 +7,13 @@ import numpy as pn
 
 from evolution.core import config
 from evolution.core import gworld
+from evolution.utils.subscribe import Subscriber
 
-class Camera:
+class Camera(Subscriber):
     def __init__(self, ctx: mgl.Context, cfg: config.Config, window: mglw.BaseWindow, world: gworld.GWorld):
+        super().__init__()
+        world.publisher.subscribe(self)
+        
         self.ctx = ctx
         self.cfg = cfg
         self.ubo = self.ctx.buffer(reserve=2 * 4*4 * 4)  # 2 mat4s, 4x4 floats of 4 bytes
@@ -66,7 +70,7 @@ class Camera:
         old_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
         # self.position += self.front * yoffset / 10
         self.zoom /= (1+yoffset/5) #* self.scroll_sensitivity
-        self.zoom = np.clip(self.zoom, 0.001, 100) # prevent zooming in/out too far
+        self.zoom = np.clip(self.zoom, 0.001, 200) # prevent zooming in/out too far
         # print(self.zoom)
         new_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
         self.position.xy -= (new_cursor_pos - old_cursor_pos).xy
@@ -110,7 +114,7 @@ class Camera:
         self.following = not self.following
     
 
-    def update(self, creature_id):
+    def _update(self, creature_id):
         if creature_id is None:
             return
         if self.following:

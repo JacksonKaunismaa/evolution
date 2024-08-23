@@ -115,6 +115,7 @@ class Config:
     food_growth_rate: float = 10.0  # scale to apply to food growth rate
     food_recovery_rate: float = 30.0  # scale to apply to food growth rate when its negative
     food_health_recovery: float = 0.1  # multiple of food eaten that creatures gain as health
+    food_step_size: float = 4e-6  # how much food grows each step
 
 
     ### Creatures

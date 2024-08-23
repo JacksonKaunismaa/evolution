@@ -165,7 +165,8 @@ class Creatures(CreatureArray):
         
         # grow food, apply eating costs
         # step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
-        step_size = (self.cfg.max_food / (self.cfg.size**(1.9)))#.item()
+        # step_size = (self.cfg.max_food / (self.cfg.size**(1.9)))#.item()
+        step_size = self.cfg.food_step_size
         threads_per_block = (16, 16)
         blocks_per_grid = (food_grid.shape[0] // threads_per_block[0] + 1, 
                            food_grid.shape[1] // threads_per_block[1] + 1)
@@ -176,20 +177,20 @@ class Creatures(CreatureArray):
         self.kernels('grow', blocks_per_grid, threads_per_block,
                      food_grid_updates, food_grid, food_grid.shape[0], self.pad, step_size)
 
-        # if selected_cell is not None:
-        #     num_occupants = pos_counts[selected_cell[1]+self.pad, selected_cell[0]+self.pad]
-        #     cover_cost = num_occupants * self.cfg.food_cover_decr
-        #     eaten_amt = food_grid_updates[selected_cell[1]+self.pad, selected_cell[0]+self.pad] - cover_cost
-        #     post_growth_food = food_grid[selected_cell[1]+self.pad, selected_cell[0]+self.pad]
-        #     pre_grow_food = prev_food - cover_cost - eaten_amt
-        #     print(f"Cell at {selected_cell}:"
-        #           f"\n\toccupants: {num_occupants}"
-        #           f"\n\tcover: {cover_cost}"
-        #           f"\n\teaten: {eaten_amt}"
-        #           f"\n\tpre-growth:  {pre_grow_food}"
-        #           f"\n\tpost-growth: {post_growth_food}"
-        #           f"\n\tstep_size: {step_size}"
-        #           f"\n\tgrowth_amt: {post_growth_food - pre_grow_food}")
+        if selected_cell is not None:
+            cell_pct_eaten = pct_eaten[selected_cell[1]+self.pad, selected_cell[0]+self.pad]
+            cover_cost = self.cfg.food_cover_decr_pct * self.cfg.food_cover_decr * cell_pct_eaten
+            eaten_amt = food_grid_updates[selected_cell[1]+self.pad, selected_cell[0]+self.pad] - cover_cost
+            post_growth_food = food_grid[selected_cell[1]+self.pad, selected_cell[0]+self.pad]
+            pre_grow_food = prev_food - cover_cost - eaten_amt
+            print(f"Cell at {selected_cell}:"
+                  f"\n\pct_eatn: {cell_pct_eaten}"
+                  f"\n\tcover: {cover_cost}"
+                  f"\n\teaten: {eaten_amt}"
+                  f"\n\tpre-growth:  {pre_grow_food}"
+                  f"\n\tpost-growth: {post_growth_food}"
+                  f"\n\tstep_size: {step_size}"
+                  f"\n\tgrowth_amt: {post_growth_food - pre_grow_food}")
 
 
     def extract_food_windows(self, indices, food_grid):
@@ -198,8 +199,8 @@ class Creatures(CreatureArray):
         Returns a [N, W] tensor of the food in the W x W window around each index, 
         which goes as an input into creatures' brains."""
         windows = indices.unsqueeze(1) + self.offsets  # [N, 1, 2] + [1, 9, 2] = [N, 9, 2]
-        if windows.min() < 0 or windows.max() >= food_grid.shape[0]:
-            raise ValueError("OOB")
+        # if windows.min() < 0 or windows.max() >= food_grid.shape[0]:
+        #     raise ValueError("OOB")
         return food_grid[windows[..., 1], windows[..., 0]]
         
 

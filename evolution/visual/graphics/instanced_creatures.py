@@ -5,12 +5,13 @@ from evolution.core import config
 from evolution.core import gworld
 from evolution.cuda import cuda_utils
 from evolution.utils import loading
+from evolution.utils.subscribe import Subscriber
 
-from .updater import Updater
-
-class InstancedCreatures(Updater):
+class InstancedCreatures(Subscriber):
     def __init__(self, cfg, ctx, world, shaders):
-        super().__init__(world, 'creatures')
+        super().__init__()
+        world.publisher.subscribe(self)
+        
         self.cfg: config.Config = cfg
         self.ctx: mgl.Context = ctx
         self.world: gworld.GWorld = world

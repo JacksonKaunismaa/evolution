@@ -31,6 +31,7 @@ from .graphics.thoughts import ThoughtsVisualizer
 
 from evolution.core import gworld
 from evolution.cuda.cu_algorithms import checkCudaErrors
+from evolution.utils.subscribe import Publisher
 
 
 class Game:
@@ -58,6 +59,12 @@ class Game:
 
         self.paused = False
         self.game_speed = 1
+        
+        self.creature_publisher = Publisher()
+        self.creature_publisher.subscribe(self.rays)
+        self.creature_publisher.subscribe(self.camera)
+        # self.creature_publisher.subscribe(self.brain_visual)
+        self.creature_publisher.subscribe(self.thoughts_visual)
 
     def save(self):
         self.world.write_checkpoint('game.ckpt')
@@ -103,10 +110,13 @@ class Game:
 
     def selected_creature_updates(self):
         creature = self.world.get_selected_creature()
-        self.rays.update(creature)
-        self.camera.update(creature)
-        # self.brain_visual.update(creature)
-        self.thoughts_visual.update(creature)
+        self.creature_publisher.publish()
+        for sub in self.creature_publisher.subscribers:
+            sub.update(creature)
+        # self.rays.update(creature)
+        # self.camera.update(creature)
+        # # self.brain_visual.update(creature)
+        # self.thoughts_visual.update(creature)
         # if self.controller.selected_creature is not None:
         #     print('energy', self.world.creatures.energies[self.controller.selected_creature])
         

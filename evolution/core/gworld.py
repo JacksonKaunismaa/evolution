@@ -13,6 +13,7 @@ import numpy as np
 from evolution.cuda import cu_algorithms
 from evolution.cuda import cuda_utils
 from evolution.cuda.cuda_utils import cuda_profile
+from evolution.utils.subscribe import Publisher
 
 from .config import Config, simple_cfg
 from .creatures.creatures import Creatures
@@ -37,22 +38,7 @@ class GWorld():
         self.dead_updated = False
         self.time = 0
         self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
-        self.updated = {}  # a dictionary of which objects have been updated
-        
-    def subscribe_updates(self, name):
-        if name in self.updated:
-            raise ValueError(f"Name {name} already exists in updated dictionary.")
-        self.updated[name] = True
-        
-    def notify_updated(self):
-        for k in self.updated:
-            self.updated[k] = True
-            
-    def acknowledge_update(self, name):
-        self.updated[name] = False
-        
-    def is_updated(self, name):
-        return self.updated[name]
+        self.publisher = Publisher()
 
     @cuda_profile
     def trace_rays(self):
@@ -307,7 +293,7 @@ class GWorld():
             return False
 
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
-        self.notify_updated()
+        self.publisher.publish()
         
         # if self.time % 60 == 0:   # save this generation
         #     if save:

@@ -1,18 +1,20 @@
 import moderngl as mgl
 import numpy as np
 
-from evolution.core import config
-from evolution.core import gworld
+from evolution.core.config import Config
+from evolution.core.gworld import GWorld
 from evolution.cuda import cuda_utils
+from evolution.utils.subscribe import Subscriber
 
-from .updater import Updater
 
-class CreatureRays(Updater):
-    def __init__(self, cfg, ctx, world, shaders):
-        super().__init__(world, 'creature_rays')
-        self.cfg: config.Config = cfg
-        self.ctx: mgl.Context = ctx
-        self.world: gworld.GWorld = world
+class CreatureRays(Subscriber):
+    def __init__(self, cfg: Config, ctx: mgl.Context, world: GWorld, shaders):
+        super().__init__()
+        world.publisher.subscribe(self)
+        
+        self.cfg = cfg
+        self.ctx = ctx
+        self.world = world
         self.shaders = shaders
         self.visible = False
 

@@ -6,16 +6,18 @@ import torch
 from evolution.core import config
 from evolution.cuda import cuda_utils
 from evolution.utils import loading
+from evolution.utils.subscribe import Subscriber
 
 if TYPE_CHECKING:
     from evolution.visual.main import Game
 
-from .updater import Updater
 
-class ThoughtsVisualizer(Updater):
+class ThoughtsVisualizer(Subscriber):
     """Display memories and current outputs of a creature's thoughts."""
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: 'Game', shaders: Dict[str, str]):
-        super().__init__(world.world, 'thoughts')
+        super().__init__()
+        world.world.publisher.subscribe(self)
+        
         self.cfg = cfg
         self.ctx = ctx
         self.world = world

@@ -6,12 +6,14 @@ import torch
 from evolution.core import config
 from evolution.core import gworld
 from evolution.cuda import cuda_utils
+from evolution.utils.subscribe import Subscriber
 
-from .updater import Updater
 
-class BrainVisualizer(Updater):
+class BrainVisualizer(Subscriber):
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: gworld.GWorld, shaders: Dict[str, str]):
-        super().__init__(world, 'brain_visualizer')
+        super().__init__()
+        world.publisher.subscribe(self)
+        
         self.cfg = cfg
         self.ctx = ctx
         self.world = world
