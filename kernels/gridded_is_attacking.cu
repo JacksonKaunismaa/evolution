@@ -56,18 +56,21 @@ void gridded_is_attacking(float* positions, float* sizes, float* colors, float* 
 
         float other_color[3] = {colors[other * 3 + 0], colors[other * 3 + 1], colors[other * 3 + 2]};
         float color_diff = 0.0f;
+        float cdif = 0.0f;
         for (int c = 0; c < 3; c++) {
-            color_diff += fabs(color[c] - other_color[c]);
+            cdif = fabs(color[c] - other_color[c]);
+            color_diff += min(cdif, 255.0f - cdif);
         }
-        if (color_diff <= CFG_attack_ignore_color_dist) {  // dont attack colors that are close to your own
-            continue;
-        }
+        float color_diff_frac = color_diff / (255.0f*3.0f / 2.0f);
+        // if (color_diff <= CFG_attack_ignore_color_dist) {  // dont attack colors that are close to your own
+        //     continue;
+        // }
         int other_idx = other * 2;
 
         if (small_cells){
             // fallacious to use organism/other idx since the 2 in results is not the same 2 as in positions
             atomicAdd(&results[organism_idx + 0], 1);
-            atomicAdd(&results[other_idx + 1], size * size * 1.5f);
+            atomicAdd(&results[other_idx + 1], color_diff_frac * CFG_attack_dmg(size));
             continue;
             
         }
@@ -81,7 +84,7 @@ void gridded_is_attacking(float* positions, float* sizes, float* colors, float* 
         if (sq_dist < other_size * other_size + CFG_attack_dist_bonus) {  // +1 to give some leeway
             //fallacious to use organism/other idx here for same reason as above
             atomicAdd(&results[organism_idx + 0], 1);  // damage is a function of size
-            atomicAdd(&results[other_idx + 1], CFG_attack_dmg(size));
+            atomicAdd(&results[other_idx + 1], color_diff_frac * CFG_attack_dmg(size));
         }
     }
 }

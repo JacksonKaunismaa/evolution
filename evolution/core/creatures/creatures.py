@@ -198,6 +198,8 @@ class Creatures(CreatureArray):
         Returns a [N, W] tensor of the food in the W x W window around each index, 
         which goes as an input into creatures' brains."""
         windows = indices.unsqueeze(1) + self.offsets  # [N, 1, 2] + [1, 9, 2] = [N, 9, 2]
+        if windows.min() < 0 or windows.max() >= food_grid.shape[0]:
+            raise ValueError("OOB")
         return food_grid[windows[..., 1], windows[..., 0]]
         
 

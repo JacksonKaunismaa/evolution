@@ -36,7 +36,7 @@ class CreatureArray:
     when creatures die or reproduce."""
     def __init__(self, cfg: Config, device='cuda'):
         self.cfg = cfg
-        self.posn_bounds = (0, cfg.size-1e-4)
+        self.posn_bounds = (0, cfg.size-1e-3)
         self.num_food = (cfg.food_sight*2+1)**2
         self.device = device
         
