@@ -5,9 +5,11 @@ from evolution.core import config
 from evolution.core import gworld
 from evolution.cuda import cuda_utils
 
+from .updater import Updater
 
-class CreatureRays:
+class CreatureRays(Updater):
     def __init__(self, cfg, ctx, world, shaders):
+        super().__init__(world, 'creature_rays')
         self.cfg: config.Config = cfg
         self.ctx: mgl.Context = ctx
         self.world: gworld.GWorld = world
@@ -49,7 +51,7 @@ class CreatureRays:
         ],
         index_buffer=self.hbox_ibo)
 
-    def update(self, creature_id):
+    def _update(self, creature_id):
         if creature_id is None:
             self.visible = False
             return

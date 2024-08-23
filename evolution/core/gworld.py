@@ -37,6 +37,22 @@ class GWorld():
         self.dead_updated = False
         self.time = 0
         self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
+        self.updated = {}  # a dictionary of which objects have been updated
+        
+    def subscribe_updates(self, name):
+        if name in self.updated:
+            raise ValueError(f"Name {name} already exists in updated dictionary.")
+        self.updated[name] = True
+        
+    def notify_updated(self):
+        for k in self.updated:
+            self.updated[k] = True
+            
+    def acknowledge_update(self, name):
+        self.updated[name] = False
+        
+    def is_updated(self, name):
+        return self.updated[name]
 
     @cuda_profile
     def trace_rays(self):
@@ -280,7 +296,7 @@ class GWorld():
         self.increasing_food_decr_enabled = not self.increasing_food_decr_enabled
         
 
-    def step(self, visualize=False, save=True) -> bool:        
+    def step(self) -> bool:        
         # we do these steps in this (seemingly backwards) order, because we want vision and brain
         # information to be up to date when we visualize the scene, which happens after we exit from here
         self.update_creatures()   # move creatures, update health and energy, reproduce, eat, grow food
@@ -291,6 +307,7 @@ class GWorld():
             return False
 
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
+        self.notify_updated()
         
         # if self.time % 60 == 0:   # save this generation
         #     if save:

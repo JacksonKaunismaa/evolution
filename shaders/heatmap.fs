@@ -4,13 +4,14 @@ in vec2 TexCoord;
 
 uniform sampler2D heatmapTexture;
 uniform vec3[256] colormap;
-// uniform float minVal;
-// uniform float maxVal;
+uniform float minVal;
+uniform float maxVal;
 uniform float scale;
 uniform float negGamma;
 
 
 vec3 heatmapGreen(float value) {
+    value = (value) * (maxVal - minVal) + minVal;   // min val to max val
     float x = clamp(value / scale, -1.0, 1.0);  // -1, 1 range
 
     if (x < 0) x = -(pow(abs(x), negGamma));  // gamma on negative range
@@ -24,7 +25,7 @@ vec3 heatmapGreen(float value) {
 
 void main()
 {
-    float value = texture(heatmapTexture, TexCoord).r;
+    float value = texture(heatmapTexture, TexCoord).r;  // in [0, 1]
     vec3 color = heatmapGreen(value);
     FragColor = vec4(color, 1.0);   // green only colormap
 }

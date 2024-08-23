@@ -10,15 +10,18 @@ from evolution.cuda import cuda_utils
 from evolution.core import config
 from evolution.core import gworld
 
-class Heatmap:
+from .updater import Updater
+
+class Heatmap(Updater):
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: gworld.GWorld, shaders: Dict[str, str]):
+        super().__init__(world, 'heatmap')
         self.cfg = cfg
         self.ctx = ctx
         self.world = world
         self.shaders = shaders
 
         # world.food_grid[50:80, 0:20] = -2
-        self.heatmap_tex = self.ctx.texture((self.cfg.size, self.cfg.size), 1, dtype='f4')
+        self.heatmap_tex = self.ctx.texture((self.cfg.size, self.cfg.size), 1, dtype='f1')
         self.heatmap_sampler = self.ctx.sampler(texture=self.heatmap_tex)
         filter_type = self.ctx.NEAREST
         self.heatmap_sampler.filter = (filter_type, filter_type)
@@ -62,12 +65,14 @@ class Heatmap:
 
         self.cuda_heatmap = cuda_utils.register_cuda_image(self.heatmap_tex)
 
-    def update(self):
+    def _update(self):
         max_value, min_value = self.cfg.max_food, self.world.central_food_grid.min()
-        # self.prog['minVal'] = min_value
-        # self.prog['maxVal'] = max_value
+        self.prog['minVal'] = min_value
+        self.prog['maxVal'] = max_value
         self.prog['scale'] = max(abs(min_value), abs(max_value))
-        cuda_utils.copy_to_texture(self.world.central_food_grid, self.cuda_heatmap)
+        byte_grid = ((self.world.central_food_grid - min_value) / (max_value - min_value) * 255).byte()
+        # print(byte_grid)
+        cuda_utils.copy_to_texture(byte_grid, self.cuda_heatmap)
 
     def render(self):
         self.update()

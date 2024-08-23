@@ -7,13 +7,15 @@ from evolution.core import config
 from evolution.cuda import cuda_utils
 from evolution.utils import loading
 
-
 if TYPE_CHECKING:
     from evolution.visual.main import Game
 
-class ThoughtsVisualizer:
+from .updater import Updater
+
+class ThoughtsVisualizer(Updater):
     """Display memories and current outputs of a creature's thoughts."""
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: 'Game', shaders: Dict[str, str]):
+        super().__init__(world.world, 'thoughts')
         self.cfg = cfg
         self.ctx = ctx
         self.world = world
@@ -80,7 +82,7 @@ class ThoughtsVisualizer:
             (self.activations, '1f /i', 'activation')
         ], index_buffer=self.thoughts_ibo)
 
-    def update(self, creature_id):
+    def _update(self, creature_id):
         if creature_id is None:
             self.visible = False
             return

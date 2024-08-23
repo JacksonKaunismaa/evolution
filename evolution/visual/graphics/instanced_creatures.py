@@ -6,9 +6,11 @@ from evolution.core import gworld
 from evolution.cuda import cuda_utils
 from evolution.utils import loading
 
+from .updater import Updater
 
-class InstancedCreatures:
+class InstancedCreatures(Updater):
     def __init__(self, cfg, ctx, world, shaders):
+        super().__init__(world, 'creatures')
         self.cfg: config.Config = cfg
         self.ctx: mgl.Context = ctx
         self.world: gworld.GWorld = world
@@ -85,7 +87,7 @@ class InstancedCreatures:
     def toggle_visibility(self):
         self.visible = not self.visible
 
-    def update(self):
+    def _update(self):
         cuda_utils.copy_to_buffer(self.world.creatures.positions, self.cuda_positions)
         cuda_utils.copy_to_buffer(self.world.creatures.sizes, self.cuda_sizes)
         cuda_utils.copy_to_buffer(self.world.creatures.head_dirs, self.cuda_head_dirs)

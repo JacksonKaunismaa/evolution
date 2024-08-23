@@ -7,9 +7,11 @@ from evolution.core import config
 from evolution.core import gworld
 from evolution.cuda import cuda_utils
 
+from .updater import Updater
 
-class BrainVisualizer:
+class BrainVisualizer(Updater):
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: gworld.GWorld, shaders: Dict[str, str]):
+        super().__init__(world, 'brain_visualizer')
         self.cfg = cfg
         self.ctx = ctx
         self.world = world
@@ -138,7 +140,7 @@ class BrainVisualizer:
     def fetch_weights(self, creature_id):
         return [self.world.creatures.weights[i][creature_id] for i in range(len(self.world.creatures.weights))]
 
-    def update(self, creature_id):
+    def _update(self, creature_id):
         if creature_id is None:
             self.visible = False
             return
