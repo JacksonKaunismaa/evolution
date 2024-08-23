@@ -297,6 +297,14 @@ class CreatureArray:
             self.alive[best_start+n_after : sl.stop].nonzero().squeeze(1) + best_start+n_after # right side of window
             ])
         
+        
+        # move the old creatures that are outside the best window into the gaps in the best window
+        self.rearrange_old_data(outer_idxs, old_idxs)
+        # add the new creatures to the other gaps in the best window
+        if other is not None:
+            self.write_new_data(new_idxs, other)
+        self.start_idx = best_start  # update the start of the block to the best window found
+        
         # update the selected creature
         if creature is not None:
             # find its absolute index into the entire underlying data buffer
@@ -307,11 +315,4 @@ class CreatureArray:
                 discontig_creature = old_idxs[move_idx]
             # turn it back into a contiguous index
             creature = discontig_creature - self.start_idx
-        
-        # move the old creatures that are outside the best window into the gaps in the best window
-        self.rearrange_old_data(outer_idxs, old_idxs)
-        # add the new creatures to the other gaps in the best window
-        if other is not None:
-            self.write_new_data(new_idxs, other)
-        self.start_idx = best_start  # update the start of the block to the best window found
         return creature

@@ -72,12 +72,26 @@ class Controller:
             if key == self.wnd.keys.G:    # jump to Genghis Khan (guy with most offspring)
                 most_kids = self.game.world.creatures.n_children.argmax()
                 self.set_selected_creature(most_kids)
+                
+            if key == self.wnd.keys.O:   # jump to oldest creature
+                oldest = self.game.world.creatures.ages.argmax()
+                self.set_selected_creature(oldest)
 
             if key == self.wnd.keys.UP:    # speed up simulation so that we do 1 more step per frame
-                self.game.game_speed += 1
+                amt = 1
+                if modifiers.shift:
+                    amt *= 10
+                if modifiers.ctrl:
+                    amt *= 10
+                self.game.game_speed += amt
 
             if key == self.wnd.keys.DOWN:  # slow down simulation so that we do 1 less step per frame
-                self.game.game_speed -= 1
+                amt = 1
+                if modifiers.shift:
+                    amt *= 10
+                if modifiers.ctrl:
+                    amt *= 10
+                self.game.game_speed -= amt
                 self.game.game_speed = max(1, self.game.game_speed)
  
             if key == self.wnd.keys.B:    # turn hitboxes on/off
