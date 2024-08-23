@@ -6,23 +6,23 @@ torch.set_grad_enabled(False)
 # logging.basicConfig(level=logging.ERROR, filename='game.log')
 
 from evolution.utils.batched_random import BatchedRandom
-from evolution.cuda import cuda_utils
+from evolution.cuda.cuda_utils import cuda_profile
 from evolution.cuda.cu_algorithms import CUDAKernelManager
+from evolution.core.config import Config
 
-from ..config import Config
 from .creature_array import CreatureArray
 
 
 class Creatures(CreatureArray):
     """Class to store all relevant creature attributes in CUDA objects to ensure minimal
     movement between devices. To skip copying read-only parameters, we store 2 copies of the data.
-    The first set, which is generally refered to as "discontiguous" memory is of size max_creatures 
+    The first set, which is generally refered to as "underlying" memory is of size max_creatures 
     and stores (potentially out-of-date) data for all creatures.
-    We store the set of indices into the distinguous set that correspond to creatures that are still 
+    We store the set of indices into the underlying set that correspond to creatures that are still 
     alive in self.alive.
-    The second set, which is generally referred to as "contiguous" memory, is of size population, 
-    and consists of all the attributes of creatures that are alive in contiguous arrays. 
-    Kernels and graphics read from and write to the contiguous memory, but we want the discontiguous memory because
+    The second set, which is generally referred to as "current" memory, is of size population, 
+    and consists of all the attributes of creatures that are alive in Tensors. 
+    Kernels and graphics read from and write to the current memory, but we want the underlying memory because
     it allows us to fuse the kill and reproduce operation into one operation to minimize copies.
     By forcing traits to remain on the GPU at all times, we can massively increase the speed of the simulation
     by utilizing massively parallel operations on the GPU. """
@@ -37,17 +37,13 @@ class Creatures(CreatureArray):
         self.offsets = torch.tensor([[i, j] for i in range(-self.pad, self.pad+1) 
                                      for j in range(-self.pad, self.pad+1)], device='cuda').unsqueeze(0)
         self.activations = []
-        self.dead = None   # [N] contiguous boolean tensor
-        self.dead_idxs = None # [N] discontiguous index tensor of creatures that died on last step
+        self.dead = None   # [N] current memory boolean tensor
         self._selected_creature = None
         
     def set_selected_creature(self, creature_id):
         self._selected_creature = creature_id
         
     def get_selected_creature(self):
-        """Given a discontiguous creature_id, retrieve the contiguous index. Useful
-        for the interactive component, since contiguous creature ids can change their meaning
-        rapidly, but discontiguous ids always mean the same thing."""
         return self._selected_creature
 
     def fused_kill_reproduce(self, central_food_grid):
@@ -59,7 +55,7 @@ class Creatures(CreatureArray):
             self._selected_creature = self.add_with_deaths(dead, alive, num_dead, new_creatures, 
                                                            self._selected_creature)        
                     
-    @cuda_utils.cuda_profile
+    #@cuda_profile
     def _kill_dead(self, central_food_grid: torch.Tensor) -> Tuple[torch.Tensor, int]:
         """If any creature drops below 0 health or energy, kill it. Update the food grid by depositing an amount of food
         that depends on the creature's size at death."""
@@ -78,40 +74,49 @@ class Creatures(CreatureArray):
                                 accumulate=True)
         
         return self.dead, num_dead
-
-    @cuda_utils.cuda_profile
-    def _reproduce(self, alive, num_dead) -> Union[None, 'CreatureArray']:
-        """For sufficiently high energy creatures, create a new creature with mutated genes. Updates self.alive,
-        contiguous memory storage (_attrs) for old creatures if this wasn't already done by _kill_dead, writes
-        to contiguous memory storage the new creature attributes. Returns True if at least 1 creature reproduces,
-        otherwise False."""
-        max_reproducers = self.cfg.max_creatures + num_dead - self.population # dont bother if none can reproduce anyway 
-        if max_reproducers <= 0:
-            return
-        
+    
+    #@cuda_profile
+    def _get_reproducers(self, alive: Union[None, torch.Tensor]) -> torch.Tensor:
         # 1 + so that really small creatures don't get unfairly benefitted
-        reproducers = (self.ages >= self.sizes*self.cfg.mature_age_mul) & (self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes))  # contiguous boolean tensor
+        reproducers = (self.ages >= self.sizes*self.cfg.mature_age_mul) & (self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes))  # current mem boolean tensor
         if alive is not None:
             reproducers &= alive
-        
-        # limit reproducers so we don't exceed max size
-        num_reproducers = torch.sum(reproducers)
-        if num_reproducers == 0:  # no one can reproduce
-            return
-        
+        return reproducers
+            
+    #@cuda_profile
+    def _reduce_reproducers(self, reproducers: torch.Tensor, num_reproducers: int, 
+                            max_reproducers: int) -> Tuple[torch.Tensor, int]:
         if num_reproducers > max_reproducers:  # this benefits older creatures because they 
             num_reproducers = max_reproducers  # are more likely to be in the num_reproducers window
             reproducer_indices = torch.nonzero(reproducers)#[num_reproducers:]
             perm = torch.randperm(reproducer_indices.shape[0], device='cuda')
             non_reproducers = reproducer_indices[perm[num_reproducers:]]
             reproducers[non_reproducers] = False
+        return reproducers, num_reproducers
+
+    #@cuda_profile
+    def _reproduce(self, alive, num_dead) -> Union[None, 'CreatureArray']:
+        """For sufficiently high energy creatures, create a new creature with mutated genes. Returns the set
+        of new creatures in a CreatureArray object."""
+        max_reproducers = self.cfg.max_creatures + num_dead - self.population # dont bother if none can reproduce anyway 
+        if max_reproducers <= 0:
+            return
+        
+        reproducers = self._get_reproducers(alive)  # current memory boolean tensor
+        # limit reproducers so we don't exceed max size
+        num_reproducers = torch.sum(reproducers)
+        if num_reproducers == 0:  # no one can reproduce
+            return
+        
         # print(int(num_reproducers), num_dead)
+        reproducers, num_reproducers = self._reduce_reproducers(reproducers, num_reproducers, max_reproducers)
+        self.n_children[reproducers] += 1
 
         # could fuse this
         self.energies[reproducers] -= self.sizes[reproducers]  # subtract off the energy that you've put into the world
         self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
         
-        new_creatures = self.reproduce(reproducers, num_reproducers)
+        new_creatures = self.reproduce_traits(reproducers, num_reproducers)
         return new_creatures
 
     def eat_grow(self, food_grid: torch.Tensor, selected_cell: Union[None, Tuple[int, int]]):

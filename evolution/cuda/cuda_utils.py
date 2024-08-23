@@ -7,14 +7,16 @@ from OpenGL.GL import *
 from functools import wraps
 from collections import defaultdict
 
-
-start = torch.cuda.Event(enable_timing=True)
-end = torch.cuda.Event(enable_timing=True)
+BENCHMARK = False
 times = defaultdict(float)
 
 def cuda_profile(func):
+    start = torch.cuda.Event(enable_timing=True)
+    end = torch.cuda.Event(enable_timing=True)
     @wraps(func)
     def wrapper(*args, **kwargs):
+        if not BENCHMARK:
+            return func(*args, **kwargs)
         start.record()
         res = func(*args, **kwargs)
         end.record()

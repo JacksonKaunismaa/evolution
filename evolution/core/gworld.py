@@ -12,6 +12,7 @@ import numpy as np
 
 from evolution.cuda import cu_algorithms
 from evolution.cuda import cuda_utils
+from evolution.cuda.cuda_utils import cuda_profile
 
 from .config import Config, simple_cfg
 from .creatures.creatures import Creatures
@@ -37,7 +38,7 @@ class GWorld():
         self.time = 0
         self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
 
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def trace_rays(self):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
         rays = self.creatures.rays
@@ -55,7 +56,7 @@ class GWorld():
                      self.population)
         return collisions
 
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def compute_grid_setup(self):
         """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
         (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
@@ -80,7 +81,7 @@ class GWorld():
         return cells, cell_counts  # argument return order should match trace_rays_grid
     
 
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def trace_rays_grid(self, cells, cell_counts):
         """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
 
@@ -136,22 +137,22 @@ class GWorld():
         creature = nonzero[0].item() if nonzero.shape[0] != 0 else None
         return creature
 
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def collect_stimuli(self, collisions):
         """Returns [N, F] array for all creature stimuli."""
         return self.creatures.collect_stimuli(collisions, self.food_grid)
     
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def think(self, stimuli):
         """Return [N, O] array of outputs of the creatures' neural networks.."""
         return self.creatures.forward(stimuli.unsqueeze(1))
     
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def rotate_creatures(self, outputs):
         """Rotate all creatures based on their outputs."""
         self.creatures.rotate_creatures(outputs)
     
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def only_move_creatures(self, outputs):
         """Rotate and move all creatures"""
         self.creatures.move_creatures(outputs)
@@ -161,7 +162,7 @@ class GWorld():
         self.rotate_creatures(outputs)
         self.only_move_creatures(outputs)
 
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def compute_attacks(self):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
@@ -181,7 +182,7 @@ class GWorld():
                      self.population)
         return tr_results
     
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def compute_gridded_attacks(self, cells, cell_counts):
         """Compute which creatures are attacking which creatures are then based on that, update health 
         and energy of creatures."""
@@ -202,7 +203,7 @@ class GWorld():
                      self.population, cells.shape[0])
         return tr_results
     
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def only_do_attacks(self, tr_results):
         # update health and energy
         self.creatures.do_attacks(tr_results)
@@ -211,7 +212,7 @@ class GWorld():
         # update health and energy
         self.only_do_attacks(tr_results)
 
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def creatures_eat_grow(self):
         self.creatures.eat_grow(self.food_grid, self._selected_cell)        
 
@@ -244,7 +245,7 @@ class GWorld():
             self.cfg = checkpoint['cfg']
             self.time = checkpoint.get('time', 0)
     
-    @cuda_utils.cuda_profile
+    @cuda_profile
     def fused_kill_reproduce(self):
         self.creatures.fused_kill_reproduce(self.central_food_grid)
         self.dead_updated = False
@@ -307,6 +308,7 @@ def _benchmark(cfg=None, max_steps=512):
     # import cProfile
     # from pstats import SortKey
     # import io, pstats
+    cuda_utils.BENCHMARK = True
     cuda_utils.times.clear()
 
     # torch.manual_seed(1)
@@ -321,6 +323,10 @@ def _benchmark(cfg=None, max_steps=512):
             return game
     
     cuda_utils.times['n_maxxed'] = game.n_maxxed.item()
+    cuda_utils.times['algo_max'] = game.creatures.algos['max']
+    cuda_utils.times['algo_fill'] = game.creatures.algos['fill_gaps']
+    cuda_utils.times['algo_move'] = game.creatures.algos['move_block']
+    
 
     # pr.disable()
     # s = io.StringIO()
@@ -333,7 +339,7 @@ def _benchmark(cfg=None, max_steps=512):
 def multi_benchmark(cfg, max_steps=2500, N=20, skip_first=False):
     total_times = defaultdict(list)
     for i in range(N):
-        bmarks = _benchmark(cfg, max_steps=2500)
+        bmarks = _benchmark(cfg, max_steps=max_steps)
         if i == 0 and skip_first:  # skip first iteration for compilation weirdness
             continue
         for k, v in bmarks.items():

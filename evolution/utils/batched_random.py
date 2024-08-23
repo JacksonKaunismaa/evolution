@@ -3,8 +3,8 @@ import torch
 from operator import mul
 from functools import reduce
 
-
 from evolution.core.creatures.creature_param import CreatureParam
+from evolution.cuda.cuda_utils import cuda_profile
 
 class BatchedRandom:
     def __init__(self, params: List[CreatureParam]):
@@ -26,11 +26,13 @@ class BatchedRandom:
         self.buffer = None
         self.idx = 0
         
+    #@cuda_profile
     def generate(self, num):
         self.buffer = torch.randn(num, self.gen_size, device='cuda')
         self.idx = 0
-        
-    def get(self, param, idx=None):
+    
+    #@cuda_profile
+    def fetch_params(self, param, idx=None):
         if idx is not None:
             acc_size = self.param_elems[param][idx]
             shape = self.param_shapes[param][idx]

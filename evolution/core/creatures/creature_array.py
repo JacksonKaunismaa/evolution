@@ -7,8 +7,9 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from evolution.utils.batched_random import BatchedRandom
+from evolution.core.config import Config
+from evolution.cuda.cuda_utils import cuda_profile
 
-from ..config import Config
 from .creature_param import CreatureParam
 
 def normalize_rays(rays: 'CreatureParam', sizes: 'CreatureParam', cfg: Config):
@@ -89,9 +90,28 @@ class CreatureArray:
         self.alive = torch.zeros(self.cfg.max_creatures, dtype=torch.float32, device='cuda')
         self.alive[:self.cfg.start_creatures] = 1.0
         self.rng = BatchedRandom(self.variables)
+        self.algos = {'max': 0, 'fill_gaps': 0, 'move_block': 0}
+        
+    #@cuda_profile
+    def reproduce_most(self, reproducers: Tensor, num_reproducers: int, children: 'CreatureArray', mut: Tensor):
+        for v in self.variables:   # handle mutable parameters
+            child_trait = v.reproduce(self.rng, reproducers, num_reproducers, mut)
+            if child_trait is not None:
+                setattr(children, v.name, child_trait)
+                
+    #@cuda_profile
+    def reproduce_extra(self, reproducers: Tensor, children: 'CreatureArray'):
+        children.positions = self.positions.reproduce_mutable(self.rng, reproducers, 
+                                                        self.cfg.reproduce_dist, force_mutable=True)
+        # need to call normalization weird for rays since it depends on sizes
+        normalize_rays(children.rays, children.sizes, self.cfg)
+        # need to initialize these weird as well because they depend on sizes
+        children.energies = self.cfg.init_energy(children.sizes)
+        children.healths = self.cfg.init_health(children.sizes)
+        
 
- 
-    def reproduce(self, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
+    #@cuda_profile
+    def reproduce_traits(self, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
         """Generate descendant traits from the set of indices in reproducers and store it in 
         a new CreatureArray.
         
@@ -101,22 +121,10 @@ class CreatureArray:
         """
         mut = self.mutation_rates[reproducers]
         self.rng.generate(num_reproducers)
-        self.n_children[reproducers] += 1
         children = CreatureArray(self.cfg, self.device)
-        
-        for v in self.variables:   # handle mutable parameters
-            child_trait = v.reproduce(self.rng, reproducers, num_reproducers, mut)
-            if child_trait is not None:
-                setattr(children, v.name, child_trait)
-        
+        self.reproduce_most(reproducers, num_reproducers, children, mut)
         # we can pretend position is a mutable parameter since it is a random deviation from the parent
-        children.positions = self.positions.reproduce_mutable(self.rng, reproducers, 
-                                                              self.cfg.reproduce_dist, force_mutable=True)
-        # need to call normalization weird for rays since it depends on sizes
-        normalize_rays(children.rays, children.sizes, self.cfg)
-        # need to initialize these weird as well because they depend on sizes
-        children.energies = self.cfg.init_energy(children.sizes)
-        children.healths = self.cfg.init_health(children.sizes)
+        self.reproduce_extra(reproducers, children)
         return children
             
     @property
@@ -206,6 +214,7 @@ class CreatureArray:
             dead: A boolean tensor (size of current memory) of creatures that are dead.
             other: The CreatureArray that contains the new creatures (if any).
         """
+        self.algos['max'] += 1
         self.start_idx = 0  # case where we just have to fill in the gaps
         if dead.shape[0] == self.cfg.max_creatures:
                 # if prev epoch was also maxxed, then we can just use dead
@@ -231,6 +240,7 @@ class CreatureArray:
             creature: The index of the selected creature (if any).
         Returns:
             The updated index of the selected creature (or None if it died)."""
+        self.algos['fill_gaps'] += 1
         missing = dead.nonzero().squeeze(1) + self.start_idx   # missing spots in current block
         num_added = num_reproducers - num_dead   # how many we need to add to the sides
         before_avail = self.start_idx   # how much we can add to the left gap
@@ -270,6 +280,7 @@ class CreatureArray:
             creature: The index of the selected creature (if any).
         Returns:
             The updated index of the selected creature (or None if it died)."""
+        self.algos['move_block'] += 1
         window = torch.ones(n_after, device='cuda', dtype=torch.float)
         # count the number of alive creatures in each window of size n_after
         windows = F.conv1d(self.alive[sl].view(1, 1, -1), window.view(1, 1, -1), padding=0).squeeze()

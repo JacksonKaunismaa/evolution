@@ -8,7 +8,8 @@ if TYPE_CHECKING:
     from evolution.utils.batched_random import BatchedRandom
 
 
-from ..config import Config
+from evolution.core.config import Config
+from evolution.cuda.cuda_utils import cuda_profile
 
 
 
@@ -87,7 +88,7 @@ class CreatureParam:
     def reproduce_randn(self, rng: 'BatchedRandom'):
         """Generate child traits from the current CreatureParam by sampling random noise."""
         child = CreatureParam(self.name, self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
-        child.data = rng.get(self.name)
+        child.data = rng.fetch_params(self.name)
         child.normalize()
         return child
     
@@ -100,6 +101,7 @@ class CreatureParam:
             child.data = torch.zeros(num_reproducers, *self._shape, device=self.device)
         return child
             
+    #@cuda_profile
     def reproduce_mutable(self, rng: 'BatchedRandom', reproducers: Tensor,
                           mut: Tensor, force_mutable=False):
         """Generate child traits from the current CreatureParam by adding random noise to the
@@ -121,10 +123,10 @@ class CreatureParam:
             mut = mut[:, self.mut_idx].view(-1, *([1]*n_dims))
         child = CreatureParam(self.name, self._shape, None, self.normalize_func, self.device, None)
         if self.is_list:
-            perturb = [rng.get(self.name, i) * mut for i in range(len(self.data))]
+            perturb = [rng.fetch_params(self.name, i) * mut for i in range(len(self.data))]
             child.data = [d[reproducers] + od for d, od in zip(self.data, perturb)]
         else:
-            perturb = rng.get(self.name) * mut
+            perturb = rng.fetch_params(self.name) * mut
             child.data = self[reproducers] + perturb
         child.normalize()
         return child
@@ -146,6 +148,7 @@ class CreatureParam:
         elif self.reproduce_type == 'randn':
             return self.reproduce_randn(rng)
             
+    #@cuda_profile
     def normalize(self):  # technically we should add support for list-type CreatureParams, but we don't use that
         """Apply normalization function to the trait."""
         if self.normalize_func is not None:

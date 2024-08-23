@@ -69,9 +69,9 @@ class Game:
             n = self.game_speed
         for _ in range(n):
             if not self.world.step(visualize=False, save=False):
-                torch.cuda.synchronize()
+                # torch.cuda.synchronize()
                 return False
-        torch.cuda.synchronize()
+        # torch.cuda.synchronize()
         return True
     
     # def select_creature(self, creature_id):
