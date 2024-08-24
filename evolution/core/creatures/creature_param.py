@@ -26,11 +26,10 @@ class CreatureParam:
     population changes. It also supports lists of Tensors, which function the exact same
     as single Tensors, but every operation is applied to each Tensor in the list. This is useful
     e.g. for the weights of a neural network, where each layer has its own weight matrix."""
-    def __init__(self, name: str, shape: Union[List[tuple], tuple], 
+    def __init__(self, shape: Union[List[tuple], tuple], 
                  init: Union[List[Tuple[str,...]], Tuple[str,...], None], 
                  normalize_func: Callable, device: str,
                  mut_idx: Union[int, None]):
-        self.name = name
         self._shape = shape
         self.is_list = isinstance(shape, list)
         self.init = init
@@ -44,6 +43,8 @@ class CreatureParam:
             self.reproduce_type = 'mutable'
         elif init is not None and init[0] == 'zero_':
             self.reproduce_type = 'zeros'
+        elif init is not None and init[0] == 'fill_':
+            self.reproduce_type = 'fill'
         elif init is not None and init[0] == 'normal_':
             self.reproduce_type = 'randn'
         else:
@@ -60,6 +61,14 @@ class CreatureParam:
         if self.is_list:
             return [d.shape for d in self.data]
         return self.data.shape
+    
+    def init_underlying(self, max_creatures: int):
+        """Allocate underlying memory. This should only be called
+        for root CreatureParams, and not for any offspring/children CreatureParams."""
+        if self.is_list:
+            self._data = [torch.empty(max_creatures, *shape, device=self.device) for shape in self._shape]
+        else:
+            self._data = torch.empty(max_creatures, *self._shape, device=self.device)
         
     def init_base(self, cfg: Config):
         """Initialize underlying memory and current memory. This should only be called
@@ -77,7 +86,23 @@ class CreatureParam:
                 return
             self.data = getattr(self._data[:cfg.start_creatures], self.init[0])(*self.init[1:])
         self.normalize()
-            
+        
+    def unset_data(self):
+        self.data = None
+        self._data = None
+        
+    def init_base_from_state_dict(self, data: Union[Tensor, List[Tensor]], cfg: Config, start: int, new_size: int):
+        """Instantiate and initialize current memory from a given state_dict. This is useful
+        for loading a saved model."""
+        self.init_underlying(cfg.max_creatures)
+        if self.is_list:
+            for i, d in enumerate(data):
+                self._data[i][start: start+new_size] = d.to(self.device)
+        else:
+            self._data[start: start+new_size] = data.to(self.device)
+        self.reindex(start, new_size)
+        
+        
     def init_base_from_data(self, data: Tensor):
         """Initialize underlying memory and current memory from a given Tensor. This is useful
         for e.g. energy and health, which are initialized as a function of the size. This should
@@ -90,24 +115,34 @@ class CreatureParam:
         which are initialized as a function of the size. Do this for offspring/children CreatureParams."""
         self.data = data
               
-    def reproduce_randn(self, rng: 'BatchedRandom'):
+    def reproduce_randn(self, name: str, rng: 'BatchedRandom'):
         """Generate child traits from the current CreatureParam by sampling random noise."""
-        child = CreatureParam(self.name, self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
-        child.data = rng.fetch_params(self.name)
+        child = CreatureParam(self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
+        child.data = rng.fetch_params(name)
         child.normalize()
         return child
     
     def reproduce_zeros(self, num_reproducers):
         """Generate child traits from the current CreatureParam by setting them to zero."""
-        child = CreatureParam(self.name, self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
+        child = CreatureParam(self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
         if self.is_list:
             child.data = [torch.zeros(num_reproducers, *shape, device=self.device) for shape in self._shape]
         else:
             child.data = torch.zeros(num_reproducers, *self._shape, device=self.device)
         return child
+    
+    def reproduce_fill(self, num_reproducers):
+        """Generate child traits from the current CreatureParam by setting them to zero."""
+        child = CreatureParam(self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
+        if self.is_list:
+            child.data = [torch.full((num_reproducers, *shape), self.init[1], 
+                                     device=self.device) for shape in self._shape]
+        else:
+            child.data = torch.full((num_reproducers, *self._shape), self.init[1], device=self.device)
+        return child
             
     #@cuda_profile
-    def reproduce_mutable(self, rng: 'BatchedRandom', reproducers: Tensor,
+    def reproduce_mutable(self, name: str, rng: 'BatchedRandom', reproducers: Tensor,
                           mut: Tensor, force_mutable=False):
         """Generate child traits from the current CreatureParam by adding random noise to the
         parent's traits, and then normalizing. The noise is scaled by the mut Tensor, which is
@@ -126,17 +161,17 @@ class CreatureParam:
         if self.mut_idx is not None:
             n_dims = len(self._shape[0]) if self.is_list else len(self._shape)
             mut = mut[:, self.mut_idx].view(-1, *([1]*n_dims))
-        child = CreatureParam(self.name, self._shape, None, self.normalize_func, self.device, None)
+        child = CreatureParam(self._shape, None, self.normalize_func, self.device, None)
         if self.is_list:
-            perturb = [rng.fetch_params(self.name, i) * mut for i in range(len(self.data))]
+            perturb = [rng.fetch_params(name, i) * mut for i in range(len(self.data))]
             child.data = [d[reproducers] + od for d, od in zip(self.data, perturb)]
         else:
-            perturb = rng.fetch_params(self.name) * mut
+            perturb = rng.fetch_params(name) * mut
             child.data = self[reproducers] + perturb
         child.normalize()
         return child
             
-    def reproduce(self, rng: 'BatchedRandom', reproducers: Tensor,  num_reproducers: int, mut: Tensor):
+    def reproduce(self, name: str, rng: 'BatchedRandom', reproducers: Tensor,  num_reproducers: int, mut: Tensor):
         """Select the appropriate reproduction method based on the reproduce_type attribute to
         generate the child traits.
         
@@ -149,9 +184,11 @@ class CreatureParam:
         if self.reproduce_type == 'zeros':
             return self.reproduce_zeros(num_reproducers)
         elif self.reproduce_type == 'mutable':
-            return self.reproduce_mutable(rng, reproducers, mut)
+            return self.reproduce_mutable(name, rng, reproducers, mut)
         elif self.reproduce_type == 'randn':
-            return self.reproduce_randn(rng)
+            return self.reproduce_randn(name, rng)
+        elif self.reproduce_type == 'fill':
+            return self.reproduce_fill(num_reproducers)
             
     #@cuda_profile
     def normalize(self):  # technically we should add support for list-type CreatureParams, but we don't use that
@@ -215,7 +252,7 @@ class CreatureParam:
         if self.is_list:
             return iter(self.data)
         else:
-            raise ValueError(f"Cannot iterate over non-list CreatureParam(name={self.name}, shape={self.shape})")
+            raise ValueError(f"Cannot iterate over non-list CreatureParam(shape={self.shape})")
             
     def __getitem__(self, idxs: Tensor):
         return self.data[idxs]
@@ -224,7 +261,7 @@ class CreatureParam:
         self.data[idxs] = val
         
     def __repr__(self):
-        return f"CreatureParam(name={self.name}, data={self.data})"
+        return f"CreatureParam(data={self.data})"
                 
     def long(self) -> Tensor:
         return self.data.long()

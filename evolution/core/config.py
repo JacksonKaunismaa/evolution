@@ -109,13 +109,14 @@ class Config:
     food_cover_decr: float = 0.2  # if a creature occupies a cell, the food in that cell be decreased by this amount each step
     # actual_food_decr = food_cover_decr * float_cover_decr_pct * creature_eat_pct
     food_cover_decr_pct: float = 10.
+    food_cover_decr_incr_amt: float = 1.5e-5  # how much food_cover_decr increase per generation when increase is enabled
     neg_food_eat_mul: float = 0.1  # if food is negative, creature eating is scaled by this amount
     max_food: float = 15.     # maximum amount of food in a cell (decays past this value)
     food_decay_rate: float = 0.05 # how fast food decays (when over max_food)
     food_growth_rate: float = 10.0  # scale to apply to food growth rate
     food_recovery_rate: float = 30.0  # scale to apply to food growth rate when its negative
     food_health_recovery: float = 0.1  # multiple of food eaten that creatures gain as health
-    food_step_size: float = 4e-6  # how much food grows each step
+    food_step_size: float = 1e-4  # how much food grows each step
 
 
     ### Creatures
@@ -175,8 +176,11 @@ class Config:
     reproduce_thresh: ConfigFunction = ConfigFunction('square', 11.)  
     reproduce_energy_loss_frac: float = 15.  # factor to divide energy by after reproducing (and subtracting off init_energy costs)
     reproduce_dist: float = 3.  # standard deviation of distance from parent to place offspring
-    mature_age_mul: float = 20.0  # size * mature_age_mult is the age at which creatures can reproduce
 
+    ### Aging
+    age_dmg_mul: float = 1e-4  # for every year past age_old, creatures take this pct more dmg (compounded)
+    mature_age_mul: float = 20.0  # size * mature_age_mult is the age at which creatures can reproduce
+    age_old_mul: float = 40.0 # size * age_old_mult is the age at which creatures start taking extra dmg/energy
     
     
     ## Algorithm parameters

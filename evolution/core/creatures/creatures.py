@@ -27,15 +27,15 @@ class Creatures(CreatureArray):
     By forcing traits to remain on the GPU at all times, we can massively increase the speed of the simulation
     by utilizing massively parallel operations on the GPU. """
     
-    def __init__(self, cfg: Config, kernels: CUDAKernelManager):
-        super().__init__(cfg)
+    def __init__(self, cfg: Config, kernels: CUDAKernelManager, device: torch.device):
+        super().__init__(cfg, device)
         self.cfg = cfg
         self.kernels = kernels
 
         # how much indexing into the food grid needs to be adjusted to avoid OOB
         self.pad = self.cfg.food_sight 
         self.offsets = torch.tensor([[i, j] for i in range(-self.pad, self.pad+1) 
-                                     for j in range(-self.pad, self.pad+1)], device='cuda').unsqueeze(0)
+                                     for j in range(-self.pad, self.pad+1)], device=self.device).unsqueeze(0)
         self.activations = []
         self.dead = None   # [N] current memory boolean tensor
         self._selected_creature = None
@@ -89,7 +89,7 @@ class Creatures(CreatureArray):
         if num_reproducers > max_reproducers:  # this benefits older creatures because they 
             num_reproducers = max_reproducers  # are more likely to be in the num_reproducers window
             reproducer_indices = torch.nonzero(reproducers)#[num_reproducers:]
-            perm = torch.randperm(reproducer_indices.shape[0], device='cuda')
+            perm = torch.randperm(reproducer_indices.shape[0], device=self.device)
             non_reproducers = reproducer_indices[perm[num_reproducers:]]
             reproducers[non_reproducers] = False
         return reproducers, num_reproducers
@@ -136,7 +136,7 @@ class Creatures(CreatureArray):
         pos = self.positions.int() + self.pad
         
         # calculate how many creatures are in each position, useful for computng how much food each creature eats
-        pct_eaten = torch.zeros_like(food_grid, dtype=torch.float32, device='cuda') 
+        pct_eaten = torch.zeros_like(food_grid, dtype=torch.float32, device=self.device) 
         threads_per_block = 512
         blocks_per_grid = self.population // threads_per_block + 1
         self.kernels('setup_eat_grid', blocks_per_grid, threads_per_block,
@@ -146,16 +146,17 @@ class Creatures(CreatureArray):
             prev_energy = self.energies[self.get_selected_creature()].item()
         
         # calculate how much food each creature eats, add 1 to ages, update energies, take away living costs
-        food_grid_updates = torch.zeros_like(food_grid, device='cuda')
-        alive_costs = torch.zeros(self.population, device='cuda', dtype=torch.float32)
+        food_grid_updates = torch.zeros_like(food_grid, device=self.device)
+        alive_costs = torch.zeros(self.population, device=self.device, dtype=torch.float32)
         self.kernels('eat', blocks_per_grid, threads_per_block,
                      pos, self.eat_pcts, pct_eaten, self.sizes, food_grid,
-                     food_grid_updates, alive_costs, self.energies, self.healths, self.ages,
+                     food_grid_updates, alive_costs, self.energies, self.healths, self.ages, self.age_mults,
                      self.population, food_grid.shape[0], self.cfg.food_cover_decr)
         if self.get_selected_creature() is not None:
             creat_pos = pos[self.get_selected_creature()]
             # print(creat_pos, self.get_selected_creature())
             print(f"\tAge: {self.ages[self.get_selected_creature()].item()}"
+                  f"\n\tAge Mult: {self.age_mults[self.get_selected_creature()].item()}"
                   f"\n\tChildren: {self.n_children[self.get_selected_creature()].item()}"
                   f"\n\tAlive Costs: {alive_costs[self.get_selected_creature()].item()}"
                   f"\n\tEat pct: {self.eat_pcts[self.get_selected_creature()].item()}"
@@ -251,7 +252,7 @@ class Creatures(CreatureArray):
         
         block_size = 512
         grid_size = self.population // block_size + 1
-        rotation_matrix = torch.empty((self.population, 2, 2), device='cuda')  # [N, 2, 2]
+        rotation_matrix = torch.empty((self.population, 2, 2), device=self.device)  # [N, 2, 2]
         self.kernels('build_rotation_matrices', grid_size, block_size,
                      outputs, self.sizes, self.energies, self.population, outputs.shape[1],
                      rotation_matrix)

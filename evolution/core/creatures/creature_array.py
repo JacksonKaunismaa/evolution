@@ -7,6 +7,7 @@ import torch.nn.functional as F
 from torch import Tensor
 
 from evolution.utils.batched_random import BatchedRandom
+from evolution.utils.quantize import quantize, QuantizedData
 from evolution.core.config import Config
 from evolution.cuda.cuda_utils import cuda_profile
 
@@ -44,28 +45,28 @@ class CreatureArray:
     def generate_from_cfg(self):
         """Generate a new set of creatures from the configuration. This should only be called for
         the root CreatureArray, that represents all the creatures in the world."""
-        self.sizes: CreatureParam = CreatureParam('sizes', tuple(), ('uniform_', *self.cfg.init_size_range), 
+        self.sizes: CreatureParam = CreatureParam(tuple(), ('uniform_', *self.cfg.init_size_range), 
                               partial(clamp, min_=self.cfg.size_range[0], max_=self.cfg.size_range[1]), 
                               self.device, 0)
-        self.colors: CreatureParam = CreatureParam('colors', (3,), ('uniform_', 1, 255),
+        self.colors: CreatureParam = CreatureParam((3,), ('uniform_', 1, 255),
                               partial(clamp, min_=1, max_=255), self.device, 1)
-        self.rays: CreatureParam = CreatureParam('rays', (self.cfg.num_rays, 3), ('normal_', 0, 1),
+        self.rays: CreatureParam = CreatureParam((self.cfg.num_rays, 3), ('normal_', 0, 1),
                               None, self.device, 2)
-        self.mutation_rates: CreatureParam = CreatureParam('mutation_rates', (6,), 
-                                                           ('uniform_', *self.cfg.init_mut_rate_range),
+        self.mutation_rates: CreatureParam = CreatureParam((6,), ('uniform_', *self.cfg.init_mut_rate_range),
                               None, self.device, 5)
-        self.positions: CreatureParam = CreatureParam('positions', (2,), ('uniform_', *self.posn_bounds),
+        self.positions: CreatureParam = CreatureParam((2,), ('uniform_', *self.posn_bounds),
                               partial(clamp, min_=self.posn_bounds[0], max_=self.posn_bounds[1]), 
                               self.device, None)
         
-        self.energies: CreatureParam = CreatureParam('energies', tuple(), None, None, self.device, None)
-        self.healths: CreatureParam = CreatureParam('healths', tuple(), None, None, self.device, None)
-        self.eat_pcts: CreatureParam = CreatureParam('eat_pcts', tuple(), None, None, self.device, None)
-        self.memories: CreatureParam = CreatureParam('memories', (self.cfg.mem_size,), ('zero_',), None, 
+        self.energies: CreatureParam = CreatureParam(tuple(), None, None, self.device, None)
+        self.healths: CreatureParam = CreatureParam(tuple(), None, None, self.device, None)
+        self.eat_pcts: CreatureParam = CreatureParam(tuple(), None, None, self.device, None)
+        self.age_mults: CreatureParam = CreatureParam(tuple(), ('fill_', 1.0), None, self.device, None)
+        self.memories: CreatureParam = CreatureParam((self.cfg.mem_size,), ('zero_',), None, 
                                                      self.device, None)
-        self.ages: CreatureParam = CreatureParam('ages', tuple(), ('zero_',), None, self.device, None)
-        self.n_children: CreatureParam = CreatureParam('n_children', tuple(), ('zero_',), None, self.device, None)
-        self.head_dirs: CreatureParam = CreatureParam('head_dirs', (2,), ('normal_', 0, 1), 
+        self.ages: CreatureParam = CreatureParam(tuple(), ('zero_',), None, self.device, None)
+        self.n_children: CreatureParam = CreatureParam(tuple(), ('zero_',), None, self.device, None)
+        self.head_dirs: CreatureParam = CreatureParam((2,), ('normal_', 0, 1), 
                                        normalize_head_dirs, self.device, None)
         
         layer_sizes = [self.cfg.num_rays*3 + self.cfg.mem_size + self.num_food + 2, 
@@ -79,13 +80,13 @@ class CreatureArray:
             b_norm = 0.5 / np.sqrt(next_layer)
             weight_inits.append(('uniform_', -w_norm, w_norm))
             bias_inits.append(('uniform_', -b_norm, b_norm))
-        self.weights: CreatureParam = CreatureParam('weights', weight_sizes, weight_inits, None, self.device, 3)
-        self.biases: CreatureParam = CreatureParam('biases', bias_sizes, bias_inits, None, self.device, 4)
+        self.weights: CreatureParam = CreatureParam(weight_sizes, weight_inits, None, self.device, 3)
+        self.biases: CreatureParam = CreatureParam(bias_sizes, bias_inits, None, self.device, 4)
         
         # select all CreatureParam objects
-        self.variables: List[CreatureParam] = [getattr(self, p) for p in dir(self) 
-                                               if isinstance(getattr(self, p), CreatureParam)]
-        for v in self.variables:
+        self.variables: Dict[str, CreatureParam] = {p: getattr(self, p) for p in dir(self) 
+                                               if isinstance(getattr(self, p), CreatureParam)}
+        for v in self.variables.values():
             v.init_base(self.cfg)
         self.energies.init_base_from_data(self.cfg.init_energy(self.sizes.data))
         self.healths.init_base_from_data(self.cfg.init_health(self.sizes.data))
@@ -93,21 +94,21 @@ class CreatureArray:
         normalize_rays(self.rays, self.sizes, self.cfg)
 
         self.start_idx = 0
-        self.alive = torch.zeros(self.cfg.max_creatures, dtype=torch.float32, device='cuda')
+        self.alive = torch.zeros(self.cfg.max_creatures, dtype=torch.float32, device=self.device)
         self.alive[:self.cfg.start_creatures] = 1.0
-        self.rng = BatchedRandom(self.variables)
+        self.rng = BatchedRandom(self.variables, self.device)
         self.algos = {'max': 0, 'fill_gaps': 0, 'move_block': 0}
         
     #@cuda_profile
     def reproduce_most(self, reproducers: Tensor, num_reproducers: int, children: 'CreatureArray', mut: Tensor):
-        for v in self.variables:   # handle mutable parameters
-            child_trait = v.reproduce(self.rng, reproducers, num_reproducers, mut)
+        for name, v in self.variables.items():   # handle mutable parameters
+            child_trait = v.reproduce(name, self.rng, reproducers, num_reproducers, mut)
             if child_trait is not None:
-                setattr(children, v.name, child_trait)
+                setattr(children, name, child_trait)
                 
     #@cuda_profile
     def reproduce_extra(self, reproducers: Tensor, children: 'CreatureArray'):
-        children.positions = self.positions.reproduce_mutable(self.rng, reproducers, 
+        children.positions = self.positions.reproduce_mutable('positions', self.rng, reproducers, 
                                                         self.cfg.reproduce_dist, force_mutable=True)
         # need to call normalization weird for rays since it depends on sizes
         normalize_rays(children.rays, children.sizes, self.cfg)
@@ -146,13 +147,13 @@ class CreatureArray:
             idxs: Tensor of indices (into underlying memory) where we want to write the new creatures.
             other: The CreatureArray that contains the new creatures.
         """
-        for v in self.variables:
-            v.write_new(idxs, getattr(other, v.name))
+        for name, v in self.variables.items():
+            v.write_new(idxs, getattr(other, name))
             
     def reindex(self, start_idx: int, n_after: int):
         """Slice each CreatureParam according to the current block so that their `data` attribute
         is set properly for the next generation."""
-        for v in self.variables:
+        for v in self.variables.values():
             v.reindex(start_idx, n_after)
             
     def rearrange_old_data(self, outer_idxs: Tensor, inner_idxs: Tensor):
@@ -165,7 +166,7 @@ class CreatureArray:
             inner_idxs: Tensor of indices (into underlying memory) where we want to move them to, inside 
                         the best window
         """
-        for v in self.variables:
+        for v in self.variables.values():
             v.rearrange_old_data(outer_idxs, inner_idxs)
 
     def add_with_deaths(self, dead: Union[None, Tensor], alive: Union[None, Tensor], 
@@ -288,7 +289,7 @@ class CreatureArray:
         Returns:
             The updated index of the selected creature (or None if it died)."""
         self.algos['move_block'] += 1
-        window = torch.ones(n_after, device='cuda', dtype=torch.float)
+        window = torch.ones(n_after, device=self.device, dtype=torch.float)
         # count the number of alive creatures in each window of size n_after
         windows = F.conv1d(self.alive[sl].view(1, 1, -1), window.view(1, 1, -1), padding=0).squeeze()
         best_start = windows.argmax().item() + self.start_idx
@@ -323,3 +324,31 @@ class CreatureArray:
             # turn it back into a contiguous index
             creature = discontig_creature - self.start_idx
         return creature
+    
+    def state_dict(self, quantized=True):
+        variables = {}
+        for name, v in self.variables.items():
+            if quantized and name not in ['positions', 'colors', 'energies',   
+                                          'healths', 'ages', 'n_children']: # list of vars we shouldn't quantize
+                variables[name] = quantize(v.data, map_location='cpu')
+            else:
+                variables[name] = v.data.to('cpu')
+                           
+        start_idx = self.start_idx
+        alive = self.alive
+        return {'variables': variables, 'start_idx': start_idx, 'alive': alive, 'population': self.population}
+    
+    def load_state_dict(self, state_dict, map_location):
+        self.start_idx = state_dict['start_idx']
+        self.alive = state_dict['alive'].to(self.device)
+        population = state_dict['population']
+        
+        for name, v in self.variables.items():
+            data = state_dict['variables'][name]
+            if isinstance(data, QuantizedData):
+                data = data.dequantize(map_location)
+            v.init_base_from_state_dict(data, self.cfg, self.start_idx, population)  # sets _data parameters
+        
+    def unset_data(self):
+        for v in self.variables.values():
+            v.unset_data()  # unsets _data parameters to make room for state_dicts to be loaded

@@ -14,18 +14,20 @@ from evolution.cuda import cu_algorithms
 from evolution.cuda import cuda_utils
 from evolution.cuda.cuda_utils import cuda_profile
 from evolution.utils.subscribe import Publisher
+from evolution.utils.quantize import quantize, QuantizedData
 
 from .config import Config, simple_cfg
 from .creatures.creatures import Creatures
 
 class GWorld():
-    def __init__(self, cfg: Config):
+    def __init__(self, cfg: Config, device='cuda'):
         self.cfg = cfg
-        self.food_grid = torch.rand((cfg.size, cfg.size), device='cuda') * cfg.init_food_scale
+        self.device = device
+        self.food_grid = torch.rand((cfg.size, cfg.size), device=self.device) * cfg.init_food_scale
         # pad with -inf on all sides
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
         self.kernels = cu_algorithms.CUDAKernelManager(cfg)
-        self.creatures: Creatures = Creatures(cfg, self.kernels)
+        self.creatures: Creatures = Creatures(cfg, self.kernels, self.device)
         self.creatures.generate_from_cfg()
         self.n_maxxed = 0
 
@@ -48,7 +50,7 @@ class GWorld():
         sizes = self.creatures.sizes
         colors = self.creatures.colors
 
-        collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device='cuda')  # [N, R, C]
+        collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device=self.device)  # [N, R, C]
 
         # algorithms.correct_ray_trace[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, collisions)
 
@@ -70,8 +72,8 @@ class GWorld():
 
         # fill in grid cells to vastly reduce the number of objects we need to check
         num_cells = int(self.cfg.size // self.cfg.cell_size + 1)
-        cells = torch.full((num_cells, num_cells, self.cfg.max_per_cell), -1, dtype=torch.int32, device='cuda')
-        cell_counts = torch.zeros((num_cells, num_cells), dtype=torch.int32, device='cuda')
+        cells = torch.full((num_cells, num_cells, self.cfg.max_per_cell), -1, dtype=torch.int32, device=self.device)
+        cell_counts = torch.zeros((num_cells, num_cells), dtype=torch.int32, device=self.device)
         block_size = 512
         grid_size = self.population // block_size + 1
 
@@ -93,13 +95,13 @@ class GWorld():
         sizes = self.creatures.sizes
 
         # traverse the grid and draw lines through it, checking each object that passes through the ray
-        collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device='cuda')
+        collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device=self.device)
         # algorithms.trace_rays_grid(self.cfg)[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, 
         #                                                                    cells, cell_counts, 
         #                                                                    self.cfg.cell_size, collisions)
-        # cells_hit = torch.zeros((rays.shape[0], rays.shape[1]), device='cuda', dtype=torch.int32)
-        # organisms_checked = torch.zeros((rays.shape[0], rays.shape[1]), device='cuda', dtype=torch.int32)
-        # cache_hits = torch.zeros((rays.shape[0], rays.shape[1]), device='cuda', dtype=torch.int32)
+        # cells_hit = torch.zeros((rays.shape[0], rays.shape[1]), device=self.device, dtype=torch.int32)
+        # organisms_checked = torch.zeros((rays.shape[0], rays.shape[1]), device=self.device, dtype=torch.int32)
+        # cache_hits = torch.zeros((rays.shape[0], rays.shape[1]), device=self.device, dtype=torch.int32)
         self.kernels('trace_rays_grid', 
                      rays.shape[0], rays.shape[1], # threads
                      rays, posns, sizes, colors, 
@@ -132,7 +134,7 @@ class GWorld():
     
     def click_creature(self, mouse_pos) -> int:
         """Return the index of the creature clicked on, or None if no creature was clicked."""
-        mouse_pos = torch.tensor(mouse_pos, device='cuda')   # [2]
+        mouse_pos = torch.tensor(mouse_pos, device=self.device)   # [2]
         dists = torch.norm(self.creatures.positions - mouse_pos, dim=1)   # [N, 2] - [1, 2] = [N, 2]
         close_enough = dists < self.creatures.sizes
         nonzero = torch.nonzero(close_enough)
@@ -172,7 +174,7 @@ class GWorld():
         sizes = self.creatures.sizes
         colors = self.creatures.colors
         head_dirs = self.creatures.head_dirs
-        tr_results = torch.zeros((self.population, 2), device='cuda')
+        tr_results = torch.zeros((self.population, 2), device=self.device)
 
         # figure out who is attacking who
         block_size = (32, 32)
@@ -194,7 +196,7 @@ class GWorld():
         head_dirs = self.creatures.head_dirs
 
         # figure out who is attacking who
-        tr_results = torch.zeros((self.population, 2), device='cuda')
+        tr_results = torch.zeros((self.population, 2), device=self.device)
         block_size = 512
         grid_size = self.population // block_size + 1
 
@@ -229,23 +231,37 @@ class GWorld():
     def population(self):
         return self.creatures.population
 
-    def write_checkpoint(self, path):
-        torch.save({'food_grid': self.food_grid, 
-                    'creatures': self.creatures, 
+    def write_checkpoint(self, path, quantized=True):
+        seed = self.time
+        fgrid = quantize(self.food_grid, map_location='cpu') if quantized else self.food_grid
+        torch.save({'food_grid': fgrid, 
+                    'creatures': self.creatures.state_dict(quantized), 
                     'cfg': self.cfg,
-                    'time': self.time
+                    'time': self.time,
+                    'seed': seed
                     }, path)
+        torch.random.manual_seed(seed)
         
     def load_checkpoint(self, path):
         if not osp.exists(path):
             print(f"Warning: checkpoint file '{path}' not found, continuing anyway...")
         else:
             print(f"Loading checkpoint '{path}'...")
+            
+            self.creatures.unset_data()
+            del self.food_grid
+            
             checkpoint = torch.load(path)
-            self.food_grid = checkpoint['food_grid']
-            self.creatures = checkpoint['creatures']
+            
+            fgrid = checkpoint['food_grid']
+            if isinstance(fgrid, QuantizedData):
+                fgrid = fgrid.dequantize(map_location=self.device)
+            self.food_grid = fgrid
+            
+            self.creatures.load_state_dict(checkpoint['creatures'], self.device)
             self.cfg = checkpoint['cfg']
             self.time = checkpoint.get('time', 0)
+            torch.random.manual_seed(checkpoint['seed'])
     
     @cuda_profile
     def fused_kill_reproduce(self):
@@ -303,7 +319,7 @@ class GWorld():
 
         self.time += 1
         if self.increasing_food_decr_enabled:
-            self.cfg.food_cover_decr += 1e-6
+            self.cfg.food_cover_decr += self.cfg.food_cover_decr_incr_amt
         return True
 
 
