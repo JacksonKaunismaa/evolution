@@ -3,22 +3,18 @@ from OpenGL.GL import *
 from contextlib import contextmanager
 import moderngl_window as mglw
 from moderngl_window import settings
+from moderngl_window.integrations.imgui import ModernglWindowRenderer
 import moderngl as mgl
 import glob
 import os.path as osp
 from cuda import cuda
 import torch
 
-from ..core import config
-
-from ..utils import loading
+import imgui
 
 torch.set_grad_enabled(False)
 import PIL.Image
 import time
-from sdl2 import timer
-from sdl2.ext import window as sdl2_window
-import sdl2.video
 
 
 from .interactive.controller import Controller
@@ -29,8 +25,11 @@ from .graphics.creature_rays import CreatureRays
 from .graphics.brain import BrainVisualizer
 from .graphics.thoughts import ThoughtsVisualizer
 
+
+from evolution.core import config
 from evolution.core import gworld
 from evolution.cuda.cu_algorithms import checkCudaErrors
+from evolution.utils import loading
 from evolution.utils.subscribe import Publisher
 
 
@@ -55,7 +54,7 @@ class Game:
         self.thoughts_visual = ThoughtsVisualizer(self.cfg, self.ctx, self, self.shaders)
         self.controller = Controller(window, self.camera, self)
 
-        self.max_dims = self.calculate_max_window_size()
+        # self.max_dims = self.calculate_max_window_size()
 
         self.paused = False
         self.game_speed = 1
@@ -65,6 +64,35 @@ class Game:
         self.creature_publisher.subscribe(self.camera)
         # self.creature_publisher.subscribe(self.brain_visual)
         self.creature_publisher.subscribe(self.thoughts_visual)
+        
+        imgui.create_context()
+        self.imgui = ModernglWindowRenderer(window)
+        
+        self.setup_events()
+        self.setup_imgui_extras()
+
+    def setup_events(self):
+        def create_func(evt_func):
+            evt_name = evt_func[:-5]
+            def func(*args, **kwargs):
+                getattr(self.controller, evt_func)(*args, **kwargs)
+                getattr(self.imgui, evt_name)(*args, **kwargs)
+            return func
+        
+        for evt_func in dir(self.controller):
+            if evt_func.endswith('_func'):
+                setattr(self.wnd, evt_func, create_func(evt_func))
+                
+    def setup_imgui_extras(self):
+        extra_funcs = ['resize_func', 'unicode_char_entered_func']
+        def create_func(func_name):
+            imgui_name = func_name[:-5]
+            def func(*args, **kwargs):
+                getattr(self.imgui, imgui_name)(*args, **kwargs)
+            return func
+        
+        for func_name in extra_funcs:
+            setattr(self.wnd, func_name, create_func(func_name))
 
     def save(self):
         self.world.write_checkpoint('game.ckpt')
@@ -80,29 +108,6 @@ class Game:
                 return False
         # torch.cuda.synchronize()
         return True
-    
-    # def select_creature(self, creature_id):
-    #     # print("rays creature id updated to ", creature_id)
-    #     self.rays.update(creature_id)
-
-    # def deselect_creature(self):
-    #     # print("rays creature id deselcted to None")
-    #     self.rays.update(None)
-    
-    def calculate_max_window_size(self):
-        # calculate non-fullscreen maximum window size, in a very hacky way
-        # basically, we make the window larger than its supposed to be, do a single process_events(),
-        # which captures the automatic resizing event to fit the window in the frame, coming from
-        # the window manager, and then we get the size of the window
-        mode = sdl2.video.SDL_DisplayMode()
-        sdl2.video.SDL_GetDesktopDisplayMode(0, mode)  # these should be larger than the max possible
-        max_width = mode.w * 10
-        max_height = mode.h * 10
-        self.wnd.resize(max_width, max_height)
-        self.wnd.process_events()
-        max_width, max_height = self.wnd.size
-        # self.wnd.size = start_size
-        return max_width, max_height
         
     
     def toggle_pause(self):
@@ -123,7 +128,7 @@ class Game:
 
     def render(self):
         # This method is called every frame
-        self.ctx.viewport = (0, self.max_dims[1] - (self.wnd.height), self.wnd.width, self.wnd.height)
+        # self.ctx.viewport = (0, self.max_dims[1] - (self.wnd.height), self.wnd.width, self.wnd.height)
         # self.ctx.viewport = (0, 0, self.wnd.width, self.wnd.height)
         self.ctx.clear(0.0, 0.0, 0.0)
 
@@ -137,13 +142,40 @@ class Game:
         self.rays.render()
         self.brain_visual.render()
         self.thoughts_visual.render()
+        
+        self.render_ui()
 
-        self.controller.tick()
+        # self.controller.tick()
+        
+    def render_ui(self):
+        imgui.new_frame()
+        if imgui.begin_main_menu_bar():
+            if imgui.begin_menu("File", True):
+
+                clicked_quit, selected_quit = imgui.menu_item(
+                    "Quit", 'Cmd+Q', False, True
+                )
+
+                if clicked_quit:
+                    exit(1)
+
+                imgui.end_menu()
+            imgui.end_main_menu_bar()
+
+        imgui.show_test_window()
+
+        imgui.begin("Custom window", True)
+        imgui.text("Bar")
+        imgui.text_colored("Eggs", 0.2, 1., 0.)
+        imgui.end()
+
+        imgui.render()
+        self.imgui.render(imgui.get_draw_data())
         
 
 def main(cfg=None):
-    settings.WINDOW['class'] = 'moderngl_window.context.sdl2.Window'
-    settings.WINDOW['gl_version'] = (4, 6)
+    settings.WINDOW['class'] = 'moderngl_window.context.glfw.Window'
+    settings.WINDOW['gl_version'] = (4, 5)
     settings.WINDOW['title'] = 'Evolution'
     settings.WINDOW['size'] = (2000, 2000)
     settings.WINDOW['aspect_ratio'] = None
@@ -151,7 +183,6 @@ def main(cfg=None):
     settings.WINDOW['resizable'] = True
     # settings.WINDOW['fullscreen'] = True
     window = mglw.create_window_from_settings()
-    # print(sdl2_window.SDL_)
     if cfg is None:
         cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0, immortal=False)
         print(cfg.food_cover_decr)
@@ -160,18 +191,9 @@ def main(cfg=None):
     game = Game(window, cfg, load_path='game.ckpt')
     game.toggle_pause()
     game.world.compute_decisions()
-    # central_grid = torch.arange(cfg.size**2, dtype=torch.float32, device='cuda').view(cfg.size, cfg.size)
-    # pad = cfg.food_sight
-    # game.world.food_grid[pad:-pad, pad:-pad] = central_grid
-    # print(game.world.food_grid)
+
     populated = True
 
-    # sdl2_window._get_sdl_window(window._window).maximize()
-    # mode = sdl2.video.SDL_DisplayMode()
-    # sdl2.video.SDL_GetDesktopDisplayMode(0, mode)
-    # print(mode.h)
-    
-    curr_time = timer.SDL_GetTicks()
     curr_fps = 0
     i = 0
    
@@ -187,11 +209,11 @@ def main(cfg=None):
         # window.process_events()
         # time.sleep(0.1)
         populated = game.step()
-        i += 1
-        if i % 5 == 4:
-            next_time = timer.SDL_GetTicks()
-            curr_fps = 5.0 / (next_time - curr_time) * 1000.0
-            curr_time = next_time
+        # i += 1
+        # if i % 5 == 4:
+        #     next_time = timer.SDL_GetTicks()
+        #     curr_fps = 5.0 / (next_time - curr_time) * 1000.0
+        #     curr_time = next_time
 
     def unregister(rsrc):
         checkCudaErrors(cuda.cuGraphicsUnregisterResource(rsrc))

@@ -1,5 +1,5 @@
 import glm
-from sdl2 import timer
+# from sdl2 import timer
 from typing import TYPE_CHECKING
 import moderngl_window as mglw
 
@@ -11,12 +11,9 @@ if TYPE_CHECKING:
 class Controller:
     def __init__(self, window: mglw.BaseWindow, camera: Camera, game: 'Game'):
         # add all attrs of controller that end in _func to window, since these are associated with events
-        for attr in dir(self):
-            if attr.endswith('_func'):
-                setattr(window, attr, getattr(self, attr))
 
         self.wnd = window
-        self.now = timer.SDL_GetTicks()
+        # self.now = timer.SDL_GetTicks()
         self.delta_time = 0
         self.camera = camera
         self.game = game
@@ -160,7 +157,7 @@ class Controller:
     def mouse_position_event_func(self, x, y, dx, dy):
         self.mouse_pos = glm.vec2(x, y)
 
-    def tick(self):
-        curr_time = timer.SDL_GetTicks()
-        self.delta_time = (curr_time - self.now) / 1000.0
-        self.now = curr_time
+    # def tick(self):
+    #     curr_time = timer.SDL_GetTicks()
+    #     self.delta_time = (curr_time - self.now) / 1000.0
+    #     self.now = curr_time
