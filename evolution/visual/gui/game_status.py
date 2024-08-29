@@ -39,7 +39,7 @@ class GameStatus(UIElement):
         self.collapsing_header_open = imgui.collapsing_header("Game Stats")[0]
         # Display the text when expanded
         
-        imgui.text(f"food_decr_rate: {self.cfg.food_cover_decr}")
+        imgui.text(f"food_cover_decr: {self.cfg.food_cover_decr:.6f}")
         imgui.text(f"epoch: {self.world.time}")
         imgui.text(f"population: {self.world.population}")
         changed, new_speed = imgui.slider_int('game_speed', self.state.game_speed, 1, self.cfg.max_game_speed, 

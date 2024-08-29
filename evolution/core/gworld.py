@@ -45,24 +45,6 @@ class GWorld():
         self.publisher = Publisher()
 
     @cuda_profile
-    def trace_rays(self):
-        """Returns [N, R, 3] array of the results of ray collisions for all creatures."""
-        rays = self.creatures.rays
-        posns = self.creatures.positions
-        sizes = self.creatures.sizes
-        colors = self.creatures.colors
-
-        collisions = torch.zeros((rays.shape[0], rays.shape[1], colors.shape[-1]), device=self.device)  # [N, R, C]
-
-        # algorithms.correct_ray_trace[rays.shape[0], rays.shape[1]](rays, posns, sizes, colors, collisions)
-
-        self.kernels('correct_ray_trace',
-                     rays.shape[0], rays.shape[1],  # threads
-                     rays, posns, sizes, colors, collisions, 
-                     self.population)
-        return collisions
-
-    @cuda_profile
     def compute_grid_setup(self):
         """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
         (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
@@ -150,26 +132,6 @@ class GWorld():
         """Rotate and move all creatures"""
         self.rotate_creatures(outputs)
         self.only_move_creatures(outputs)
-
-    @cuda_profile
-    def compute_attacks(self):
-        """Compute which creatures are attacking which creatures are then based on that, update health 
-        and energy of creatures."""
-        posns = self.creatures.positions
-        sizes = self.creatures.sizes
-        colors = self.creatures.colors
-        head_dirs = self.creatures.head_dirs
-        tr_results = torch.zeros((self.population, 2), device=self.device)
-
-        # figure out who is attacking who
-        block_size = (32, 32)
-        grid_size = (self.population//block_size[0] + 1, self.population//block_size[0] + 1)
-
-        self.kernels('is_attacking', 
-                     grid_size, block_size,  # threads
-                     posns, sizes, colors, head_dirs, tr_results,
-                     self.population)
-        return tr_results
     
     @cuda_profile
     def compute_gridded_attacks(self, cells, cell_counts):
@@ -205,13 +167,11 @@ class GWorld():
     def creatures_eat_grow(self):
         self.creatures.eat_grow(self.food_grid, self.state)        
 
-
     @property
     def central_food_grid(self):
         pad = self.cfg.food_sight
         return self.food_grid[pad:-pad, pad:-pad]
         
-    
     @property
     def population(self):
         return self.creatures.population
