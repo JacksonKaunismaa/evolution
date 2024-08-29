@@ -188,6 +188,11 @@ class Config:
     cell_size: float = 4.0   # width of cells when doing gridded/celled ray tracing
     cache_size: int = 32    # number of creatures to cache when doing gridded/celled ray tracing (power of 2)
     use_cache: int = 0   # whether to use the cache when doing gridded ray tracing (1 = enabled, 0 = disabled)
+    
+    
+    
+    ## Game Settings
+    max_game_speed: int = 1000 # maximum game speed (steps per frame)
 
 
 def simple_cfg(**kwargs):

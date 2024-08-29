@@ -35,7 +35,7 @@ class Game:
     def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders', load_path=None):
         # super().__init__(**kwargs)
         self.wnd: mglw.BaseWindow = window
-        self.state = GameState()
+        self.state = GameState(cfg)
         self.world: gworld.GWorld = gworld.GWorld(cfg, self.state)
         
         if load_path is not None:
@@ -68,9 +68,10 @@ class Game:
     def setup_events(self):
         def create_func(evt_func):
             evt_name = evt_func[:-5]
+            is_mouse_evt = 'mouse' in evt_name
             def func(*args, **kwargs):
                 getattr(self.ui_manager.imgui, evt_name)(*args, **kwargs)
-                if not self.ui_manager.is_hovered():
+                if not self.ui_manager.is_hovered() or not is_mouse_evt:
                     getattr(self.controller, evt_func)(*args, **kwargs)
             return func
         
@@ -106,18 +107,9 @@ class Game:
         self.creature_publisher.publish()
         for sub in self.creature_publisher.subscribers:
             sub.update(creature)
-        # self.rays.update(creature)
-        # self.camera.update(creature)
-        # # self.brain_visual.update(creature)
-        # self.thoughts_visual.update(creature)
-        # if self.controller.selected_creature is not None:
-        #     print('energy', self.world.creatures.energies[self.controller.selected_creature])
         
 
     def render(self):
-        # This method is called every frame
-        # self.ctx.viewport = (0, self.max_dims[1] - (self.wnd.height), self.wnd.width, self.wnd.height)
-        # self.ctx.viewport = (0, 0, self.wnd.width, self.wnd.height)
         self.ctx.clear(0.0, 0.0, 0.0)
 
         self.selected_creature_updates()
@@ -176,34 +168,4 @@ def main(cfg=None):
         # if i % 5 == 4:
         #     next_time = timer.SDL_GetTicks()
         #     curr_fps = 5.0 / (next_time - curr_time) * 1000.0
-        #     curr_time = next_time
-
-    def unregister(rsrc):
-        checkCudaErrors(cuda.cuGraphicsUnregisterResource(rsrc))
-
-
-    # free Cuda resources
-    game.heatmap.heatmap_tex.release()
-    game.heatmap.heatmap_sampler.release()
-    game.creatures.creature_tex.release()
-    game.creatures.creature_sampler.release()
-    game.creatures.positions.release()
-    game.creatures.sizes.release()
-    game.creatures.head_dirs.release()
-    game.creatures.colors.release()
-    unregister(game.heatmap.cuda_heatmap)
-    unregister(game.creatures.cuda_positions)
-    unregister(game.creatures.cuda_sizes)
-    unregister(game.creatures.cuda_head_dirs)
-    unregister(game.creatures.cuda_colors)
-    game.camera.ubo.release()
-    game.world.kernels.shutdown()
-    game.ctx.release()
-    window.close()
-
-
-
-
-            
-        
-
+        #     curr_time = next_tim

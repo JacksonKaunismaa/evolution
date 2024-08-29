@@ -35,7 +35,7 @@ class UIManager:
         for elem in self.ui_elements:
             elem.render()
             
-        imgui.show_test_window()
+        # imgui.show_test_window()
             
         imgui.render()
         self.imgui.render(imgui.get_draw_data())

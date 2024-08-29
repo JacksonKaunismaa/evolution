@@ -93,7 +93,6 @@ class Controller:
                 if modifiers.ctrl:
                     amt *= 10
                 self.state.game_speed -= amt
-                self.state.game_speed = max(1, self.state.game_speed)
  
             if key == self.wnd.keys.B:    # turn hitboxes on/off
                 self.state.toggle_hitboxes()
