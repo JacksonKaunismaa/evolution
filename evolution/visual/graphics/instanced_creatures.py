@@ -1,21 +1,25 @@
+from typing import Dict
 import moderngl as mgl
+from moderngl import Context
 import numpy as np
 
-from evolution.core import config
-from evolution.core import gworld
+from evolution.core.config import Config
+from evolution.core.gworld import GWorld
+from evolution.visual.game_state import GameState
 from evolution.cuda import cuda_utils
 from evolution.utils import loading
 from evolution.utils.subscribe import Subscriber
 
 class InstancedCreatures(Subscriber):
-    def __init__(self, cfg, ctx, world, shaders):
+    def __init__(self, cfg: Config, ctx: Context, world: GWorld, state: GameState, shaders: Dict[str, str]):
         super().__init__()
         world.publisher.subscribe(self)
         
-        self.cfg: config.Config = cfg
-        self.ctx: mgl.Context = ctx
-        self.world: gworld.GWorld = world
+        self.cfg = cfg
+        self.ctx = ctx
+        self.world = world
         self.shaders = shaders
+        self.state = state
 
         self.positions = self.ctx.buffer(reserve=self.cfg.max_creatures * 2 * 4)  # 2 coordinates
         self.sizes = self.ctx.buffer(reserve=self.cfg.max_creatures * 1 * 4)  # 1 radius
@@ -36,8 +40,6 @@ class InstancedCreatures(Subscriber):
         filter_type = self.ctx.NEAREST
         self.creature_sampler.filter = (filter_type, filter_type)
         self.circle_sampler.filter = (filter_type, filter_type)
-        self.hitboxes_on = False
-        self.visible = True
 
         creature_vertices = np.asarray([
             -1.0,  1.0,    0.0, 1.0,
@@ -82,12 +84,6 @@ class InstancedCreatures(Subscriber):
             (self.colors, '3f /i', 'color')],
         index_buffer=self.creature_ibo)
 
-    def toggle_hitboxes(self):
-        self.hitboxes_on = not self.hitboxes_on
-        
-    def toggle_visibility(self):
-        self.visible = not self.visible
-
     def _update(self):
         cuda_utils.copy_to_buffer(self.world.creatures.positions, self.cuda_positions)
         cuda_utils.copy_to_buffer(self.world.creatures.sizes, self.cuda_sizes)
@@ -95,7 +91,7 @@ class InstancedCreatures(Subscriber):
         cuda_utils.copy_to_buffer(self.world.creatures.colors, self.cuda_colors)
 
     def render(self):
-        if not self.visible:
+        if not self.state.creatures_visible:
             return
         self.update()
         # self.creature_sampler.use(self.creature_tex_loc)
@@ -104,6 +100,6 @@ class InstancedCreatures(Subscriber):
         # self.circle_sampler.use(1)
         self.creature_vao.render(instances=self.world.population)
 
-        if self.hitboxes_on:
+        if self.state.hitboxes_enabled:
             self.circle_sampler.use(0)
             self.hbox_vao.render(instances=self.world.population)

@@ -1,27 +1,29 @@
 from typing import Dict, List, TYPE_CHECKING
-import moderngl as mgl
+from moderngl import Context
+from moderngl_window import BaseWindow
 import numpy as np
-import torch
 
-from evolution.core import config
+from evolution.core.config import Config
+from evolution.core.gworld import GWorld
 from evolution.cuda import cuda_utils
 from evolution.utils import loading
 from evolution.utils.subscribe import Subscriber
-
-if TYPE_CHECKING:
-    from evolution.visual.main import Game
+from evolution.visual.game_state import GameState
 
 
 class ThoughtsVisualizer(Subscriber):
     """Display memories and current outputs of a creature's thoughts."""
-    def __init__(self, cfg: config.Config, ctx: mgl.Context, world: 'Game', shaders: Dict[str, str]):
+    def __init__(self, cfg: Config, ctx: Context, world: GWorld, wnd: BaseWindow,
+                 state: GameState, shaders: Dict[str, str]):
         super().__init__()
-        world.world.publisher.subscribe(self)
+        world.publisher.subscribe(self)
         
         self.cfg = cfg
         self.ctx = ctx
-        self.world = world
         self.shaders = shaders
+        self.world = world
+        self.state = state
+        self.wnd = wnd
         
         self.visible = False
         self.pad = 0.05
@@ -89,11 +91,11 @@ class ThoughtsVisualizer(Subscriber):
             self.visible = False
             return
         self.visible = True
-        cuda_utils.copy_to_buffer(self.world.world.outputs[creature_id], self.cuda_activations)
+        cuda_utils.copy_to_buffer(self.world.outputs[creature_id], self.cuda_activations)
 
     def render(self):
         if not self.visible:
             return
-        self.prog["aspect_ratio"] = self.world.wnd.aspect_ratio
+        self.prog["aspect_ratio"] = self.wnd.aspect_ratio
         self.thoughts_sampler.use()
         self.thoughts_vao.render(instances=self.np_positions.shape[0])

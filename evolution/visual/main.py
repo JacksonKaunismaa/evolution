@@ -5,16 +5,12 @@ import moderngl_window as mglw
 from moderngl_window import settings
 from moderngl_window.integrations.imgui import ModernglWindowRenderer
 import moderngl as mgl
-import glob
 import os.path as osp
 from cuda import cuda
 import torch
-
+torch.set_grad_enabled(False)
 import imgui
 
-torch.set_grad_enabled(False)
-import PIL.Image
-import time
 
 
 from .interactive.controller import Controller
@@ -24,6 +20,8 @@ from .graphics.instanced_creatures import InstancedCreatures
 from .graphics.creature_rays import CreatureRays
 from .graphics.brain import BrainVisualizer
 from .graphics.thoughts import ThoughtsVisualizer
+from .game_state import GameState
+from .gui.ui_manager import UIManager
 
 
 from evolution.core import config
@@ -37,7 +35,9 @@ class Game:
     def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders', load_path=None):
         # super().__init__(**kwargs)
         self.wnd: mglw.BaseWindow = window
-        self.world: gworld.GWorld = gworld.GWorld(cfg)
+        self.state = GameState()
+        self.world: gworld.GWorld = gworld.GWorld(cfg, self.state)
+        
         if load_path is not None:
             self.world.load_checkpoint(load_path)
             cfg = self.world.cfg
@@ -46,27 +46,21 @@ class Game:
         self.ctx: mgl.Context = window.ctx
         self.ctx.enable(mgl.BLEND)
         self.shaders = loading.load_shaders(shader_path)
-        self.heatmap = Heatmap(self.cfg, self.ctx, self.world, self.shaders)
-        self.creatures = InstancedCreatures(self.cfg, self.ctx, self.world, self.shaders)
-        self.rays = CreatureRays(self.cfg, self.ctx, self.world, self.shaders)
-        self.camera = Camera(self.ctx, self.cfg, window, self.world)
-        self.brain_visual = BrainVisualizer(self.cfg, self.ctx, self.world, self.shaders)
-        self.thoughts_visual = ThoughtsVisualizer(self.cfg, self.ctx, self, self.shaders)
-        self.controller = Controller(window, self.camera, self)
-
-        # self.max_dims = self.calculate_max_window_size()
-
-        self.paused = False
-        self.game_speed = 1
+        self.heatmap = Heatmap(cfg, self.ctx, self.world, self.shaders)
+        self.creatures = InstancedCreatures(cfg, self.ctx, self.world, self.state, self.shaders)
+        self.rays = CreatureRays(cfg, self.ctx, self.world, self.shaders)
+        self.camera = Camera(cfg, self.ctx, window, self.world)
+        self.brain_visual = BrainVisualizer(cfg, self.ctx, self.world, self.shaders)
+        self.thoughts_visual = ThoughtsVisualizer(cfg, self.ctx, self.world, window, self.state, self.shaders)
+        self.controller = Controller(self.world, window, self.camera, self.state)
+        
+        self.ui_manager = UIManager(cfg, self.world, window, self.state)
         
         self.creature_publisher = Publisher()
         self.creature_publisher.subscribe(self.rays)
         self.creature_publisher.subscribe(self.camera)
         # self.creature_publisher.subscribe(self.brain_visual)
         self.creature_publisher.subscribe(self.thoughts_visual)
-        
-        imgui.create_context()
-        self.imgui = ModernglWindowRenderer(window)
         
         self.setup_events()
         self.setup_imgui_extras()
@@ -75,8 +69,9 @@ class Game:
         def create_func(evt_func):
             evt_name = evt_func[:-5]
             def func(*args, **kwargs):
-                getattr(self.controller, evt_func)(*args, **kwargs)
-                getattr(self.imgui, evt_name)(*args, **kwargs)
+                getattr(self.ui_manager.imgui, evt_name)(*args, **kwargs)
+                if not self.ui_manager.is_hovered():
+                    getattr(self.controller, evt_func)(*args, **kwargs)
             return func
         
         for evt_func in dir(self.controller):
@@ -88,33 +83,26 @@ class Game:
         def create_func(func_name):
             imgui_name = func_name[:-5]
             def func(*args, **kwargs):
-                getattr(self.imgui, imgui_name)(*args, **kwargs)
+                getattr(self.ui_manager.imgui, imgui_name)(*args, **kwargs)
             return func
         
         for func_name in extra_funcs:
             setattr(self.wnd, func_name, create_func(func_name))
 
-    def save(self):
-        self.world.write_checkpoint('game.ckpt')
-
-    def step(self, n=None, force=False) -> bool:
-        if self.paused and not force:
+    def step(self, n=None) -> bool:
+        if self.state.game_paused:
             return True
         if n is None:
-            n = self.game_speed
+            n = self.state.game_speed
         for _ in range(n):
             if not self.world.step():
                 # torch.cuda.synchronize()
                 return False
         # torch.cuda.synchronize()
         return True
-        
-    
-    def toggle_pause(self):
-        self.paused = not self.paused
 
     def selected_creature_updates(self):
-        creature = self.world.get_selected_creature()
+        creature = self.state.selected_creature
         self.creature_publisher.publish()
         for sub in self.creature_publisher.subscribers:
             sub.update(creature)
@@ -143,34 +131,9 @@ class Game:
         self.brain_visual.render()
         self.thoughts_visual.render()
         
-        self.render_ui()
+        self.ui_manager.render()
 
         # self.controller.tick()
-        
-    def render_ui(self):
-        imgui.new_frame()
-        if imgui.begin_main_menu_bar():
-            if imgui.begin_menu("File", True):
-
-                clicked_quit, selected_quit = imgui.menu_item(
-                    "Quit", 'Cmd+Q', False, True
-                )
-
-                if clicked_quit:
-                    exit(1)
-
-                imgui.end_menu()
-            imgui.end_main_menu_bar()
-
-        imgui.show_test_window()
-
-        imgui.begin("Custom window", True)
-        imgui.text("Bar")
-        imgui.text_colored("Eggs", 0.2, 1., 0.)
-        imgui.end()
-
-        imgui.render()
-        self.imgui.render(imgui.get_draw_data())
         
 
 def main(cfg=None):
@@ -189,7 +152,7 @@ def main(cfg=None):
     # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
     #                     init_size_range=(0.2, 0.2), num_rays=32, immortal=True)
     game = Game(window, cfg, load_path='game.ckpt')
-    game.toggle_pause()
+    game.state.toggle_pause()
     game.world.compute_decisions()
 
     populated = True

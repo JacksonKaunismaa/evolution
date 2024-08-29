@@ -5,18 +5,23 @@ import moderngl_window as mglw
 
 from .camera import Camera
 
+from evolution.visual.game_state import GameState
+from evolution.core.gworld import GWorld
+
 if TYPE_CHECKING:
     from evolution.visual.main import Game
 
 class Controller:
-    def __init__(self, window: mglw.BaseWindow, camera: Camera, game: 'Game'):
+    def __init__(self, world: GWorld, window: mglw.BaseWindow, camera: Camera, state: GameState):
         # add all attrs of controller that end in _func to window, since these are associated with events
 
         self.wnd = window
+        self.state = state
+        self.world = world
         # self.now = timer.SDL_GetTicks()
         self.delta_time = 0
         self.camera = camera
-        self.game = game
+        
         self.click_pos = None
         self.mouse_pressed = False
         self.mouse_pos = None
@@ -33,13 +38,12 @@ class Controller:
                 self.camera.process_keyboard('LEFT', self.delta_time)
                 
             if key == self.wnd.keys.H:   # toggle creature appearances
-                self.game.creatures.toggle_visibility()
+                self.state.toggle_creatures_visible()
                 self.set_selected_creature(None)
 
             if key == self.wnd.keys.D:   # toggle extra food decay
                 # self.camera.process_keyboard('RIGHT', self.delta_time)
-                self.game.world.toggle_increasing_food_decr()
-                print(self.game.cfg.food_cover_decr)
+                self.state.toggle_increasing_food_decr()
 
             if key == self.wnd.keys.R:   # reset camera to starting position, deselect any creature
                 self.set_selected_creature(None)
@@ -52,26 +56,26 @@ class Controller:
                 self.set_selected_creature(None)
 
             if key == self.wnd.keys.SPACE:   # pause simulation
-                self.game.toggle_pause()
+                self.state.toggle_pause()
 
             if key == self.wnd.keys.RIGHT:   # force step simulation by 1 
-                self.game.step(n=1, force=True)
+                self.world.step(n=1)
 
             if key == self.wnd.keys.C:    # save snapshot of current state to 'game.ckpt'
-                self.game.save()
+                self.world.write_checkpoint('game.ckpt')
 
             if key == self.wnd.keys.NUMBER_0:   # start following creature 0 
                 self.set_selected_creature(0)
 
             if key == self.wnd.keys.P:     # increase id of followed creature by 1
-                self.set_selected_creature(self.game.world.creatures._selected_creature + 1)
+                self.set_selected_creature(self.state.selected_creature + 1)
                 
             if key == self.wnd.keys.G:    # jump to Genghis Khan (guy with most offspring)
-                most_kids = self.game.world.creatures.n_children.argmax()
+                most_kids = self.world.creatures.n_children.argmax()
                 self.set_selected_creature(most_kids)
                 
             if key == self.wnd.keys.O:   # jump to oldest creature
-                oldest = self.game.world.creatures.ages.argmax()
+                oldest = self.world.creatures.ages.argmax()
                 self.set_selected_creature(oldest)
 
             if key == self.wnd.keys.UP:    # speed up simulation so that we do 1 more step per frame
@@ -80,7 +84,7 @@ class Controller:
                     amt *= 10
                 if modifiers.ctrl:
                     amt *= 10
-                self.game.game_speed += amt
+                self.state.game_speed += amt
 
             if key == self.wnd.keys.DOWN:  # slow down simulation so that we do 1 less step per frame
                 amt = 1
@@ -88,11 +92,11 @@ class Controller:
                     amt *= 10
                 if modifiers.ctrl:
                     amt *= 10
-                self.game.game_speed -= amt
-                self.game.game_speed = max(1, self.game.game_speed)
+                self.state.game_speed -= amt
+                self.state.game_speed = max(1, self.state.game_speed)
  
             if key == self.wnd.keys.B:    # turn hitboxes on/off
-                self.game.creatures.toggle_hitboxes()
+                self.state.toggle_hitboxes()
 
     def set_selected_creature(self, creature):
         # print(f"Setting to creature {creature}"
@@ -101,7 +105,7 @@ class Controller:
         #       f"\n\tHealth: {self.game.world.creatures.healths[creature]}"
         #       f"\n\tEnergy: {self.game.world.creatures.energies[creature]}")
         self.camera.following = True
-        self.game.world.set_selected_creature(creature)
+        self.state.selected_creature = creature
         # if creature is not None:
         #     print('collision', self.game.world.collisions[creature])
         #     print('rays', self.game.world.creatures.rays[creature])
@@ -113,7 +117,7 @@ class Controller:
         #     # print('grid_position', self.game.world.celled_world[1][grid_posn[1]-4:grid_posn[1]+4, grid_posn[0]-4:grid_posn[0]+4])
         
     def set_selected_cell(self, xy):
-        self.game.world.set_selected_cell(xy)
+        self.state.selected_cell = xy
         
     def mouse_press_event_func(self, x, y, button):
         # need to store everything in pixel coords so that we are closest to the actual input 
@@ -128,13 +132,13 @@ class Controller:
             self.camera_pos = self.camera.position.xy
             self.mouse_pressed = True
             game_click = self.camera.pixel_to_game_coords(*self.click_pos).xy
-            creature_id = self.game.world.click_creature(game_click) if self.game.creatures.visible else None
+            creature_id = self.world.click_creature(game_click) if self.state.creatures_visible else None
             if creature_id is not None:
                 self.set_selected_creature(creature_id)
             elif self.camera.click_in_bounds(game_click):
-                self.set_selected_cell(game_click)
+                self.state.selected_cell = game_click
             else:
-                self.set_selected_cell(None)
+                self.state.selected_cell = None
         # print(self.camera.cfg.food_cover_decr)
         
         # print(self.game.world.creatures.positions)

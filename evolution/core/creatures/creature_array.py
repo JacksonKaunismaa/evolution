@@ -10,6 +10,7 @@ from evolution.utils.batched_random import BatchedRandom
 from evolution.utils.quantize import quantize, QuantizedData
 from evolution.core.config import Config
 from evolution.cuda.cuda_utils import cuda_profile
+from evolution.visual.game_state import GameState
 
 from .creature_param import CreatureParam
 
@@ -171,7 +172,7 @@ class CreatureArray:
 
     def add_with_deaths(self, dead: Union[None, Tensor], alive: Union[None, Tensor], 
                         num_dead: int, other: Union[None, 'CreatureArray'], 
-                        creature: Union[None, int]) -> Union[None, int]:
+                        state: GameState) -> Union[None, int]:
         """Once we have determined which creatures are reproducing and which are dying, we need
         to re-order the memory to do this as efficiently as possible. Since copying is very expensive,
         we try our best to minimize the number of copies. We have 3 separate strategies for 
@@ -192,9 +193,9 @@ class CreatureArray:
         
         sl = slice(self.start_idx, self.start_idx + self.population)  # current block
         self.alive[sl] = alive.float()  # update which creatures are alive
-        if creature is not None:  # if selected_creature is dead, then we can set it to None
-            if dead[creature]:
-                creature = None
+        if state.selected_creature is not None:  # if selected_creature is dead, then we can set it to None
+            if dead[state.selected_creature]:
+                state.selected_creature = None
         num_reproducers = other.population if other is not None else 0  # how many new creatures we are adding
         n_after = self.population - num_dead + num_reproducers  # how many creatures are alive after this step
         
@@ -202,9 +203,9 @@ class CreatureArray:
         if n_after == self.cfg.max_creatures:
             self.add_with_deaths_max_array(dead, other)
         elif num_reproducers >= num_dead:
-            creature = self.add_with_deaths_fill_gaps(dead, other, num_dead, num_reproducers, sl, creature)
+            self.add_with_deaths_fill_gaps(dead, other, num_dead, num_reproducers, sl, state)
         else:
-            creature = self.add_with_deaths_move_block(other, n_after, num_reproducers, sl, creature)
+            self.add_with_deaths_move_block(other, n_after, num_reproducers, sl, state)
         
         # update self.alive to reflect the new block
         self.alive[self.start_idx : self.start_idx+n_after] = 1.0  # mark the new creatures as alive
@@ -212,7 +213,6 @@ class CreatureArray:
         self.alive[self.start_idx+n_after:] = 0.0
         # slice the underlying data arrays to give the current updated data
         self.reindex(self.start_idx, n_after)
-        return creature
 
     def add_with_deaths_max_array(self, dead: Tensor, other: 'CreatureArray'):
         """If the number of creatures after death and reproduction will fill the entire buffer,
@@ -233,7 +233,7 @@ class CreatureArray:
         self.write_new_data(missing, other)
         
     def add_with_deaths_fill_gaps(self, dead: Tensor, other: 'CreatureArray',
-                                  num_dead: int, num_reproducers: int, sl: slice, creature: int) -> int:
+                                  num_dead: int, num_reproducers: int, sl: slice, state: GameState):
         """If we add more creatures than we kill in this step, then we will be able to fill in all the
         gaps created in the block created by the dead creatures. Then, we put the remaining creatures on
         either side of the new block. We try our best to move the start of the block as far back to the
@@ -245,9 +245,8 @@ class CreatureArray:
             num_dead: The number of creatures that are dead.
             num_reproducers: The number of creatures that are reproducing.
             sl: The slice corresponding to the current block of creatures.
-            creature: The index of the selected creature (if any).
-        Returns:
-            The updated index of the selected creature (or None if it died)."""
+            state: GameState that includes selected creature (which this updates)
+        """
         self.algos['fill_gaps'] += 1
         missing = dead.nonzero().squeeze(1) + self.start_idx   # missing spots in current block
         num_added = num_reproducers - num_dead   # how many we need to add to the sides
@@ -268,12 +267,11 @@ class CreatureArray:
         self.write_new_data(missing, other)
         
         # block has been adjusted backwards, so we need to push the pointer forward
-        if creature is not None:
-            creature += (sl.start - self.start_idx)
-        return creature
+        if state.selected_creature is not None:
+            state.selected_creature += (sl.start - self.start_idx)
     
     def add_with_deaths_move_block(self, other: 'CreatureArray', n_after: int, 
-                                   num_reproducers: int, sl: slice, creature: int) -> int:
+                                   num_reproducers: int, sl: slice, state: GameState):
         """If we have more dead creatures than new creatures, then we need to totally restart our
         block and find the best window of `n_after` creatures that we should put our block in. We
         do this by finding which window of `n_after` creatures already contains the most creatures.
@@ -285,9 +283,8 @@ class CreatureArray:
             n_after: The number of creatures that are alive after this step.
             num_reproducers: The number of creatures that are reproducing.
             sl: The slice corresponding to the current block of creatures.
-            creature: The index of the selected creature (if any).
-        Returns:
-            The updated index of the selected creature (or None if it died)."""
+            state: GameState that includes selected creature (which this updates)
+        """
         self.algos['move_block'] += 1
         window = torch.ones(n_after, device=self.device, dtype=torch.float)
         # count the number of alive creatures in each window of size n_after
@@ -314,16 +311,15 @@ class CreatureArray:
         self.start_idx = best_start  # update the start of the block to the best window found
         
         # update the selected creature
-        if creature is not None:
+        if state.selected_creature is not None:
             # find its absolute index into the entire underlying data buffer
-            discontig_creature = creature + sl.start
+            discontig_creature = state.selected_creature + sl.start
             # if it is outside the best window, find where it is being moved to
             move_idx = (outer_idxs == discontig_creature).nonzero().squeeze(1)
             if move_idx.shape[0] > 0:
                 discontig_creature = old_idxs[move_idx].item()
             # turn it back into a contiguous index
-            creature = discontig_creature - self.start_idx
-        return creature
+            state.selected_creature = discontig_creature - self.start_idx
     
     def state_dict(self, quantized=True):
         variables = {}

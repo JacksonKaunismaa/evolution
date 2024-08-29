@@ -1,16 +1,17 @@
 import glm
-import moderngl as mgl
+from moderngl import Context
 import numpy as np
-import moderngl_window as mglw
+from moderngl_window import BaseWindow
 import numpy as pn
 
 
-from evolution.core import config
-from evolution.core import gworld
+from evolution.core.config import Config
+from evolution.core.gworld import GWorld
 from evolution.utils.subscribe import Subscriber
+from evolution.visual.game_state import GameState
 
 class Camera(Subscriber):
-    def __init__(self, ctx: mgl.Context, cfg: config.Config, window: mglw.BaseWindow, world: gworld.GWorld):
+    def __init__(self, cfg: Config, ctx: Context, window: BaseWindow, world: GWorld):
         super().__init__()
         world.publisher.subscribe(self)
         

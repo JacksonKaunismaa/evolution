@@ -15,12 +15,13 @@ from evolution.cuda import cuda_utils
 from evolution.cuda.cuda_utils import cuda_profile
 from evolution.utils.subscribe import Publisher
 from evolution.utils.quantize import quantize, QuantizedData
+from evolution.visual.game_state import GameState
 
 from .config import Config, simple_cfg
 from .creatures.creatures import Creatures
 
 class GWorld():
-    def __init__(self, cfg: Config, device='cuda'):
+    def __init__(self, cfg: Config, state: GameState=None, device='cuda'):
         self.cfg = cfg
         self.device = device
         self.food_grid = torch.rand((cfg.size, cfg.size), device=self.device) * cfg.init_food_scale
@@ -30,16 +31,17 @@ class GWorld():
         self.creatures: Creatures = Creatures(cfg, self.kernels, self.device)
         self.creatures.generate_from_cfg()
         self.n_maxxed = 0
+        
+        self.state = state
+        if state is None:
+            self.state = GameState()
 
         # we keep track of these objects so that we can visualize them
         self.celled_world = None    # array of grid cells for fast object clicking
-        self.increasing_food_decr_enabled = False
         self.outputs = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions = None   # the set of ray collisions for each creature
-        self._selected_cell = None
         self.dead_updated = False
         self.time = 0
-        self.all_hits = {'cells_hit': [], 'organisms_checked': [], 'cache_hits': []}
         self.publisher = Publisher()
 
     @cuda_profile
@@ -114,23 +116,6 @@ class GWorld():
         # self.all_hits['cache_hits'].append(cache_hits.cpu().numpy())
         return collisions
     
-    def get_selected_cell_food(self):
-        return self.central_food_grid[self._selected_cell[1], self._selected_cell[0]].item()
-    
-    def set_selected_cell(self, cell):
-        if cell is None:
-            self._selected_cell = cell
-            return
-        self._selected_cell = (int(cell.x), int(cell.y))
-        print("Init Cell food:", self.get_selected_cell_food())
-        # print(self.central_food_grid)
-        
-    def get_selected_creature(self):
-        return self.creatures.get_selected_creature()
-    
-    def set_selected_creature(self, creature):  
-        self.creatures.set_selected_creature(creature)
-    
     
     def click_creature(self, mouse_pos) -> int:
         """Return the index of the creature clicked on, or None if no creature was clicked."""
@@ -154,12 +139,12 @@ class GWorld():
     @cuda_profile
     def rotate_creatures(self, outputs):
         """Rotate all creatures based on their outputs."""
-        self.creatures.rotate_creatures(outputs)
+        self.creatures.rotate_creatures(outputs, self.state)
     
     @cuda_profile
     def only_move_creatures(self, outputs):
         """Rotate and move all creatures"""
-        self.creatures.move_creatures(outputs)
+        self.creatures.move_creatures(outputs, self.state)
 
     def move_creatures(self, outputs):
         """Rotate and move all creatures"""
@@ -210,7 +195,7 @@ class GWorld():
     @cuda_profile
     def only_do_attacks(self, tr_results):
         # update health and energy
-        self.creatures.do_attacks(tr_results)
+        self.creatures.do_attacks(tr_results, self.state)
 
     def do_attacks(self, tr_results):
         # update health and energy
@@ -218,7 +203,7 @@ class GWorld():
 
     @cuda_profile
     def creatures_eat_grow(self):
-        self.creatures.eat_grow(self.food_grid, self._selected_cell)        
+        self.creatures.eat_grow(self.food_grid, self.state)        
 
 
     @property
@@ -265,7 +250,7 @@ class GWorld():
     
     @cuda_profile
     def fused_kill_reproduce(self):
-        self.creatures.fused_kill_reproduce(self.central_food_grid)
+        self.creatures.fused_kill_reproduce(self.central_food_grid, self.state)
         self.dead_updated = False
 
     def update_creatures(self):
@@ -318,7 +303,7 @@ class GWorld():
         #         self.visualize(None, show_rays=False) 
 
         self.time += 1
-        if self.increasing_food_decr_enabled:
+        if self.state.increasing_food_decr:
             self.cfg.food_cover_decr += self.cfg.food_cover_decr_incr_amt
         return True
 
