@@ -5,7 +5,7 @@ import moderngl_window as mglw
 
 from .camera import Camera
 
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 from evolution.core.gworld import GWorld
 
 if TYPE_CHECKING:

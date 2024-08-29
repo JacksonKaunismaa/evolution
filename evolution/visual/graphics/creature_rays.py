@@ -54,7 +54,7 @@ class CreatureRays(Subscriber):
         index_buffer=self.hbox_ibo)
 
     def _update(self, creature_id):
-        if creature_id is None:
+        if not creature_id:
             self.visible = False
             return
         self.visible = True

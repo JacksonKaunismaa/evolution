@@ -10,7 +10,7 @@ from evolution.utils.batched_random import BatchedRandom
 from evolution.cuda.cuda_utils import cuda_profile
 from evolution.cuda.cu_algorithms import CUDAKernelManager
 from evolution.core.config import Config
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 
 from .creature_array import CreatureArray
 
@@ -126,6 +126,8 @@ class Creatures(CreatureArray):
         Finally, we allow food in all cells to grow by an amount proportional to its distance from
         the 'maximum' food level. Food levels beyond the maximum food level are decayed 
         proportionally to how high above the maximum they are."""
+        state.selected_creature.extract_pre_eat_state(self.energies)
+        state.selected_cell.extract_pre_grow_state(food_grid)
         
         pos = self.positions.int() + self.pad
         
@@ -136,9 +138,6 @@ class Creatures(CreatureArray):
         self.kernels('setup_eat_grid', blocks_per_grid, threads_per_block,
                      pos, self.eat_pcts, pct_eaten, self.population, food_grid.shape[0])
         
-        if state.selected_creature is not None:
-            prev_energy = self.energies[state.selected_creature].item()
-        
         # calculate how much food each creature eats, add 1 to ages, update energies, take away living costs
         food_grid_updates = torch.zeros_like(food_grid, device=self.device)
         alive_costs = torch.zeros(self.population, device=self.device, dtype=torch.float32)
@@ -146,17 +145,6 @@ class Creatures(CreatureArray):
                      pos, self.eat_pcts, pct_eaten, self.sizes, food_grid,
                      food_grid_updates, alive_costs, self.energies, self.healths, self.ages, self.age_mults,
                      self.population, food_grid.shape[0], self.cfg.food_cover_decr)
-        if state.selected_creature is not None:
-            creat_pos = pos[state.selected_creature]
-            # print(creat_pos, self.selected_creature)
-            print(f"\tAge: {self.ages[state.selected_creature].item()}"
-                  f"\n\tAge Mult: {self.age_mults[state.selected_creature].item()}"
-                  f"\n\tChildren: {self.n_children[state.selected_creature].item()}"
-                  f"\n\tAlive Costs: {alive_costs[state.selected_creature].item()}"
-                  f"\n\tEat pct: {self.eat_pcts[state.selected_creature].item()}"
-                  f"\n\tFood Eaten: {self.energies[state.selected_creature].item() - prev_energy}"
-                  f"\n\tCell Energy: {food_grid[creat_pos[1], creat_pos[0]].item()}"
-                  f"\n\tEnergy: {self.energies[state.selected_creature].item()}")
         
         # grow food, apply eating costs
         # step_size = (torch.sum(alive_costs)/self.cfg.max_food/(self.cfg.size**2)).item()
@@ -166,26 +154,12 @@ class Creatures(CreatureArray):
         blocks_per_grid = (food_grid.shape[0] // threads_per_block[0] + 1, 
                            food_grid.shape[1] // threads_per_block[1] + 1)
         
-        if state.selected_cell is not None:
-            prev_food = food_grid[state.selected_cell[1] + self.pad, state.selected_cell[0] + self.pad].item()
             
         self.kernels('grow', blocks_per_grid, threads_per_block,
                      food_grid_updates, food_grid, food_grid.shape[0], self.pad, step_size)
-
-        if state.selected_cell is not None:
-            cell_pct_eaten = pct_eaten[state.selected_cell[1]+self.pad, state.selected_cell[0]+self.pad]
-            cover_cost = self.cfg.food_cover_decr_pct * self.cfg.food_cover_decr * cell_pct_eaten
-            eaten_amt = food_grid_updates[state.selected_cell[1]+self.pad, state.selected_cell[0]+self.pad] - cover_cost
-            post_growth_food = food_grid[state.selected_cell[1]+self.pad, state.selected_cell[0]+self.pad]
-            pre_grow_food = prev_food - cover_cost - eaten_amt
-            print(f"Cell at {state.selected_cell}:"
-                  f"\n\pct_eatn: {cell_pct_eaten}"
-                  f"\n\tcover: {cover_cost}"
-                  f"\n\teaten: {eaten_amt}"
-                  f"\n\tpre-growth:  {pre_grow_food}"
-                  f"\n\tpost-growth: {post_growth_food}"
-                  f"\n\tstep_size: {step_size}"
-                  f"\n\tgrowth_amt: {post_growth_food - pre_grow_food}")
+        
+        state.selected_cell.extract_post_grow_state(pct_eaten, food_grid, food_grid_updates, step_size)
+        state.selected_creature.extract_post_eat_state(pos, alive_costs, food_grid, self)
 
 
     def extract_food_windows(self, indices, food_grid):
@@ -241,8 +215,7 @@ class Creatures(CreatureArray):
         positive is leftwards. We also take a small energy penalty for rotating."""
         # rotation => need to rotate the rays and the object's direction
         
-        if state.selected_creature is not None:
-            energy_before = self.energies[state.selected_creature].item()
+        state.selected_creature.extract_pre_rotate_state(self.energies)
         
         block_size = 512
         grid_size = self.population // block_size + 1
@@ -251,16 +224,11 @@ class Creatures(CreatureArray):
                      outputs, self.sizes, self.energies, self.population, outputs.shape[1],
                      rotation_matrix)
         
-        if state.selected_creature is not None:
-            print(f"Creature {state.selected_creature}:"
-                  f"\n\tRotate Logit: {outputs[state.selected_creature, 1].item()}"
-                  f"\n\tRotate angle: {np.arccos(rotation_matrix[state.selected_creature,0,0].item())}"
-                  f"\n\tRotate Energy: {energy_before - self.energies[state.selected_creature].item()}\n")
-        
-
         # rotate the rays and head directions
         self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
         self.head_dirs[:] = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
+        
+        state.selected_creature.extract_post_rotate_state(outputs[:,1], rotation_matrix, self.energies)
 
     def move_creatures(self, outputs: Tensor, state: GameState):
         """Given the neural network outputs `outputs`, move each creature accordingly.
@@ -273,15 +241,12 @@ class Creatures(CreatureArray):
         # maybe add some acceleration/velocity thing instead
         move = self.cfg.move_amt(outputs[:,0], self.sizes)
         move_cost = self.cfg.move_cost(move, self.sizes)
-        #logging.info(f"Move amt: {move}")
-        #logging.info(f"Move cost: {move_cost}")
+
         self.energies -= move_cost
         self.positions += self.head_dirs * move.unsqueeze(1)   # move the object's to new position
         self.positions.normalize()# = torch.clamp(self.positions, *self.posn_bounds)  # don't let it go off the edge
-        if state.selected_creature is not None:
-            print(f"\tMove Logit: {outputs[state.selected_creature, 0].item()}"
-                  f"\n\tMove Amt: {move[state.selected_creature].item()}"
-                  f"\n\tMove Energy: {move_cost[state.selected_creature].item()}\n")
+        
+        state.selected_creature.extract_move_state(outputs[:,0], move, move_cost, self.energies)
             
 
     def do_attacks(self, attacks: Tensor, state: GameState):
@@ -290,18 +255,8 @@ class Creatures(CreatureArray):
         organism is taking from other things attacking it. We update each 
         creature's health and energy accordingly."""
 
-        # print('nrg_before', self.energies)
-        # #logging.info(f'Attacks:\n{attacks}')
-        # self.energies -= attacks[:,0] * self.sizes * 0.1  # takes 0.1 * size to do an attack
         attack_cost = self.cfg.attack_cost(attacks[:,0], self.sizes)
-        # attack_cost = attacks[:, 0] * self.sizes * self.cfg.attack_cost.mul
         self.energies -= attack_cost
-        #logging.info(f"Attack energy: {attack_cost}")
         self.healths -= attacks[:,1]
-        
-        if state.selected_creature is not None:
-            print(f"\tNum attacking: {attacks[state.selected_creature, 0].item()}"
-                  f"\n\tDamage Taken: {attacks[state.selected_creature, 1].item()}"
-                  f"\n\tHealth: {self.healths[state.selected_creature].item()}"
-                  f"\n\tAttack Energy: {attack_cost[state.selected_creature].item()}\n")
-            
+
+        state.selected_creature.extract_attack_state(attacks, attack_cost, self.energies, self.healths)

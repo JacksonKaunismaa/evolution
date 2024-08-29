@@ -15,7 +15,7 @@ from evolution.cuda import cuda_utils
 from evolution.cuda.cuda_utils import cuda_profile
 from evolution.utils.subscribe import Publisher
 from evolution.utils.quantize import quantize, QuantizedData
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 
 from .config import Config, simple_cfg
 from .creatures.creatures import Creatures

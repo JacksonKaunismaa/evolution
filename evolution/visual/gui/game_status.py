@@ -4,7 +4,7 @@ from moderngl_window.integrations.imgui import ModernglWindowRenderer
 
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 
 from .ui_element import UIElement
 

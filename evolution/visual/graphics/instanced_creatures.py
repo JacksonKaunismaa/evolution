@@ -5,7 +5,7 @@ import numpy as np
 
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 from evolution.cuda import cuda_utils
 from evolution.utils import loading
 from evolution.utils.subscribe import Subscriber

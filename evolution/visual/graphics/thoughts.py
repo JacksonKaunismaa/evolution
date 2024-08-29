@@ -8,7 +8,7 @@ from evolution.core.gworld import GWorld
 from evolution.cuda import cuda_utils
 from evolution.utils import loading
 from evolution.utils.subscribe import Subscriber
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 
 
 class ThoughtsVisualizer(Subscriber):
@@ -87,7 +87,7 @@ class ThoughtsVisualizer(Subscriber):
         ], index_buffer=self.thoughts_ibo)
 
     def _update(self, creature_id):
-        if creature_id is None:
+        if not creature_id:
             self.visible = False
             return
         self.visible = True

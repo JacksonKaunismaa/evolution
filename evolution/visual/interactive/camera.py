@@ -2,13 +2,12 @@ import glm
 from moderngl import Context
 import numpy as np
 from moderngl_window import BaseWindow
-import numpy as pn
 
 
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
 from evolution.utils.subscribe import Subscriber
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 
 class Camera(Subscriber):
     def __init__(self, cfg: Config, ctx: Context, window: BaseWindow, world: GWorld):
@@ -116,7 +115,7 @@ class Camera(Subscriber):
     
 
     def _update(self, creature_id):
-        if creature_id is None:
+        if not creature_id:
             return
         if self.following:
             self.position.xy = glm.vec2(self.world.creatures.positions[creature_id].cpu().numpy())

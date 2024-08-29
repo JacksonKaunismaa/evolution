@@ -1,34 +1,43 @@
+from typing import Tuple, Union
 import numpy as np
 
+
+from .creature_state import CreatureState
+from .cell_state import CellState
 
 from evolution.core.config import Config
 
 class GameState:
     """Tracks state that is relevant for control of the simulation, especially the visual aspects,
-    but only if it needs to be shared between different objects.
+    and if it needs to be shared between different objects (say the GUI and creatures.Creatures).
     """
     def __init__(self, cfg: Config):
         self.cfg = cfg
         
-        self._selected_cell = None
-        self.selected_creature = None
+        self._selected_cell = CellState(cfg)  
+        self._selected_creature = CreatureState()
         
         self.increasing_food_decr = False
         self._game_speed = 1
         self.game_paused = False
         self.creatures_visible = True
         self.hitboxes_enabled = False
+        
+    @property
+    def selected_creature(self) -> CreatureState:
+        return self._selected_creature
+    
+    @selected_creature.setter
+    def selected_creature(self, creature: Union[int, None]):
+        self._selected_creature.set_creature(creature)
     
     @property
-    def selected_cell(self):
+    def selected_cell(self) -> CellState:
         return self._selected_cell
     
     @selected_cell.setter
-    def selected_cell(self, cell):
-        if cell is None:
-            self._selected_cell = cell
-            return
-        self._selected_cell = (int(cell.x), int(cell.y))
+    def selected_cell(self, cell: Union[Tuple[int, int], None]):
+        self._selected_cell.set_cell(cell)
         
     @property
     def game_speed(self):

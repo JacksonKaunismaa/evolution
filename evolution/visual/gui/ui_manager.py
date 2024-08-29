@@ -6,7 +6,7 @@ from moderngl_window import BaseWindow
 
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 
 from .game_status import GameStatus
 from .ui_element import UIElement

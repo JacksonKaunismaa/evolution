@@ -10,7 +10,7 @@ from evolution.utils.batched_random import BatchedRandom
 from evolution.utils.quantize import quantize, QuantizedData
 from evolution.core.config import Config
 from evolution.cuda.cuda_utils import cuda_profile
-from evolution.visual.game_state import GameState
+from evolution.state.game_state import GameState
 
 from .creature_param import CreatureParam
 
@@ -193,7 +193,7 @@ class CreatureArray:
         
         sl = slice(self.start_idx, self.start_idx + self.population)  # current block
         self.alive[sl] = alive.float()  # update which creatures are alive
-        if state.selected_creature is not None:  # if selected_creature is dead, then we can set it to None
+        if state.selected_creature:  # if selected_creature is dead, then we can set it to None
             if dead[state.selected_creature]:
                 state.selected_creature = None
         num_reproducers = other.population if other is not None else 0  # how many new creatures we are adding
@@ -267,7 +267,7 @@ class CreatureArray:
         self.write_new_data(missing, other)
         
         # block has been adjusted backwards, so we need to push the pointer forward
-        if state.selected_creature is not None:
+        if state.selected_creature:
             state.selected_creature += (sl.start - self.start_idx)
     
     def add_with_deaths_move_block(self, other: 'CreatureArray', n_after: int, 
@@ -311,7 +311,7 @@ class CreatureArray:
         self.start_idx = best_start  # update the start of the block to the best window found
         
         # update the selected creature
-        if state.selected_creature is not None:
+        if state.selected_creature:
             # find its absolute index into the entire underlying data buffer
             discontig_creature = state.selected_creature + sl.start
             # if it is outside the best window, find where it is being moved to

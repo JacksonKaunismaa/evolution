@@ -20,11 +20,11 @@ from .graphics.instanced_creatures import InstancedCreatures
 from .graphics.creature_rays import CreatureRays
 from .graphics.brain import BrainVisualizer
 from .graphics.thoughts import ThoughtsVisualizer
-from .game_state import GameState
 from .gui.ui_manager import UIManager
 from .fps import FPSTracker
 
 
+from evolution.state.game_state import GameState
 from evolution.core import config
 from evolution.core import gworld
 from evolution.cuda.cu_algorithms import checkCudaErrors
