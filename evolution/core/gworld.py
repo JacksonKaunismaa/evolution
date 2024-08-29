@@ -34,7 +34,9 @@ class GWorld():
         
         self.state = state
         if state is None:
-            self.state = GameState()
+            self.state = GameState(cfg)
+        self.state.set_creatures_reference(self.creatures)
+        
 
         # we keep track of these objects so that we can visualize them
         self.celled_world = None    # array of grid cells for fast object clicking

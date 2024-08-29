@@ -279,6 +279,8 @@ class CreatureParam:
         return self.data.unsqueeze(*args, **kwargs)
     
     def dim(self) -> int:
+        if self.is_list:
+            return [d.dim() for d in self.data]
         return self.data.dim()
     
     def data_ptr(self) -> int:

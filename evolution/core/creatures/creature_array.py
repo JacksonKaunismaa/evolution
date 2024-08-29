@@ -195,6 +195,7 @@ class CreatureArray:
         self.alive[sl] = alive.float()  # update which creatures are alive
         if state.selected_creature:  # if selected_creature is dead, then we can set it to None
             if dead[state.selected_creature]:
+                # print("select is dead")
                 state.selected_creature = None
         num_reproducers = other.population if other is not None else 0  # how many new creatures we are adding
         n_after = self.population - num_dead + num_reproducers  # how many creatures are alive after this step
@@ -268,6 +269,7 @@ class CreatureArray:
         
         # block has been adjusted backwards, so we need to push the pointer forward
         if state.selected_creature:
+            # print("filling gaps selected")
             state.selected_creature += (sl.start - self.start_idx)
     
     def add_with_deaths_move_block(self, other: 'CreatureArray', n_after: int, 
@@ -312,6 +314,7 @@ class CreatureArray:
         
         # update the selected creature
         if state.selected_creature:
+            # print("move block selected")
             # find its absolute index into the entire underlying data buffer
             discontig_creature = state.selected_creature + sl.start
             # if it is outside the best window, find where it is being moved to

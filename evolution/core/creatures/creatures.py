@@ -126,7 +126,7 @@ class Creatures(CreatureArray):
         Finally, we allow food in all cells to grow by an amount proportional to its distance from
         the 'maximum' food level. Food levels beyond the maximum food level are decayed 
         proportionally to how high above the maximum they are."""
-        state.selected_creature.extract_pre_eat_state(self.energies)
+        state.selected_creature.extract_pre_eat_state()
         state.selected_cell.extract_pre_grow_state(food_grid)
         
         pos = self.positions.int() + self.pad
@@ -159,7 +159,7 @@ class Creatures(CreatureArray):
                      food_grid_updates, food_grid, food_grid.shape[0], self.pad, step_size)
         
         state.selected_cell.extract_post_grow_state(pct_eaten, food_grid, food_grid_updates, step_size)
-        state.selected_creature.extract_post_eat_state(pos, alive_costs, food_grid, self)
+        state.selected_creature.extract_post_eat_state(pos, alive_costs, food_grid)
 
 
     def extract_food_windows(self, indices, food_grid):
@@ -215,7 +215,7 @@ class Creatures(CreatureArray):
         positive is leftwards. We also take a small energy penalty for rotating."""
         # rotation => need to rotate the rays and the object's direction
         
-        state.selected_creature.extract_pre_rotate_state(self.energies)
+        state.selected_creature.extract_pre_rotate_state()
         
         block_size = 512
         grid_size = self.population // block_size + 1
@@ -228,7 +228,7 @@ class Creatures(CreatureArray):
         self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
         self.head_dirs[:] = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
         
-        state.selected_creature.extract_post_rotate_state(outputs[:,1], rotation_matrix, self.energies)
+        state.selected_creature.extract_post_rotate_state(outputs[:,1], rotation_matrix)
 
     def move_creatures(self, outputs: Tensor, state: GameState):
         """Given the neural network outputs `outputs`, move each creature accordingly.
@@ -246,7 +246,7 @@ class Creatures(CreatureArray):
         self.positions += self.head_dirs * move.unsqueeze(1)   # move the object's to new position
         self.positions.normalize()# = torch.clamp(self.positions, *self.posn_bounds)  # don't let it go off the edge
         
-        state.selected_creature.extract_move_state(outputs[:,0], move, move_cost, self.energies)
+        state.selected_creature.extract_move_state(outputs[:,0], move, move_cost)
             
 
     def do_attacks(self, attacks: Tensor, state: GameState):
@@ -259,4 +259,4 @@ class Creatures(CreatureArray):
         self.energies -= attack_cost
         self.healths -= attacks[:,1]
 
-        state.selected_creature.extract_attack_state(attacks, attack_cost, self.energies, self.healths)
+        state.selected_creature.extract_attack_state(attacks, attack_cost)

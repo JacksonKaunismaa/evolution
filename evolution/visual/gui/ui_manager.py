@@ -9,6 +9,7 @@ from evolution.core.gworld import GWorld
 from evolution.state.game_state import GameState
 
 from .game_status import GameStatus
+from .creature_info import CreatureInfo
 from .ui_element import UIElement
 
 
@@ -20,6 +21,7 @@ class UIManager:
         self.imgui = ModernglWindowRenderer(window)
         
         self.game_status = GameStatus(cfg, world, window, state)
+        self.creature_info = CreatureInfo(cfg, world, window, state)
         
     def __setattr__(self, name, value):
         if isinstance(value, UIElement):

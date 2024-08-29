@@ -59,7 +59,7 @@ class Controller:
                 self.state.toggle_pause()
 
             if key == self.wnd.keys.RIGHT:   # force step simulation by 1 
-                self.world.step(n=1)
+                self.world.step()
 
             if key == self.wnd.keys.C:    # save snapshot of current state to 'game.ckpt'
                 self.world.write_checkpoint('game.ckpt')
@@ -73,6 +73,10 @@ class Controller:
             if key == self.wnd.keys.G:    # jump to Genghis Khan (guy with most offspring)
                 most_kids = self.world.creatures.n_children.argmax()
                 self.set_selected_creature(most_kids)
+                
+            if key == self.wnd.keys.M:   # jump to Methuselah (oldest creature)
+                oldest = self.world.creatures.ages.argmax()
+                self.set_selected_creature(oldest)
                 
             if key == self.wnd.keys.O:   # jump to oldest creature
                 oldest = self.world.creatures.ages.argmax()

@@ -1,4 +1,4 @@
-from typing import Tuple, Union
+from typing import Tuple, Union, TYPE_CHECKING
 import numpy as np
 
 
@@ -6,6 +6,9 @@ from .creature_state import CreatureState
 from .cell_state import CellState
 
 from evolution.core.config import Config
+
+if TYPE_CHECKING:
+    from evolution.core.creatures.creature_array import CreatureArray
 
 class GameState:
     """Tracks state that is relevant for control of the simulation, especially the visual aspects,
@@ -22,6 +25,12 @@ class GameState:
         self.game_paused = False
         self.creatures_visible = True
         self.hitboxes_enabled = False
+        
+    def set_creatures_reference(self, creatures: 'CreatureArray'):
+        """Sets the reference to the creatures array so that we can extract information from it.
+        This must be done after __init__ since creating Creatures requires reference to the global
+        GameState object (of which this is a part), so we have a circular dependency."""
+        self._selected_creature.set_creatures_reference(creatures)
         
     @property
     def selected_creature(self) -> CreatureState:
