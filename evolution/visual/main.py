@@ -22,6 +22,7 @@ from .graphics.brain import BrainVisualizer
 from .graphics.thoughts import ThoughtsVisualizer
 from .game_state import GameState
 from .gui.ui_manager import UIManager
+from .fps import FPSTracker
 
 
 from evolution.core import config
@@ -53,6 +54,7 @@ class Game:
         self.brain_visual = BrainVisualizer(cfg, self.ctx, self.world, self.shaders)
         self.thoughts_visual = ThoughtsVisualizer(cfg, self.ctx, self.world, window, self.state, self.shaders)
         self.controller = Controller(self.world, window, self.camera, self.state)
+        self.fps_tracker = FPSTracker()
         
         self.ui_manager = UIManager(cfg, self.world, window, self.state)
         
@@ -124,7 +126,10 @@ class Game:
         self.thoughts_visual.render()
         
         self.ui_manager.render()
+        
+        self.fps_tracker.tick()
 
+        self.wnd.title = f'CUDA-Evolution - FPS: {self.fps_tracker.fps:.2f}'
         # self.controller.tick()
         
 
@@ -148,24 +153,12 @@ def main(cfg=None):
     game.world.compute_decisions()
 
     populated = True
-
-    curr_fps = 0
-    i = 0
    
     while not window.is_closing and populated:
         window.clear()
         game.render()
-        # print(window.frames)
-        # time.sleep(5.0)
-        window.title = f'Epoch: {game.world.time} | Population: {game.world.population} | FPS: {curr_fps:.2f}'
+
         window.swap_buffers()
         game.ctx.viewport = (0, 0, window.width, window.height)
-        # window.set_default_viewport()
-        # window.process_events()
-        # time.sleep(0.1)
+
         populated = game.step()
-        # i += 1
-        # if i % 5 == 4:
-        #     next_time = timer.SDL_GetTicks()
-        #     curr_fps = 5.0 / (next_time - curr_time) * 1000.0
-        #     curr_time = next_tim
