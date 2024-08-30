@@ -102,34 +102,19 @@ class Controller:
                 self.state.toggle_hitboxes()
 
     def set_selected_creature(self, creature):
-        # print(f"Setting to creature {creature}"
-        #       f"\n\tPos: {self.game.world.creatures.positions[creature]}"
-        #       f"\n\tSize: {self.game.world.creatures.sizes[creature]}"
-        #       f"\n\tHealth: {self.game.world.creatures.healths[creature]}"
-        #       f"\n\tEnergy: {self.game.world.creatures.energies[creature]}")
         self.camera.following = True
         self.state.selected_creature = creature
-        # if creature is not None:
-        #     print('collision', self.game.world.collisions[creature])
-        #     print('rays', self.game.world.creatures.rays[creature])
-        #     posn = self.game.world.creatures.positions[creature]
-        #     # print('position', posn)
-        #     grid_posn = (posn // self.game.world.cfg.cell_size).long()
-        #     # print('cell_size', self.game.world.cfg.cell_size)
-        #     # print('grid_center',self.game.world.celled_world[1].shape, self.game.world.celled_world[1][grid_posn[1], grid_posn[0]])
-        #     # print('grid_position', self.game.world.celled_world[1][grid_posn[1]-4:grid_posn[1]+4, grid_posn[0]-4:grid_posn[0]+4])
+        if creature is not None:   # if setting creature, set cell to None
+            self.set_selected_cell(None)
         
     def set_selected_cell(self, xy):
         self.state.selected_cell = xy
+        if xy is not None:   # if setting cell None, set creature to None
+            self.set_selected_creature(None)
         
     def mouse_press_event_func(self, x, y, button):
         # need to store everything in pixel coords so that we are closest to the actual input 
         # this avoids jittering and weird camera behavior when dragging the map
-        # print('posn', self.game.world.creatures.positions)
-        # print('size', self.game.world.creatures.sizes)
-        # print('color', self.game.world.creatures.colors)
-        # print('head_dir', self.game.world.creatures.head_dirs)
-        # print('rays', self.game.world.creatures.rays)
         if button == self.wnd.mouse.left:
             self.click_pos = glm.vec2(x, y)
             self.camera_pos = self.camera.position.xy
@@ -139,16 +124,9 @@ class Controller:
             if creature_id is not None:
                 self.set_selected_creature(creature_id)
             elif self.camera.click_in_bounds(game_click):
-                self.state.selected_cell = game_click
+                self.set_selected_cell(game_click)
             else:
-                self.state.selected_cell = None
-        # print(self.camera.cfg.food_cover_decr)
-        
-        # print(self.game.world.creatures.positions)
-        # print(self.game.world.creatures.sizes)
-            # print(game_click, self.game.world.creatures.positions, self.game.world.creatures.rays, creature)
-            # if creature is not None:
-            # self.game.select_creature(creature)
+                self.set_selected_cell(None)
             
     def mouse_scroll_event_func(self, xoffset, yoffset):
         self.camera.zoom_into_point(yoffset, self.mouse_pos)

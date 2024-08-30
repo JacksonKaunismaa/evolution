@@ -36,8 +36,8 @@ class Game:
     def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders', load_path=None):
         # super().__init__(**kwargs)
         self.wnd: mglw.BaseWindow = window
-        self.state = GameState(cfg)
-        self.world: gworld.GWorld = gworld.GWorld(cfg, self.state)
+        self.world: gworld.GWorld = gworld.GWorld(cfg)
+        self.state = self.world.state
         
         if load_path is not None:
             self.world.load_checkpoint(load_path)

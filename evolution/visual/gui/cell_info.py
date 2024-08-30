@@ -9,22 +9,22 @@ from evolution.state.game_state import GameState
 from .ui_element import UIElement
 
 
-class CreatureInfo(UIElement):
+class CellInfo(UIElement):
     def __init__(self, cfg: Config, world: GWorld, window: BaseWindow, state: GameState):
         self.cfg = cfg
         self.world = world
         self.state = state
         self.wnd = window
         self.init_size = self.wnd.size
-        self.n_lines = 6
+        self.n_lines = 1
         self.width = 250
         self.y_pos = 0
-        self.name = "Creature Stats"
+        self.name = "Cell Stats"
         
     def render(self):
         # Set the position dynamically based on collapsing header state
-        creat = self.state.selected_creature
-        if not creat:   # if its not visible, don't show anything
+        cell = self.state.selected_cell
+        if not cell:   # if its not visible, don't show anything
             return
         window_width, window_height = self.wnd.size
         
@@ -39,12 +39,7 @@ class CreatureInfo(UIElement):
         # self.collapsing_header_open = imgui.collapsing_header(self.name)[0]
         # Display the text when expanded
         # if self.collapsing_header_open:
-        imgui.text(f"Age: {creat.age}")
-        imgui.text(f"Energy: {creat.energy:.4f}")
-        imgui.text(f"Health: {creat.health:.4f}")
-        imgui.text(f"Age Multiplier: {creat.age_mult:.4f}")
-        imgui.text(f"Num Children: {creat.n_children}")
-        imgui.text(f"Size: {creat.size:.4f}")
+        imgui.text(f"Food {cell.food}")
 
 
         # End the ImGui window

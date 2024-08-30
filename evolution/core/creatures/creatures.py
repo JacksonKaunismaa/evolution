@@ -127,7 +127,7 @@ class Creatures(CreatureArray):
         the 'maximum' food level. Food levels beyond the maximum food level are decayed 
         proportionally to how high above the maximum they are."""
         state.selected_creature.extract_pre_eat_state()
-        state.selected_cell.extract_pre_grow_state(food_grid)
+        state.selected_cell.extract_pre_grow_state()
         
         pos = self.positions.int() + self.pad
         
@@ -158,8 +158,8 @@ class Creatures(CreatureArray):
         self.kernels('grow', blocks_per_grid, threads_per_block,
                      food_grid_updates, food_grid, food_grid.shape[0], self.pad, step_size)
         
-        state.selected_cell.extract_post_grow_state(pct_eaten, food_grid, food_grid_updates, step_size)
-        state.selected_creature.extract_post_eat_state(pos, alive_costs, food_grid)
+        state.selected_cell.extract_post_grow_state(pct_eaten, food_grid_updates, step_size)
+        state.selected_creature.extract_post_eat_state(pos, alive_costs)
 
 
     def extract_food_windows(self, indices, food_grid):

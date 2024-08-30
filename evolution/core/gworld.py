@@ -21,7 +21,7 @@ from .config import Config, simple_cfg
 from .creatures.creatures import Creatures
 
 class GWorld():
-    def __init__(self, cfg: Config, state: GameState=None, device='cuda'):
+    def __init__(self, cfg: Config, device='cuda'):
         self.cfg = cfg
         self.device = device
         self.food_grid = torch.rand((cfg.size, cfg.size), device=self.device) * cfg.init_food_scale
@@ -32,12 +32,8 @@ class GWorld():
         self.creatures.generate_from_cfg()
         self.n_maxxed = 0
         
-        self.state = state
-        if state is None:
-            self.state = GameState(cfg)
-        self.state.set_creatures_reference(self.creatures)
+        self.state = GameState(cfg, self)
         
-
         # we keep track of these objects so that we can visualize them
         self.celled_world = None    # array of grid cells for fast object clicking
         self.outputs = None   # the set of neural outputs that decide what the creatures want to do

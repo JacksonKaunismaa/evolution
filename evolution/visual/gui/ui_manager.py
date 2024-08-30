@@ -10,6 +10,7 @@ from evolution.state.game_state import GameState
 
 from .game_status import GameStatus
 from .creature_info import CreatureInfo
+from .cell_info import CellInfo
 from .ui_element import UIElement
 
 
@@ -22,6 +23,7 @@ class UIManager:
         
         self.game_status = GameStatus(cfg, world, window, state)
         self.creature_info = CreatureInfo(cfg, world, window, state)
+        self.cell_info = CellInfo(cfg, world, window, state)
         
     def __setattr__(self, name, value):
         if isinstance(value, UIElement):
