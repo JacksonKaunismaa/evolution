@@ -27,12 +27,17 @@ class CreatureParam:
     as single Tensors, but every operation is applied to each Tensor in the list. This is useful
     e.g. for the weights of a neural network, where each layer has its own weight matrix."""
     def __init__(self, shape: Union[List[tuple], tuple], 
-                 init: Union[List[Tuple[str,...]], Tuple[str,...], None], 
+                 init: Union[List[Tuple[str,...]], Tuple[str,...], str, Callable, None], 
                  normalize_func: Callable, device: str,
                  mut_idx: Union[int, None]):
         self._shape = shape
         self.is_list = isinstance(shape, list)
-        self.init = init
+        
+        if isinstance(init, str):
+            self.init = (init,)
+        else:
+            self.init = init
+
         self.normalize_func = normalize_func
         self.device = device
         self._data = None  # the "base" data is the underlying memory
@@ -41,12 +46,10 @@ class CreatureParam:
         
         if mut_idx is not None:
             self.reproduce_type = 'mutable'
-        elif init is not None and init[0] == 'zero_':
-            self.reproduce_type = 'zeros'
-        elif init is not None and init[0] == 'fill_':
-            self.reproduce_type = 'fill'
-        elif init is not None and init[0] == 'normal_':
-            self.reproduce_type = 'randn'
+        elif isinstance(self.init, tuple):  # deals with normal_, zeros_, fill_, etc.
+            self.reproduce_type = 'fillable'
+        elif isinstance(init, Callable):
+            self.reproduce_type = 'size-dependent'
         else:
             self.reproduce_type = 'none'
         
@@ -76,13 +79,13 @@ class CreatureParam:
         self.max_size = cfg.max_creatures
         if self.is_list:
             self._data = [torch.empty(cfg.max_creatures, *shape, device=self.device) for shape in self._shape]
-            if self.init is None:
+            if self.reproduce_type == 'size-dependent':
                 return
             self.data = [getattr(data[:cfg.start_creatures], init[0])(*init[1:]) 
                             for data, init in zip(self._data, self.init)]
         else:
             self._data = torch.empty(cfg.max_creatures, *self._shape, device=self.device)
-            if self.init is None:
+            if self.reproduce_type == 'size-dependent':
                 return
             self.data = getattr(self._data[:cfg.start_creatures], self.init[0])(*self.init[1:])
         self.normalize()
@@ -110,35 +113,33 @@ class CreatureParam:
         self._data[:data.shape[0]] = data  # copy the data in to the appropriate spot
         self.data = self._data[:data.shape[0]]  # set the view to the underlying data
         
-    def init_from_data(self, data: Tensor):
-        """Initialize the current memory from a given Tensor. This is useful for e.g. energy and health,
-        which are initialized as a function of the size. Do this for offspring/children CreatureParams."""
-        self.data = data
+    def init_base_from_size(self, size: 'CreatureParam'):
+        """Initialize underlying memory and current memory from a given CreatureParam. This is useful
+        for e.g. energy and health, which are initialized as a function of the size. This should
+        only be called for root CreatureParams, and not for any offspring/children CreatureParams."""
+        data = self.init(size.data)
+        self.init_base_from_data(data)
+        
+    def reproduce_size(self, size: 'CreatureParam'):
+        """Deal with size-dependent initialization. This is used for e.g. energy and health, which are
+        initialized as a function of the size."""
+        child = CreatureParam(self._shape, None, self.normalize_func, self.device, self.mut_idx)
+        child.data = self.init(size.data)
+        return child
               
-    def reproduce_randn(self, name: str, rng: 'BatchedRandom'):
-        """Generate child traits from the current CreatureParam by sampling random noise."""
+    def reproduce_fillable(self, name: str, rng: 'BatchedRandom', num_reproducers: int):
+        """Generate child traits from the current CreatureParam by either sampling from random normal, or 
+        using some default Pytorch initialization function. The child traits are then normalized."""
         child = CreatureParam(self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
-        child.data = rng.fetch_params(name)
-        child.normalize()
-        return child
-    
-    def reproduce_zeros(self, num_reproducers):
-        """Generate child traits from the current CreatureParam by setting them to zero."""
-        child = CreatureParam(self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
-        if self.is_list:
-            child.data = [torch.zeros(num_reproducers, *shape, device=self.device) for shape in self._shape]
+        if self.init[0] == 'normal_':
+            child.data = rng.fetch_params(name) * self.init[2] + self.init[1]   # * std + mean
+            child.normalize()
         else:
-            child.data = torch.zeros(num_reproducers, *self._shape, device=self.device)
-        return child
-    
-    def reproduce_fill(self, num_reproducers):
-        """Generate child traits from the current CreatureParam by setting them to zero."""
-        child = CreatureParam(self._shape, self.init, self.normalize_func, self.device, self.mut_idx)
-        if self.is_list:
-            child.data = [torch.full((num_reproducers, *shape), self.init[1], 
-                                     device=self.device) for shape in self._shape]
-        else:
-            child.data = torch.full((num_reproducers, *self._shape), self.init[1], device=self.device)
+            if self.is_list:
+                child.data = [getattr(torch.empty(num_reproducers, *shape, device=self.device), self.init[0])(*self.init[1:]) 
+                              for shape in self._shape]
+            else:
+                child.data = getattr(torch.empty(num_reproducers, *self._shape, device=self.device), self.init[0])(*self.init[1:])
         return child
             
     #@cuda_profile
@@ -181,14 +182,10 @@ class CreatureParam:
             num_reproducers: Number of creatures that are reproducing.
             mut: Tensor of mutation rates for each trait.
         """
-        if self.reproduce_type == 'zeros':
-            return self.reproduce_zeros(num_reproducers)
+        if self.reproduce_type == 'fillable':
+            return self.reproduce_fillable(name, rng, num_reproducers)
         elif self.reproduce_type == 'mutable':
             return self.reproduce_mutable(name, rng, reproducers, mut)
-        elif self.reproduce_type == 'randn':
-            return self.reproduce_randn(name, rng)
-        elif self.reproduce_type == 'fill':
-            return self.reproduce_fill(num_reproducers)
             
     #@cuda_profile
     def normalize(self):  # technically we should add support for list-type CreatureParams, but we don't use that

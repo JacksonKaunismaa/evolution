@@ -23,7 +23,7 @@ def normalize_rays(rays: 'CreatureParam', sizes: 'CreatureParam', cfg: Config):
 def normalize_head_dirs(head_dirs: 'CreatureParam'):
     head_dirs /= torch.norm(head_dirs, dim=1, keepdim=True)
     
-def eat_amt(sizes: CreatureParam, cfg: Config) -> Tensor:
+def _eat_amt(sizes: CreatureParam, cfg: Config) -> Tensor:
     size_pct = (sizes - cfg.size_range[0]) / (cfg.size_range[1] - cfg.size_range[0])
     return cfg.eat_pct[0] + size_pct * (cfg.eat_pct[1] - cfg.eat_pct[0])
     
@@ -59,14 +59,16 @@ class CreatureArray:
                               partial(clamp, min_=self.posn_bounds[0], max_=self.posn_bounds[1]), 
                               self.device, None)
         
-        self.energies: CreatureParam = CreatureParam(tuple(), None, None, self.device, None)
-        self.healths: CreatureParam = CreatureParam(tuple(), None, None, self.device, None)
-        self.eat_pcts: CreatureParam = CreatureParam(tuple(), None, None, self.device, None)
+        self.energies: CreatureParam = CreatureParam(tuple(), self.cfg.init_energy, None, self.device, None)
+        self.healths: CreatureParam = CreatureParam(tuple(), self.cfg.init_health, None, self.device, None)
+        eat_amt = partial(_eat_amt, cfg=self.cfg)
+        self.eat_pcts: CreatureParam = CreatureParam(tuple(), eat_amt, None, self.device, None)
+        self.age_speeds: CreatureParam = CreatureParam(tuple(), self.cfg.age_speed_size, None, self.device, None)
         self.age_mults: CreatureParam = CreatureParam(tuple(), ('fill_', 1.0), None, self.device, None)
         self.memories: CreatureParam = CreatureParam((self.cfg.mem_size,), ('zero_',), None, 
                                                      self.device, None)
-        self.ages: CreatureParam = CreatureParam(tuple(), ('zero_',), None, self.device, None)
-        self.n_children: CreatureParam = CreatureParam(tuple(), ('zero_',), None, self.device, None)
+        self.ages: CreatureParam = CreatureParam(tuple(), 'zero_', None, self.device, None)
+        self.n_children: CreatureParam = CreatureParam(tuple(), 'zero_', None, self.device, None)
         self.head_dirs: CreatureParam = CreatureParam((2,), ('normal_', 0, 1), 
                                        normalize_head_dirs, self.device, None)
         
@@ -87,11 +89,16 @@ class CreatureArray:
         # select all CreatureParam objects
         self.variables: Dict[str, CreatureParam] = {p: getattr(self, p) for p in dir(self) 
                                                if isinstance(getattr(self, p), CreatureParam)}
+        
+        # set position, size, color, etc. as samples from their respective init methods
         for v in self.variables.values():
             v.init_base(self.cfg)
-        self.energies.init_base_from_data(self.cfg.init_energy(self.sizes.data))
-        self.healths.init_base_from_data(self.cfg.init_health(self.sizes.data))
-        self.eat_pcts.init_base_from_data(eat_amt(self.sizes, self.cfg))
+        
+        # set health, energy, age_speed, etc. as a function of the size
+        for v in self.variables.values():
+            if v.reproduce_type == 'size-dependent':
+                v.init_base_from_size(self.sizes)
+                
         normalize_rays(self.rays, self.sizes, self.cfg)
 
         self.start_idx = 0
@@ -114,9 +121,9 @@ class CreatureArray:
         # need to call normalization weird for rays since it depends on sizes
         normalize_rays(children.rays, children.sizes, self.cfg)
         # need to initialize these weird as well because they depend on sizes
-        children.energies = self.cfg.init_energy(children.sizes)
-        children.healths = self.cfg.init_health(children.sizes)
-        children.eat_pcts = eat_amt(children.sizes, self.cfg)*10.
+        for name, v in self.variables.items():
+            if v.reproduce_type == 'size-dependent':
+                setattr(children, name, v.reproduce_size(children.sizes))
         
 
     #@cuda_profile

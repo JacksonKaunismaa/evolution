@@ -5,14 +5,16 @@ torch.set_grad_enabled(False)
 
 
 class ConfigFunction:   # for replacing functions in regular python code
-    def __init__(self, name, mul):
+    def __init__(self, name, mul, *args):
         self.name = name
         self.mul = mul
         self.func = getattr(self, name)
-        
+        if args:
+            self.func = lambda x: getattr(self, name)(x, *args)
+            
     @staticmethod
-    def cube(x):
-        return x**3
+    def pow(x, a):
+        return x**a
 
     @staticmethod
     def square(x):
@@ -178,9 +180,11 @@ class Config:
     reproduce_dist: float = 3.  # standard deviation of distance from parent to place offspring
 
     ### Aging
-    age_dmg_mul: float = 1e-4  # for every year past age_old, creatures take this pct more dmg (compounded)
-    age_mature_mul: float = 20.0  # size * mature_age_mult is the age at which creatures can reproduce
-    age_old_mul: float = 40.0 # size * age_old_mult is the age at which creatures start taking extra dmg/energy
+    # one epoch is approximately 1.8 Earth months = 15(yrs, sexual maturity in humans) * / age_mature_mul(epochs) * 12 (months/yr)
+    age_dmg_mul: float = 1.4e-3  # for every year past age_old, creatures take this pct more dmg (compounded)
+    age_speed_size: ConfigFunction = ConfigFunction('pow', 1., 0.1323)  # (sz**0.133) is the speed at which creatures age
+    age_mature_mul: float = 100.0  # age_speed * mature_age_mult is the age at which creatures can reproduce
+    age_old_mul: float = 1600.0 # age_speed * age_old_mult is the age at which creatures start taking extra dmg/energy
     
     
     ## Algorithm parameters
