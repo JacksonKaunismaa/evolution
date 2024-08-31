@@ -16,7 +16,7 @@ class CellInfo(UIElement):
         self.state = state
         self.wnd = window
         self.init_size = self.wnd.size
-        self.n_lines = 1
+        self.n_lines = 2
         self.width = 250
         self.y_pos = 0
         self.name = "Cell Stats"
@@ -39,7 +39,8 @@ class CellInfo(UIElement):
         # self.collapsing_header_open = imgui.collapsing_header(self.name)[0]
         # Display the text when expanded
         # if self.collapsing_header_open:
-        imgui.text(f"Food {cell.food}")
+        imgui.text(f"Food {cell.food:.3f}")
+        imgui.text(f"Position: {cell._selected_cell[0]}, {cell._selected_cell[1]}")
 
 
         # End the ImGui window

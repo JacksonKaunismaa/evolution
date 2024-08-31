@@ -16,7 +16,7 @@ class CreatureInfo(UIElement):
         self.state = state
         self.wnd = window
         self.init_size = self.wnd.size
-        self.n_lines = 6
+        self.n_lines = 7
         self.width = 250
         self.y_pos = 0
         self.name = "Creature Stats"
@@ -39,12 +39,14 @@ class CreatureInfo(UIElement):
         # self.collapsing_header_open = imgui.collapsing_header(self.name)[0]
         # Display the text when expanded
         # if self.collapsing_header_open:
-        imgui.text(f"Age: {creat.age}")
-        imgui.text(f"Energy: {creat.energy:.4f}")
-        imgui.text(f"Health: {creat.health:.4f}")
-        imgui.text(f"Age Multiplier: {creat.age_mult:.4f}")
-        imgui.text(f"Num Children: {creat.n_children}")
-        imgui.text(f"Size: {creat.size:.4f}")
+        imgui.text(f"Age: {int(creat.age)} ({creat.age_stage})")
+        imgui.text(f"Energy: {float(creat.energy):.4f} / {float(creat.reproduce_energy):.4f}")
+        imgui.text(f"Health: {float(creat.health):.4f} / {float(creat.max_health):.4f}")
+        imgui.text(f"Age Multiplier: {float(creat.age_mult):.4f}")
+        imgui.text(f"Num Children: {int(creat.n_children)}")
+        imgui.text(f"Size: {float(creat.size):.4f}")
+        imgui.text(f"Position: {float(creat.position[0]):.2f}, {float(creat.position[1]):.2f}")
+        # imgui.text(f"Color: {creat.color}")
 
 
         # End the ImGui window

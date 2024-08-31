@@ -179,7 +179,7 @@ class Config:
 
     ### Aging
     age_dmg_mul: float = 1e-4  # for every year past age_old, creatures take this pct more dmg (compounded)
-    mature_age_mul: float = 20.0  # size * mature_age_mult is the age at which creatures can reproduce
+    age_mature_mul: float = 20.0  # size * mature_age_mult is the age at which creatures can reproduce
     age_old_mul: float = 40.0 # size * age_old_mult is the age at which creatures start taking extra dmg/energy
     
     

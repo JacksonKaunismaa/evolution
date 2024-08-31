@@ -21,8 +21,9 @@ class CreatureState:
             creature = creature.item()
         changed = self._selected_creature != creature
         self._selected_creature = creature
-        if self and changed:
-            self.extract_general_state()
+        if self and changed:  # technically it might be possible that someone selects a new creature on the same frame that the old creature
+            self.extract_general_state()  # dies, and it happens to have the same id after the reshuffling, in which case this wouldn't trigger
+            
         
     def __bool__(self):
         """Returns True if a creature has been selected."""
@@ -41,14 +42,35 @@ class CreatureState:
         singular_name_exceptions = {'n_children': 'n_children',
                                     'energies': 'energy'}
         for k, v in self.world.creatures.variables.items():
-            
-            if k in singular_name_exceptions:
-                singular_name = singular_name_exceptions[k]
-            else:
-                singular_name = k[:-1]  # strip off the 's' at the end of the variable name
+            singular_name = singular_name_exceptions.get(k, k[:-1])
+            if not v.is_list and v.dim() <= 2:
+                setattr(self, singular_name, v[self._selected_creature])
                 
-            if v.dim() == 1:
-                setattr(self, singular_name, v[self._selected_creature].item())
+        self.reproduce_energy = self.world.cfg.reproduce_thresh(self.size)
+        self.max_health = self.world.cfg.init_health(self.size)
+        self.set_age_stage()
+            
+    def set_age_stage(self):
+        if not hasattr(self, 'size'):
+            return
+        mature_age = self.world.cfg.age_mature_mul * self.size
+        old_age = self.world.cfg.age_old_mul * self.size
+        
+        if self.age < mature_age:
+            self.age_stage = 'adolescent'
+        elif self.age < old_age:
+            self.age_stage = 'mature'
+        else:
+            self.age_stage = 'old'
+            
+    @property
+    def age(self):
+        return self._age
+    
+    @age.setter
+    def age(self, age):
+        self._age = age
+        self.set_age_stage()
     
     def extract_pre_eat_state(self):
         if self:
