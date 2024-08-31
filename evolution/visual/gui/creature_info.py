@@ -46,7 +46,7 @@ class CreatureInfo(UIElement):
         imgui.text(f"Num Children: {int(creat.n_children)}")
         imgui.text(f"Size: {float(creat.size):.4f}")
         imgui.text(f"Position: {float(creat.position[0]):.2f}, {float(creat.position[1]):.2f}")
-        # imgui.text(f"Color: {creat.color}")
+        imgui.text(f"Color: {int(creat.color[0])}, {int(creat.color[1])}, {int(creat.color[2])}")
 
 
         # End the ImGui window

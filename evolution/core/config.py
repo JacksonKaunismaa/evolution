@@ -9,8 +9,7 @@ class ConfigFunction:   # for replacing functions in regular python code
         self.name = name
         self.mul = mul
         self.func = getattr(self, name)
-        if args:
-            self.func = lambda x: getattr(self, name)(x, *args)
+        self.extra_args = args
             
     @staticmethod
     def pow(x, a):
@@ -37,7 +36,7 @@ class ConfigFunction:   # for replacing functions in regular python code
         return 1 - torch.exp(-torch.abs(x) * y)
 
     def __call__(self, *args):
-        return self.func(*args) * self.mul
+        return self.func(*args, *self.extra_args) * self.mul
     
     def __repr__(self):
         return f'{self.name}*{self.mul}'
@@ -183,7 +182,7 @@ class Config:
     # one epoch is approximately 1.8 Earth months = 15(yrs, sexual maturity in humans) * / age_mature_mul(epochs) * 12 (months/yr)
     age_dmg_mul: float = 1.4e-3  # for every year past age_old, creatures take this pct more dmg (compounded)
     age_speed_size: ConfigFunction = ConfigFunction('pow', 1., 0.1323)  # (sz**0.133) is the speed at which creatures age
-    age_mature_mul: float = 100.0  # age_speed * mature_age_mult is the age at which creatures can reproduce
+    age_mature_mul: float = 150.0  # age_speed * mature_age_mult is the age at which creatures can reproduce
     age_old_mul: float = 1600.0 # age_speed * age_old_mult is the age at which creatures start taking extra dmg/energy
     
     

@@ -72,7 +72,7 @@ class Creatures(CreatureArray):
     #@cuda_profile
     def _get_reproducers(self, alive: Union[None, Tensor]) -> Tensor:
         # 1 + so that really small creatures don't get unfairly benefitted
-        reproducers = (self.ages >= self.sizes*self.cfg.age_mature_mul) & (self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes))  # current mem boolean tensor
+        reproducers = (self.ages >= self.age_speeds*self.cfg.age_mature_mul) & (self.energies >= 1 + self.cfg.reproduce_thresh(self.sizes))  # current mem boolean tensor
         if alive is not None:
             reproducers &= alive
         return reproducers
@@ -142,7 +142,7 @@ class Creatures(CreatureArray):
         food_grid_updates = torch.zeros_like(food_grid, device=self.device)
         alive_costs = torch.zeros(self.population, device=self.device, dtype=torch.float32)
         self.kernels('eat', blocks_per_grid, threads_per_block,
-                     pos, self.eat_pcts, pct_eaten, self.sizes, food_grid,
+                     pos, self.eat_pcts, pct_eaten, self.sizes, self.age_speeds, food_grid,
                      food_grid_updates, alive_costs, self.energies, self.healths, self.ages, self.age_mults,
                      self.population, food_grid.shape[0], self.cfg.food_cover_decr)
         

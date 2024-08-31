@@ -53,8 +53,8 @@ class CreatureState:
     def set_age_stage(self):
         if not hasattr(self, 'size'):
             return
-        mature_age = self.world.cfg.age_mature_mul * self.size
-        old_age = self.world.cfg.age_old_mul * self.size
+        mature_age = self.world.cfg.age_mature_mul * self.age_speed
+        old_age = self.world.cfg.age_old_mul * self.age_speed
         
         if self.age < mature_age:
             self.age_stage = 'adolescent'

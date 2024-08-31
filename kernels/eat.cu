@@ -1,5 +1,5 @@
 extern "C" __global__ 
-void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes,  float* food_grid,  // read from
+void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes, float* age_speeds, float* food_grid,  // read from
     float* food_grid_updates, float* alive_costs, float* energies, // write to
         float* healths, float* ages, float* age_mults, 
     int num_creatures, int num_cells, float food_decr   // constants
@@ -13,6 +13,8 @@ void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes,  float
         pct_eaten: [S, S], where S = num_cells, where the coordinate is the percentage of food eaten in a cell.
 
         Sizes: [N], where the coordinate is the size of the creature.
+
+        Age speeds: [N], where the coordinate is the speed of aging of the creature.
 
         food_grid: [S, S], where the coordinate is the amount of food in a cell
 
@@ -48,6 +50,7 @@ void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes,  float
     int x = positions[creature * 2 + 0];
     int y = positions[creature * 2 + 1];
     float size = sizes[creature];
+    float age_speed = age_speeds[creature];
     float eat_pct = eat_pcts[creature];
 
     int cell_idx = y * num_cells + x;
@@ -62,7 +65,7 @@ void eat(int* positions, float* eat_pcts, float* pct_eaten, float* sizes,  float
 
     float age = ages[creature];
 
-    if (age > CFG_age_old_mul * size){
+    if (age > CFG_age_old_mul * age_speed){
         age_mults[creature] *= 1 + CFG_age_dmg_mul;
     }
     float age_mult = age_mults[creature];
