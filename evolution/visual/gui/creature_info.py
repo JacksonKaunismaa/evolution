@@ -37,7 +37,7 @@ class CreatureInfo(UIElement):
         
         if creat.update_state_available:
             height = self.HEADER_SIZE + self.PADDING + \
-                     self.base_n_lines * self.LINE_SIZE + \
+                     (self.base_n_lines + 1) * self.LINE_SIZE + \
                      len(self.panels) * (self.HEADER_SIZE + 2*self.HEADER_PAD) + \
                      sum([panel.n_lines for panel in self.panels if panel.open]) * self.LINE_SIZE + \
                      self.PADDING
@@ -57,40 +57,41 @@ class CreatureInfo(UIElement):
         # Display the text when expanded
         # if self.collapsing_header_open:
         imgui.text(f"Age: {int(creat.age)} ({creat.age_stage})")
-        imgui.text(f"Energy: {float(creat.energy):.4f} / {float(creat.reproduce_energy):.4f}")
-        imgui.text(f"Health: {float(creat.health):.4f} / {float(creat.max_health):.4f}")
-        imgui.text(f"Age Multiplier: {float(creat.age_mult):.4f}")
+        imgui.text(f"Energy: {creat.energy:.4f} / {creat.reproduce_energy:.4f}")
+        imgui.text(f"Health: {creat.health:.4f} / {creat.max_health:.4f}")
+        imgui.text(f"Age Multiplier: {creat.age_mult:.4f}")
         imgui.text(f"Num Children: {int(creat.n_children)}")
-        imgui.text(f"Size: {float(creat.size):.4f}")
-        imgui.text(f"Position: {float(creat.position[0]):.2f}, {float(creat.position[1]):.2f}")
+        imgui.text(f"Size: {creat.size:.4f}")
+        imgui.text(f"Position: {creat.position[0]:.2f}, {creat.position[1]:.2f}")
         imgui.text(f"Color: {int(creat.color[0])}, {int(creat.color[1])}, {int(creat.color[2])}")
         imgui.text(f"Eat pct: {100.*float(creat.eat_pct):.4f}")
         
         if creat.update_state_available:
-            self.eating_panel.render([
-                f"Alive Cost: {float(creat.alive_cost):.6f}",
-                f"Food Eaten: {float(creat.food_eaten):.6f}",
-                f"Cell Eaten Energy: {float(creat.cell_energy):.2f}",
-                f"Food Damage: {float(creat.food_dmg_taken):.2f}",
-            ])
-            
+            imgui.text(f"Net Energy Delta: {creat.net_energy_delta:.6f}")
             self.rotate_panel.render([
-                f"Rotate Logit: {float(creat.rotate_logit):.2f}",
-                f"Rotate Angle: {float(creat.rotate_angle):.2f}",
-                f"Rotate Energy: {float(creat.rotate_energy):.2f}"
+                f"Rotate Logit: {creat.rotate_logit:.2f}",
+                f"Rotate Angle: {creat.rotate_angle:.2f}°",
+                f"Rotate Energy: {creat.rotate_energy:.6f}"
             ])
             
             self.move_panel.render([
-                f"Move Logit: {float(creat.move_logit):.2f}",
-                f"Move Amount: {float(creat.move_amt):.2f}",
-                f"Move Energy: {float(creat.move_energy):.2f}"
+                f"Move Logit: {creat.move_logit:.2f}",
+                f"Move Amount: {creat.move_amt:.2f}",
+                f"Move Energy: {creat.move_energy:.6f}"
             ])
             
             self.attack_panel.render([
-                f"Num Attacking: {int(creat.n_attacking)}",
-                f"Attack Damage Taken: {float(creat.dmg_taken):.2f}",
-                f"Attack Energy: {float(creat.attack_cost):.2f}"
+                f"Num Attacking: {creat.n_attacking}",
+                f"Attack Damage Taken: {creat.dmg_taken:.2f}",
+                f"Attack Energy: {creat.attack_cost:.2f}"
             ])
+            self.eating_panel.render([
+                f"Alive Energy: {creat.alive_cost:.6f}",
+                f"Food Eaten: {creat.food_eaten:.6f}",
+                f"Cell Eaten Energy: {creat.cell_energy:.6f}",
+                f"Food Damage: {creat.food_dmg_taken:.6f}",
+            ])
+            
 
         # End the ImGui window
         imgui.end()

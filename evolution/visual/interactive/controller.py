@@ -81,6 +81,10 @@ class Controller:
             if key == self.wnd.keys.O:   # jump to oldest creature
                 oldest = self.world.creatures.ages.argmax()
                 self.set_selected_creature(oldest)
+                
+            if key == self.wnd.keys.L:   # jump to largest creature
+                largest = self.world.creatures.sizes.argmax()
+                self.set_selected_creature(largest)
 
             if key == self.wnd.keys.UP:    # speed up simulation so that we do 1 more step per frame
                 amt = 1

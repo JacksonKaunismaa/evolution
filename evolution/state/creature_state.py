@@ -73,54 +73,55 @@ class CreatureState:
     def age(self, age):
         self._age = age
         self.set_age_stage()
+        
+    def extract_pre_rotate_state(self):
+        if self:
+            self.pre_rot_energy = self.world.creatures.energies[self._selected_creature].item()
+        
+    def extract_post_rotate_state(self, logits: Tensor, rotation_matrix: Tensor):
+        if self:
+            self.post_rot_energy = self.world.creatures.energies[self._selected_creature].item()
+            self.rotate_logit = logits[self._selected_creature].item()
+            self.rotate_angle = np.arccos(rotation_matrix[self._selected_creature, 0, 0].item()) * 180.0 / np.pi
+            self.rotate_energy = self.post_rot_energy - self.pre_rot_energy
+            self.energy = self.post_rot_energy      
+        
+    def extract_move_state(self, logits: Tensor, move: Tensor, move_cost: Tensor):
+        if self:
+            self.move_logit = logits[self._selected_creature].item()
+            self.move_amt = move[self._selected_creature].item()
+            self.move_energy = -move_cost[self._selected_creature].item()
+            self.energy = self.world.creatures.energies[self._selected_creature].item()
+            
+    def extract_attack_state(self, attacks: Tensor, attack_cost: Tensor):
+        if self._selected_creature is not None:
+            self.n_attacking = attacks[self._selected_creature, 0].item()
+            self.dmg_taken = attacks[self._selected_creature, 1].item()
+            self.attack_cost = -attack_cost[self._selected_creature].item()
+            self.health = self.world.creatures.healths[self._selected_creature].item()
+            self.energy = self.world.creatures.energies[self._selected_creature].item()
     
     def extract_pre_eat_state(self):
         if self:
-            self.pre_eat_energy = self.world.creatures.energies[self._selected_creature]
-            self.pre_eat_health = self.world.creatures.healths[self._selected_creature]
+            self.pre_eat_energy = self.world.creatures.energies[self._selected_creature].item()
+            self.pre_eat_health = self.world.creatures.healths[self._selected_creature].item()
         
     def extract_post_eat_state(self, pos: Tensor, alive_costs: Tensor):
         if self:
             creat_pos = pos[self._selected_creature]
             
-            self.post_eat_energy = self.world.creatures.energies[self._selected_creature]
-            self.post_eat_health = self.world.creatures.healths[self._selected_creature]
-            self.age = self.world.creatures.ages[self._selected_creature]
-            self.age_mult = self.world.creatures.age_mults[self._selected_creature]
-            self.n_children = self.world.creatures.n_children[self._selected_creature]
-            self.alive_cost = alive_costs[self._selected_creature]
-            self.eat_pct = self.world.creatures.eat_pcts[self._selected_creature]
-            self.food_eaten = self.post_eat_energy - self.pre_eat_energy
+            self.post_eat_energy = self.world.creatures.energies[self._selected_creature].item()
+            self.post_eat_health = self.world.creatures.healths[self._selected_creature].item()
+            self.age = self.world.creatures.ages[self._selected_creature].item()
+            self.age_mult = self.world.creatures.age_mults[self._selected_creature].item()
+            self.n_children = self.world.creatures.n_children[self._selected_creature].item()
+            self.alive_cost = -alive_costs[self._selected_creature].item()
+            self.eat_pct = self.world.creatures.eat_pcts[self._selected_creature].item()
+            self.food_eaten = self.post_eat_energy - self.pre_eat_energy - self.alive_cost
             self.food_dmg_taken = self.pre_eat_health - self.post_eat_health
-            self.cell_energy = self.world.food_grid[creat_pos[1], creat_pos[0]]
+            self.cell_energy = self.world.food_grid[creat_pos[1], creat_pos[0]].item()
             self.energy = self.post_eat_energy
             
-            self.update_state_available = True
-            
-    def extract_pre_rotate_state(self):
-        self.pre_rot_energy = self.world.creatures.energies[self._selected_creature]
-        
-    def extract_post_rotate_state(self, logits: Tensor, rotation_matrix: Tensor):
-        if self:
-            self.post_rot_energy = self.world.creatures.energies[self._selected_creature]
-            self.rotate_logit = logits[self._selected_creature]
-            self.rotate_angle = np.arccos(rotation_matrix[self._selected_creature, 0, 0].item())
-            self.rotate_energy = self.post_rot_energy - self.pre_rot_energy
-            self.energy = self.post_rot_energy
-            
-    def extract_move_state(self, logits: Tensor, move: Tensor, move_cost: Tensor):
-        if self:
-            self.move_logit = logits[self._selected_creature]
-            self.move_amt = move[self._selected_creature]
-            self.move_energy = move_cost[self._selected_creature]
-            self.energy = self.world.creatures.energies[self._selected_creature]
-            
-            
-    def extract_attack_state(self, attacks: Tensor, attack_cost: Tensor):
-        if self._selected_creature is not None:
-            self.n_attacking = attacks[self._selected_creature, 0]
-            self.dmg_taken = attacks[self._selected_creature, 1]
-            self.attack_cost = attack_cost[self._selected_creature]
-            self.health = self.world.creatures.healths[self._selected_creature]
-            self.energy = self.world.creatures.energies[self._selected_creature]
+            self.net_energy_delta = self.energy - self.pre_rot_energy
+            self.update_state_available = True   
         
