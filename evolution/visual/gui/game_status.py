@@ -17,7 +17,7 @@ class GameStatus(UIElement):
         self.wnd = window
         self.init_size = self.wnd.size
         self.collapsing_header_open = False
-        self.n_lines = 5
+        self.n_lines = 3  # number of lines of text
         self.width = 250
         self.x_pos = 0  # y pos is adjustable, and height depends on n_lines * LINE_SIZE
         self.name = "Game Status"
@@ -26,22 +26,26 @@ class GameStatus(UIElement):
         # Set the position dynamically based on collapsing header state
         window_width, window_height = self.wnd.size
         
+        
         if self.collapsing_header_open:
             #  set y_pos upwards so that it appears it is expanding upwards
-            imgui.set_next_window_position(self.x_pos, window_height - self.HEADER_SIZE - self.LINE_SIZE * self.n_lines, 
-                                           condition=imgui.ALWAYS)
+            height = self.HEADER_SIZE + self.PADDING + self.LINE_SIZE * self.n_lines + self.SLIDER_SIZE + self.PADDING
         else:
             # hide near the bottom left corner so that it looks like it is collapsing
-            imgui.set_next_window_position(self.x_pos, window_height - self.HEADER_SIZE, 
-                                           condition=imgui.ALWAYS)
+            height = self.HEADER_SIZE
+            
+        imgui.set_next_window_position(self.x_pos, 
+                                        window_height - height, 
+                                        condition=imgui.ALWAYS)
 
-        imgui.set_next_window_size(self.width, self.HEADER_SIZE + self.LINE_SIZE * self.n_lines, condition=imgui.ALWAYS)
+        imgui.set_next_window_size(self.width, 
+                                   height, 
+                                   condition=imgui.ALWAYS)
         # Begin a new ImGui window
-        imgui.begin(self.name, False, 
-                    imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_SAVED_SETTINGS |
-                    imgui.WINDOW_NO_TITLE_BAR | imgui.WINDOW_NO_RESIZE)
+        self.collapsing_header_open = imgui.begin(self.name, False, 
+                    imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_SAVED_SETTINGS | 
+                    imgui.WINDOW_NO_RESIZE)[0]
         
-        self.collapsing_header_open = imgui.collapsing_header(self.name)[0]
         # Display the text when expanded
         if self.collapsing_header_open:
             imgui.text(f"food_cover_decr: {self.cfg.food_cover_decr:.6f}")

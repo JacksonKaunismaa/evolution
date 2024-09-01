@@ -15,6 +15,7 @@ class CreatureState:
     def __init__(self, world: 'GWorld'):
         self._selected_creature = None
         self.world = world
+        self.update_state_available = False  # tracks whether info like amount of food eaten in last step is available
         
     def set_creature(self, creature: Union[Tensor, int, None]):
         if isinstance(creature, Tensor):
@@ -49,6 +50,7 @@ class CreatureState:
         self.reproduce_energy = self.world.cfg.reproduce_thresh(self.size)
         self.max_health = self.world.cfg.init_health(self.size)
         self.set_age_stage()
+        self.update_state_available = False
             
     def set_age_stage(self):
         if not hasattr(self, 'size'):
@@ -75,18 +77,22 @@ class CreatureState:
     def extract_pre_eat_state(self):
         if self:
             self.pre_eat_energy = self.world.creatures.energies[self._selected_creature]
+            self.pre_eat_health = self.world.creatures.healths[self._selected_creature]
         
     def extract_post_eat_state(self, pos: Tensor, alive_costs: Tensor):
         if self:
             creat_pos = pos[self._selected_creature]
+            self.update_state_available = True
             
             self.post_eat_energy = self.world.creatures.energies[self._selected_creature]
+            self.post_eat_health = self.world.creatures.healths[self._selected_creature]
             self.age = self.world.creatures.ages[self._selected_creature]
             self.age_mult = self.world.creatures.age_mults[self._selected_creature]
             self.n_children = self.world.creatures.n_children[self._selected_creature]
             self.alive_cost = alive_costs[self._selected_creature]
             self.eat_pct = self.world.creatures.eat_pcts[self._selected_creature]
             self.food_eaten = self.post_eat_energy - self.pre_eat_energy
+            self.food_dmg_taken = self.pre_eat_health - self.post_eat_health
             self.cell_energy = self.world.food_grid[creat_pos[1], creat_pos[0]]
             self.energy = self.post_eat_energy
             

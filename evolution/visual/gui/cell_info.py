@@ -28,9 +28,11 @@ class CellInfo(UIElement):
             return
         window_width, window_height = self.wnd.size
         
+        height = self.HEADER_SIZE + self.PADDING + self.n_lines * self.LINE_SIZE + self.PADDING
+        
         imgui.set_next_window_position(window_width - self.width, self.y_pos, condition=imgui.ALWAYS)
 
-        imgui.set_next_window_size(self.width, self.HEADER_SIZE + self.LINE_SIZE * self.n_lines, condition=imgui.ALWAYS)
+        imgui.set_next_window_size(self.width, height, condition=imgui.ALWAYS)
         # Begin a new ImGui window
         imgui.begin(self.name, False, 
                     imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_SAVED_SETTINGS |
