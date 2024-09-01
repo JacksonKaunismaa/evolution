@@ -16,7 +16,6 @@ class CellInfo(UIElement):
         self.state = state
         self.wnd = window
         self.init_size = self.wnd.size
-        self.n_lines = 2
         self.width = 250
         self.y_pos = 0
         self.name = "Cell Stats"
@@ -28,6 +27,11 @@ class CellInfo(UIElement):
             return
         window_width, window_height = self.wnd.size
         
+        if cell.update_state_available:
+            self.n_lines = 6
+        else: 
+            self.n_lines = 2
+        
         height = self.HEADER_SIZE + self.PADDING + self.n_lines * self.LINE_SIZE + self.PADDING
         
         imgui.set_next_window_position(window_width - self.width, self.y_pos, condition=imgui.ALWAYS)
@@ -38,11 +42,13 @@ class CellInfo(UIElement):
                     imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_SAVED_SETTINGS |
                     imgui.WINDOW_NO_RESIZE)
         
-        # self.collapsing_header_open = imgui.collapsing_header(self.name)[0]
-        # Display the text when expanded
-        # if self.collapsing_header_open:
         imgui.text(f"Food {cell.food:.3f}")
         imgui.text(f"Position: {cell._selected_cell[0]}, {cell._selected_cell[1]}")
+        if cell.update_state_available:
+            imgui.text(f"Percent Eaten: {100.*cell.cell_pct_eaten:.3f}")
+            imgui.text(f"Cover Cost: {cell.cover_cost:.3f}")
+            imgui.text(f"Growth Amount: {cell.growth_amt:.3f}")
+            imgui.text(f"Step Size: {cell.step_size:.3f}")
 
 
         # End the ImGui window

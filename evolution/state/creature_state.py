@@ -82,7 +82,6 @@ class CreatureState:
     def extract_post_eat_state(self, pos: Tensor, alive_costs: Tensor):
         if self:
             creat_pos = pos[self._selected_creature]
-            self.update_state_available = True
             
             self.post_eat_energy = self.world.creatures.energies[self._selected_creature]
             self.post_eat_health = self.world.creatures.healths[self._selected_creature]
@@ -95,6 +94,8 @@ class CreatureState:
             self.food_dmg_taken = self.pre_eat_health - self.post_eat_health
             self.cell_energy = self.world.food_grid[creat_pos[1], creat_pos[0]]
             self.energy = self.post_eat_energy
+            
+            self.update_state_available = True
             
     def extract_pre_rotate_state(self):
         self.pre_rot_energy = self.world.creatures.energies[self._selected_creature]

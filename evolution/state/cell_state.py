@@ -15,6 +15,7 @@ class CellState:
         self.cfg = cfg
         self.world = world
         self.pad = world.creatures.pad
+        self.update_state_available = False
         
     def set_cell(self, cell: Union[Tuple[int, int], None]):
         if cell is None:
@@ -29,6 +30,7 @@ class CellState:
     def extract_general_state(self):
         self.food = self.world.food_grid[self._selected_cell[1] + self.pad,
                                             self._selected_cell[0] + self.pad].item()
+        self.update_state_available = False
             
     def extract_pre_grow_state(self):
         if self:
@@ -50,3 +52,5 @@ class CellState:
             self.growth_amt = self.post_growth_food - self.pre_grow_food
             self.step_size = step_size
             self.food = self.post_growth_food
+            
+            self.update_state_available = True
