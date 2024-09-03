@@ -17,8 +17,8 @@ class GameStatus(UIElement):
         self.wnd = window
         self.init_size = self.wnd.size
         self.collapsing_header_open = False
-        self.n_lines = 3  # number of lines of text
-        self.width = 250
+        self.n_lines = 2  # number of lines of text
+        self.width = 300
         self.x_pos = 0  # y pos is adjustable, and height depends on n_lines * LINE_SIZE
         self.name = "Game Status"
         
@@ -29,7 +29,8 @@ class GameStatus(UIElement):
         
         if self.collapsing_header_open:
             #  set y_pos upwards so that it appears it is expanding upwards
-            height = self.HEADER_SIZE + self.PADDING + self.LINE_SIZE * self.n_lines + self.SLIDER_SIZE + self.PADDING
+            height = self.HEADER_SIZE + self.PADDING + (self.HEADER_SIZE + 2*self.HEADER_PAD) + \
+                     self.LINE_SIZE * self.n_lines + self.SLIDER_SIZE + self.PADDING
         else:
             # hide near the bottom left corner so that it looks like it is collapsing
             height = self.HEADER_SIZE
@@ -49,8 +50,11 @@ class GameStatus(UIElement):
         # Display the text when expanded
         if self.collapsing_header_open:
             imgui.text(f"food_cover_decr: {self.cfg.food_cover_decr:.6f}")
-            imgui.text(f"epoch: {self.world.time}")
-            imgui.text(f"population: {self.world.population}")
+            imgui.same_line()
+            _, self.state.increasing_food_decr = imgui.checkbox("Increasing?", self.state.increasing_food_decr)
+            
+            imgui.text(f"Epoch: {self.world.time}")
+            imgui.text(f"Population: {self.world.population}")
             changed, new_speed = imgui.slider_int('game_speed', self.state.game_speed, 1, self.cfg.max_game_speed, 
                                     flags=imgui.SLIDER_FLAGS_ALWAYS_CLAMP | imgui.SLIDER_FLAGS_LOGARITHMIC)
             if changed:

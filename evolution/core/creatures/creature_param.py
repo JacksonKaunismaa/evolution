@@ -269,8 +269,14 @@ class CreatureParam:
     def max(self, *args, **kwargs) -> Tensor:
         return self.data.max(*args, **kwargs)
     
+    def min(self, *args, **kwargs) -> Tensor:
+        return self.data.min(*args, **kwargs)
+    
     def argmax(self, *args, **kwargs) -> Tensor:
         return self.data.argmax(*args, **kwargs)
+    
+    def argmin(self, *args, **kwargs) -> Tensor:
+        return self.data.argmin(*args, **kwargs)
     
     def unsqueeze(self, *args, **kwargs) -> Tensor:
         return self.data.unsqueeze(*args, **kwargs)

@@ -24,8 +24,19 @@ def normalize_head_dirs(head_dirs: 'CreatureParam'):
     head_dirs /= torch.norm(head_dirs, dim=1, keepdim=True)
     
 def _eat_amt(sizes: CreatureParam, cfg: Config) -> Tensor:
-    size_pct = (sizes - cfg.size_range[0]) / (cfg.size_range[1] - cfg.size_range[0])
-    return cfg.eat_pct[0] + size_pct * (cfg.eat_pct[1] - cfg.eat_pct[0])
+    if cfg.eat_pct_scaling[0] == 'linear':
+        size_pct = (sizes - cfg.size_range[0]) / (cfg.size_range[1] - cfg.size_range[0])
+    elif cfg.eat_pct_scaling[0] == 'log':
+        size_pct = torch.log(sizes / cfg.size_range[0]) / np.log(cfg.size_range[1] / cfg.size_range[0])
+    else:
+        raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[0]}")
+
+    if cfg.eat_pct_scaling[1] == 'linear':
+        return cfg.eat_pct[0] + size_pct * (cfg.eat_pct[1] - cfg.eat_pct[0])
+    elif cfg.eat_pct_scaling[1] == 'log':
+        return cfg.eat_pct[0] * torch.exp(size_pct * np.log(cfg.eat_pct[1] / cfg.eat_pct[0]))
+    else:
+        raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[1]}")
     
 def clamp(x: Tensor, min_: float, max_: float):
     x[:] = torch.clamp(x, min_, max_)

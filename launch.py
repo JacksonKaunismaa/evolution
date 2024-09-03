@@ -13,7 +13,7 @@ from evolution.core import config
 torch.random.manual_seed(0)
 cfg = config.Config(start_creatures=8192, max_creatures=262144, size=5000, food_cover_decr=0.2,
                     cell_size=2.0, cache_size=128, max_per_cell=128, use_cache=0,
-                    food_sight=4, ray_dist_range=(1.5, 5.0), size_range=(2.5, 5.0),
+                    food_sight=4, ray_dist_range=(1.5, 5.0), size_range=(0.1, 5.0),
                     brain_size=(50, 40))
 # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
 #                 init_size_range=(0.2, 0.2), num_rays=3, immortal=False, init_food_scale=15.)

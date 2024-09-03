@@ -106,7 +106,9 @@ class Config:
     ### Food
     init_food_scale: float = 8.0    # food will be initialized uniformly to be in [0, init_food_scale]
     # (pct of food a min. size creature can in a cell, pct of food a max. size creature can eat in a cell)
-    eat_pct: float = (0.01, 0.1)
+    eat_pct: float = (0.001, 0.1)
+    # entry[0] -> scaling function for size, entry[1] -> scaling function for eat pct (https://www.desmos.com/calculator/kzkq5kfh0x)
+    eat_pct_scaling: Tuple[str] = ('log', 'log')
     food_cover_decr: float = 0.2  # if a creature occupies a cell, the food in that cell be decreased by this amount each step
     # actual_food_decr = food_cover_decr * float_cover_decr_pct * creature_eat_pct
     food_cover_decr_pct: float = 10.
@@ -117,7 +119,7 @@ class Config:
     food_growth_rate: float = 10.0  # scale to apply to food growth rate
     food_recovery_rate: float = 30.0  # scale to apply to food growth rate when its negative
     food_health_recovery: float = 0.1  # multiple of food eaten that creatures gain as health
-    food_step_size: float = 1e-4  # how much food grows each step
+    food_step_size: float = 3e-5  # how much food grows each step
 
 
     ### Creatures
