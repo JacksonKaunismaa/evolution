@@ -16,7 +16,7 @@ class CreatureInfo(UIElement):
         self.state = state
         self.wnd = window
         self.init_size = self.wnd.size
-        self.width = 250
+        self.width = 250 / 13
         self.y_pos = 0
         self.name = "Creature Stats"
         self.base_n_lines = 9
@@ -44,11 +44,14 @@ class CreatureInfo(UIElement):
             height = self.HEADER_SIZE +  self.PADDING + \
                      self.base_n_lines * self.LINE_SIZE + self.PADDING
         
-        imgui.set_next_window_pos(imgui.ImVec2(window_width - self.width, self.y_pos), 
-                                  cond=imgui.Cond_.always)
+        pos = imgui.ImVec2(window_width - imgui.get_font_size() * self.width, 
+                           imgui.get_font_size() * self.y_pos)
+        imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)
 
-        imgui.set_next_window_size(imgui.ImVec2(self.width, height), 
-                                   cond=imgui.Cond_.always)
+        sz = imgui.ImVec2(imgui.get_font_size() * self.width, 
+                          imgui.get_font_size() * height)
+        imgui.set_next_window_size(sz, cond=imgui.Cond_.always)
+        
         # Begin a new ImGui window
         imgui.begin(self.name, False, 
                     imgui.WindowFlags_.no_move | imgui.WindowFlags_.no_saved_settings |

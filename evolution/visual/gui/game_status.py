@@ -17,7 +17,7 @@ class GameStatus(UIElement):
         self.init_size = self.wnd.size
         self.collapsing_header_open = False
         self.n_lines = 2  # number of lines of text
-        self.width = 300
+        self.width = 300 / 13
         self.x_pos = 0  # y pos is adjustable, and height depends on n_lines * LINE_SIZE
         self.name = "Game Status"
         
@@ -33,12 +33,15 @@ class GameStatus(UIElement):
         else:
             # hide near the bottom left corner so that it looks like it is collapsing
             height = self.HEADER_SIZE
-            
-        imgui.set_next_window_pos(imgui.ImVec2(self.x_pos, window_height - height), 
-                                        cond=imgui.Cond_.always)
-
-        imgui.set_next_window_size(imgui.ImVec2(self.width, height), 
-                                   cond=imgui.Cond_.always)
+        
+        pos = imgui.ImVec2(imgui.get_font_size() * self.x_pos, 
+                           window_height - imgui.get_font_size() * height)
+        imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)
+        
+        sz = imgui.ImVec2(imgui.get_font_size() * self.width, 
+                          imgui.get_font_size() * height)
+        imgui.set_next_window_size(sz, cond=imgui.Cond_.always)
+        
         # Begin a new ImGui window
         self.collapsing_header_open = imgui.begin(self.name, False, 
                     imgui.WindowFlags_.no_move | imgui.WindowFlags_.no_saved_settings | 

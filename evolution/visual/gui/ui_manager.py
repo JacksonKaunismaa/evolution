@@ -1,8 +1,7 @@
 from typing import List
-from imgui_bundle import imgui
+from imgui_bundle import imgui, implot
 from imgui_bundle.python_backends.glfw_backend import GlfwRenderer
 import glfw
-from imgui_bundle.python_backends import compute_fb_scale
 from moderngl_window import BaseWindow
 # from moderngl_window.integrations.imgui import ModernglWindowMixin
 
@@ -23,6 +22,7 @@ class UIManager:#(ModernglWindowMixin):
         self.ui_elements: List[UIElement] = []
         
         imgui.create_context()
+        implot.create_context()
         self.imgui = GlfwRenderer(window._window, attach_callbacks=False)
         
         
