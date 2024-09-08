@@ -113,7 +113,6 @@ class Camera(Subscriber):
     def toggle_follow(self):
         self.following = not self.following
     
-
     def _update(self, creature_id):
         if not creature_id:
             return

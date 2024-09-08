@@ -3,13 +3,11 @@ from OpenGL.GL import *
 from contextlib import contextmanager
 import moderngl_window as mglw
 from moderngl_window import settings
-from moderngl_window.integrations.imgui import ModernglWindowRenderer
 import moderngl as mgl
 import os.path as osp
 from cuda import cuda
 import torch
 torch.set_grad_enabled(False)
-import imgui
 
 
 
@@ -65,32 +63,22 @@ class Game:
         self.creature_publisher.subscribe(self.thoughts_visual)
         
         self.setup_events()
-        self.setup_imgui_extras()
 
     def setup_events(self):
         def create_func(evt_func):
-            evt_name = evt_func[:-5]
-            is_mouse_evt = 'mouse' in evt_name
+            is_mouse_evt = 'mouse' in evt_func
             def func(*args, **kwargs):
-                getattr(self.ui_manager.imgui, evt_name)(*args, **kwargs)
-                if not self.ui_manager.is_hovered() or not is_mouse_evt:
+                if hasattr(self.ui_manager, evt_func):  # call the ui function if its supported/exists
+                    getattr(self.ui_manager, evt_func)(*args, **kwargs)
+                if hasattr(self.controller, evt_func) and (not self.ui_manager.is_hovered() or not is_mouse_evt):
                     getattr(self.controller, evt_func)(*args, **kwargs)
             return func
         
-        for evt_func in dir(self.controller):
-            if evt_func.endswith('_func'):
+        # pull possible event functions from the ui_manager and controller by looking for attributes
+        # of each that end in func
+        for evt_func in set(dir(self.ui_manager) + dir(self.controller)):
+            if evt_func.endswith('_func'):  # ends in _func => is an event function
                 setattr(self.wnd, evt_func, create_func(evt_func))
-                
-    def setup_imgui_extras(self):
-        extra_funcs = ['resize_func', 'unicode_char_entered_func']
-        def create_func(func_name):
-            imgui_name = func_name[:-5]
-            def func(*args, **kwargs):
-                getattr(self.ui_manager.imgui, imgui_name)(*args, **kwargs)
-            return func
-        
-        for func_name in extra_funcs:
-            setattr(self.wnd, func_name, create_func(func_name))
 
     def step(self, n=None) -> bool:
         if self.state.game_paused:

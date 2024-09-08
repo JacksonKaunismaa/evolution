@@ -1,6 +1,5 @@
-import imgui
+from imgui_bundle import imgui
 from moderngl_window import BaseWindow
-from moderngl_window.integrations.imgui import ModernglWindowRenderer
 
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
@@ -35,17 +34,15 @@ class GameStatus(UIElement):
             # hide near the bottom left corner so that it looks like it is collapsing
             height = self.HEADER_SIZE
             
-        imgui.set_next_window_position(self.x_pos, 
-                                        window_height - height, 
-                                        condition=imgui.ALWAYS)
+        imgui.set_next_window_pos(imgui.ImVec2(self.x_pos, window_height - height), 
+                                        cond=imgui.Cond_.always)
 
-        imgui.set_next_window_size(self.width, 
-                                   height, 
-                                   condition=imgui.ALWAYS)
+        imgui.set_next_window_size(imgui.ImVec2(self.width, height), 
+                                   cond=imgui.Cond_.always)
         # Begin a new ImGui window
         self.collapsing_header_open = imgui.begin(self.name, False, 
-                    imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_SAVED_SETTINGS | 
-                    imgui.WINDOW_NO_RESIZE)[0]
+                    imgui.WindowFlags_.no_move | imgui.WindowFlags_.no_saved_settings | 
+                    imgui.WindowFlags_.no_resize)[0]
         
         # Display the text when expanded
         if self.collapsing_header_open:
@@ -56,7 +53,7 @@ class GameStatus(UIElement):
             imgui.text(f"Epoch: {self.world.time}")
             imgui.text(f"Population: {self.world.population}")
             changed, new_speed = imgui.slider_int('game_speed', self.state.game_speed, 1, self.cfg.max_game_speed, 
-                                    flags=imgui.SLIDER_FLAGS_ALWAYS_CLAMP | imgui.SLIDER_FLAGS_LOGARITHMIC)
+                                    flags=imgui.SliderFlags_.always_clamp | imgui.SliderFlags_.logarithmic)
             if changed:
                 self.state.game_speed = new_speed
 

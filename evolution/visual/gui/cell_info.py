@@ -1,6 +1,5 @@
-import imgui
+from imgui_bundle import imgui
 from moderngl_window import BaseWindow
-from moderngl_window.integrations.imgui import ModernglWindowRenderer
 
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
@@ -34,13 +33,15 @@ class CellInfo(UIElement):
         
         height = self.HEADER_SIZE + self.PADDING + self.n_lines * self.LINE_SIZE + self.PADDING
         
-        imgui.set_next_window_position(window_width - self.width, self.y_pos, condition=imgui.ALWAYS)
+        imgui.set_next_window_pos(imgui.ImVec2(window_width - self.width, self.y_pos), 
+                                  cond=imgui.Cond_.always)
 
-        imgui.set_next_window_size(self.width, height, condition=imgui.ALWAYS)
+        imgui.set_next_window_size(imgui.ImVec2(self.width, height), 
+                                   cond=imgui.Cond_.always)
         # Begin a new ImGui window
         imgui.begin(self.name, False, 
-                    imgui.WINDOW_NO_MOVE | imgui.WINDOW_NO_SAVED_SETTINGS |
-                    imgui.WINDOW_NO_RESIZE)
+                    imgui.WindowFlags_.no_move | imgui.WindowFlags_.no_saved_settings |
+                    imgui.WindowFlags_.no_resize)
         
         imgui.text(f"Food {cell.food:.3f}")
         imgui.text(f"Position: {cell._selected_cell[0]}, {cell._selected_cell[1]}")

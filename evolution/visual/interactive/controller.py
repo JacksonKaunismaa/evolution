@@ -56,8 +56,7 @@ class Controller:
         
         self.key_mgr.register_key(self.wnd.keys.Y, lambda m:
             self.camera.toggle_follow())  # toggle whether we are locked on to the selected creature
-        
-        
+           
         self.key_mgr.register_key(self.wnd.keys.U, lambda m: 
             self.set_selected_creature(None))  # deselect creature
         

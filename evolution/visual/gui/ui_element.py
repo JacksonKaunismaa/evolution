@@ -1,4 +1,4 @@
-import imgui
+from imgui_bundle import imgui
 
 
 class UIElement:
@@ -18,7 +18,7 @@ class CollapseableHeader(UIElement):
         self.open = False
         
     def render(self, lines):
-        self.open = imgui.collapsing_header(self.title)[0]
+        self.open = imgui.collapsing_header(self.title)
         if self.open:
             for line in lines:
                 imgui.text(line)
