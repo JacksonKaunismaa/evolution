@@ -13,7 +13,7 @@ from evolution.utils.subscribe import Subscriber
 class InstancedCreatures(Subscriber):
     def __init__(self, cfg: Config, ctx: Context, world: GWorld, state: GameState, shaders: Dict[str, str]):
         super().__init__()
-        world.publisher.subscribe(self)
+        world.state.game_publisher.subscribe(self)
         
         self.cfg = cfg
         self.ctx = ctx

@@ -81,7 +81,6 @@ class Initializer:
             return self.func(arg)
         elif self.style in [InitializerStyle.FILLABLE, InitializerStyle.FORCE_MUTABLE, InitializerStyle.MUTABLE]:
             if self.is_list:
-                print(self.args, self.args[i])
                 return getattr(arg, self.name)(*(self.args[i]))
             return getattr(arg, self.name)(*self.args)
 

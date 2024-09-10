@@ -16,7 +16,7 @@ class ThoughtsVisualizer(Subscriber):
     def __init__(self, cfg: Config, ctx: Context, world: GWorld, wnd: BaseWindow,
                  state: GameState, shaders: Dict[str, str]):
         super().__init__()
-        world.publisher.subscribe(self)
+        world.state.creature_publisher.subscribe(self)
         
         self.cfg = cfg
         self.ctx = ctx
@@ -26,10 +26,6 @@ class ThoughtsVisualizer(Subscriber):
         self.wnd = wnd
         
         self.visible = False
-        self.pad = 0.05
-        self.width = 0.5
-        self.height = 0.1
-        self.neuron_size = 0.02
 
         self.thoughts_tex = loading.load_image_as_texture(self.ctx, 
                                                           'assets/circle_outline_faded.png')
@@ -44,6 +40,10 @@ class ThoughtsVisualizer(Subscriber):
              1.0,  1.0,    1.0, 1.0,
         ], dtype='f4')
 
+        self.pad = 0.05
+        self.width = 0.5
+        self.height = 0.1
+        self.neuron_size = 0.02
         # we will let the first row be the memories
         # second row will be the ouptuts
 
@@ -60,10 +60,9 @@ class ThoughtsVisualizer(Subscriber):
         out_position_x = np.linspace(left_edge + gap_outs/2, right_edge - gap_outs/2, n_outs)
         position_y = np.linspace(top_edge, bottom_edge, 2)
 
-
         mem_position = np.stack([mem_position_x, position_y[0] * np.ones(n_mems)], dtype='f4', axis=1)
         out_position = np.stack([out_position_x, position_y[1] * np.ones(n_outs)], dtype='f4', axis=1)
-        self.np_positions = np.concatenate([mem_position, out_position], axis=0)
+        self.np_positions = np.concatenate([out_position, mem_position], axis=0)
         self.positions = self.ctx.buffer(self.np_positions)
 
         self.activations = self.ctx.buffer(reserve=(n_mems + n_outs)*4)
@@ -94,6 +93,7 @@ class ThoughtsVisualizer(Subscriber):
         cuda_utils.copy_to_buffer(self.world.outputs[creature_id], self.cuda_activations)
 
     def render(self):
+        self.update()
         if not self.visible:
             return
         self.prog["aspect_ratio"] = self.wnd.aspect_ratio

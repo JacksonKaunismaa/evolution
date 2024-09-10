@@ -40,7 +40,6 @@ class GWorld():
         self.collisions = None   # the set of ray collisions for each creature
         self.dead_updated = False
         self.time = 0
-        self.publisher = Publisher()
 
     @cuda_profile
     def compute_grid_setup(self):
@@ -252,7 +251,7 @@ class GWorld():
             return False
 
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
-        self.publisher.publish()
+        self.state.publish_all()
         
         # if self.time % 60 == 0:   # save this generation
         #     if save:

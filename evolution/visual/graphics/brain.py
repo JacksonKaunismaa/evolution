@@ -12,7 +12,7 @@ from evolution.utils.subscribe import Subscriber
 class BrainVisualizer(Subscriber):
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: gworld.GWorld, shaders: Dict[str, str]):
         super().__init__()
-        world.publisher.subscribe(self)
+        # world.state.creature_publisher.subscribe(self)
         
         self.cfg = cfg
         self.ctx = ctx
@@ -155,6 +155,7 @@ class BrainVisualizer(Subscriber):
         cuda_utils.copy_to_texture(self.img, self.cuda_brain)
 
     def render(self):
+        self.update()
         if not self.visible:
             return
         self.brain_sampler.use()

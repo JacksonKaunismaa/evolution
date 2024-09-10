@@ -55,13 +55,8 @@ class Game:
         self.fps_tracker = FPSTracker()
         
         self.ui_manager = UIManager(cfg, self.world, window, self.state)
-        
-        self.creature_publisher = Publisher()
-        self.creature_publisher.subscribe(self.rays)
-        self.creature_publisher.subscribe(self.camera)
-        # self.creature_publisher.subscribe(self.brain_visual)
-        self.creature_publisher.subscribe(self.thoughts_visual)
-        
+
+        self.state.game_publisher.init_publish()
         self.setup_events()
 
     def setup_events(self):
@@ -94,18 +89,16 @@ class Game:
 
     def selected_creature_updates(self):
         creature = self.state.selected_creature
-        self.creature_publisher.publish()
-        for sub in self.creature_publisher.subscribers:
+        for sub in self.creature_publisher:
             sub.update(creature)
         
 
     def render(self):
         self.ctx.clear(0.0, 0.0, 0.0)
-
-        self.selected_creature_updates()
-        
+                
         self.camera.ubo.write(self.camera.get_camera_matrix())
         self.camera.ubo.bind_to_uniform_block()
+        self.camera.update()
 
         self.heatmap.render()
         self.creatures.render()

@@ -289,7 +289,7 @@ class CreatureArray:
             dead: A boolean tensor (size of current memory) of creatures that are dead.
             other: The CreatureArray that contains the new creatures (if any).
         Returns:
-            0, since the selected creature doesn't get updated with this strategy
+            None, since the selected creature doesn't get updated with this strategy
         """
         self.algos['max'] += 1
         self.start_idx = 0  # case where we just have to fill in the gaps

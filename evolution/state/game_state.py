@@ -5,6 +5,7 @@ import numpy as np
 from .creature_state import CreatureState
 from .cell_state import CellState
 
+from evolution.utils.subscribe import Publisher
 from evolution.core.config import Config
 
 if TYPE_CHECKING:
@@ -20,6 +21,8 @@ class GameState:
         self._selected_cell = CellState(cfg, world)  
         self._selected_creature = CreatureState(world)
         
+        self.creature_publisher = Publisher()
+        self.game_publisher = Publisher()
         self.increasing_food_decr = False
         self._game_speed = 1
         self.game_paused = False
@@ -33,6 +36,7 @@ class GameState:
     @selected_creature.setter
     def selected_creature(self, creature: Union[int, None]):
         self._selected_creature.set_creature(creature)
+        self.creature_publisher.publish(self.selected_creature)
     
     @property
     def selected_cell(self) -> CellState:
@@ -41,6 +45,10 @@ class GameState:
     @selected_cell.setter
     def selected_cell(self, cell: Union[Tuple[int, int], None]):
         self._selected_cell.set_cell(cell)
+        
+    def publish_all(self):
+        self.game_publisher.publish()
+        self.creature_publisher.publish(self.selected_creature)
         
     @property
     def game_speed(self):

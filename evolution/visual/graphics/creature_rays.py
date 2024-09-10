@@ -10,7 +10,7 @@ from evolution.utils.subscribe import Subscriber
 class CreatureRays(Subscriber):
     def __init__(self, cfg: Config, ctx: mgl.Context, world: GWorld, shaders):
         super().__init__()
-        world.publisher.subscribe(self)
+        world.state.creature_publisher.subscribe(self)
         
         self.cfg = cfg
         self.ctx = ctx
@@ -63,6 +63,7 @@ class CreatureRays(Subscriber):
         self.prog['position'] = self.world.creatures.positions[creature_id]
 
     def render(self):
+        self.update()
         if not self.visible:
             return
         # print('rendering rays')

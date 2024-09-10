@@ -15,7 +15,7 @@ from evolution.utils.subscribe import Subscriber
 class Heatmap(Subscriber):
     def __init__(self, cfg: config.Config, ctx: mgl.Context, world: gworld.GWorld, shaders: Dict[str, str]):
         super().__init__(10)
-        world.publisher.subscribe(self)
+        world.state.game_publisher.subscribe(self)
         
         self.cfg = cfg
         self.ctx = ctx

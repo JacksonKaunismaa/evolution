@@ -12,7 +12,7 @@ from evolution.state.game_state import GameState
 class Camera(Subscriber):
     def __init__(self, cfg: Config, ctx: Context, window: BaseWindow, world: GWorld):
         super().__init__()
-        world.publisher.subscribe(self)
+        world.state.creature_publisher.subscribe(self)
         
         self.ctx = ctx
         self.cfg = cfg
