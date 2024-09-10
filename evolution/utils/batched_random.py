@@ -4,14 +4,18 @@ torch.set_grad_enabled(False)
 from operator import mul
 from functools import reduce
 
-from evolution.core.creatures.creature_param import CreatureParam
+from evolution.core.creatures.creature_trait import CreatureTrait, InitializerStyle
 from evolution.cuda.cuda_utils import cuda_profile
 
 class BatchedRandom:
-    def __init__(self, params: Dict[str, CreatureParam], device: torch.device):
+    def __init__(self, params: Dict[str, CreatureTrait], device: torch.device):
         self.param_shapes = {}  # shape of the parameter
         self.param_elems = {}    # how many elements of the contiguous random block to take
         for k, v in params.items():
+            """Only generated noise for parameters that would need it."""
+            if not (v.init.style in [InitializerStyle.MUTABLE, InitializerStyle.FORCE_MUTABLE] or 
+               v.init.style == InitializerStyle.FILLABLE and v.init.name == 'normal_'):
+                continue
             v_shape = v._shape
             self.param_shapes[k] = v_shape
             if isinstance(v_shape, list):
