@@ -1,5 +1,5 @@
 import dataclasses
-from typing import Tuple
+from typing import Any, Dict, Tuple
 import torch
 torch.set_grad_enabled(False)
 
@@ -199,9 +199,13 @@ class Config:
     ## Game Settings
     max_game_speed: int = 1000 # maximum game speed (steps per frame)
     
-    def update_in_place(self, other: 'Config'):
-        for field in dataclasses.fields(self):
-            setattr(self, field.name, getattr(other, field.name))
+    def update_in_place(self, other: 'Config' | Dict[str, Any]) -> 'Config':
+        if isinstance(other, dict):
+            for k, v in other.items():
+                setattr(self, k, v)
+        else:
+            for field in dataclasses.fields(self):
+                setattr(self, field.name, getattr(other, field.name))
         return self
 
 

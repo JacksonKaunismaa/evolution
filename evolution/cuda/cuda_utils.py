@@ -6,6 +6,7 @@ import moderngl as mgl
 from OpenGL.GL import *
 from functools import wraps
 from collections import defaultdict
+import gc
 
 BENCHMARK = False
 times = defaultdict(float)
@@ -25,6 +26,9 @@ def cuda_profile(func):
         return res
     return wrapper
 
+def clear_mem():
+    gc.collect()
+    torch.cuda.empty_cache()
 
 def _cudaGetErrorEnum(error):
     if isinstance(error, cuda.CUresult):

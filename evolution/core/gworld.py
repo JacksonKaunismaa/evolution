@@ -1,3 +1,5 @@
+import itertools
+from typing import Dict, List
 import torch
 from torch.nn import functional as F
 torch.set_grad_enabled(False)
@@ -7,6 +9,7 @@ from tqdm import trange, tqdm
 import os.path as osp
 from collections import defaultdict
 import numpy as np
+import pickle
 
 # logging.basicConfig(level=logging.info, filename='game.log')
 
@@ -230,9 +233,6 @@ class GWorld():
         """Compute the decisions of all creatures. This includes running the neural networks, computing memories, and
         running vision ray tracing. Sets `outputs`, `collisions`, and `celled_world`."""
         self.celled_world = self.compute_grid_setup()
-        if cuda_utils.BENCHMARK:
-            self.n_maxxed += (self.celled_world[1] >= self.cfg.max_per_cell).sum()
-        # input()
         self.collisions = self.trace_rays_grid(*self.celled_world)
         stimuli = self.collect_stimuli(self.collisions)
         self.outputs = self.think(stimuli)
@@ -252,6 +252,8 @@ class GWorld():
             return False
 
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
+        if cuda_utils.BENCHMARK:
+            self.n_maxxed += (self.celled_world[1]).topk(20).values.float().mean()
         self.state.publish_all()
         
         # if self.time % 60 == 0:   # save this generation
@@ -281,14 +283,16 @@ def _benchmark(cfg=None, max_steps=512):
     # pr = cProfile.Profile()
     # pr.enable()
     for i in trange(max_steps):
-        if not game.step(visualize=False):   # we did mass extinction before finishing
+        if not game.step():   # we did mass extinction before finishing
             return game
     
-    cuda_utils.times['n_maxxed'] = game.n_maxxed.item()
+    cuda_utils.times['n_maxxed'] = game.n_maxxed.item() / game.time
     cuda_utils.times['algo_max'] = game.creatures.algos['max']
     cuda_utils.times['algo_fill'] = game.creatures.algos['fill_gaps']
     cuda_utils.times['algo_move'] = game.creatures.algos['move_block']
     
+    del game
+    cuda_utils.clear_mem()
 
     # pr.disable()
     # s = io.StringIO()
@@ -306,12 +310,45 @@ def multi_benchmark(cfg, max_steps=2500, N=20, skip_first=False):
             continue
         for k, v in bmarks.items():
             total_times[k].append(v)
-
+    results = {}
     for k, v in total_times.items():
         # compute mean and sample standard deviation
         mean = np.mean(v)
-        std = np.std(v, ddof=1) / np.sqrt(len(v))
+        if len(v) == 1:
+            std = 0
+        else:
+            std = np.std(v, ddof=1) / np.sqrt(len(v))
+        results[k] = (mean, std)
         print(k, mean, '+-', std)
+    return results
+
+def hyperparameter_search(cfg: Config, hyperparameters: Dict[str, List], max_steps, N,
+                          force_restart=False, path='hyper.pkl', skip_errors=False):
+    hyp_keys = list(hyperparameters.keys())
+    hyp_vals = list(hyperparameters.values())
+    choices = itertools.product(*hyp_vals)
+    
+    if osp.exists(path) and not force_restart:
+        with open(path, 'rb') as f:
+            results = pickle.load(f)
+    else:
+        results = {}
+        
+    for choice in choices:
+        if choice in results:
+            continue
+        cfg.update_in_place(dict(zip(hyp_keys, choice)))
+        print(f"Testing {dict(zip(hyp_keys, choice))}")
+        try:
+            results[choice] = multi_benchmark(cfg, max_steps=max_steps, N=N)
+        except Exception as e:
+            if skip_errors:
+                results[choice] = e
+                raise e
+        finally:
+            with open(path, 'wb') as f:
+                pickle.dump(results, f)
+    return results
 
 
 def main(cfg=None, max_steps=99999):

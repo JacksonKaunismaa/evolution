@@ -18,23 +18,29 @@ cfg = config.Config(start_creatures=8192, max_creatures=262144, size=5000, food_
 # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
 #                 init_size_range=(0.2, 0.2), num_rays=3, immortal=False, init_food_scale=15.)
 
-evolution.visual.main.main(cfg)
+# evolution.visual.main.main(cfg)
 
-# evolution.core.gworld.multi_benchmark(cfg, max_steps=2500, N=10)
+# evolution.core.gworld.multi_benchmark(cfg, max_steps=8000, N=8)
+ 
+evolution.core.gworld.hyperparameter_search(cfg, {'cell_size': [15.0, 16.0, 17.0], 
+                                                  'max_per_cell': [80, 90, 100]}, 
+                                            max_steps=8000, N=2, skip_errors=True)  
 
     
 """
-compute_grid_setup 482.79530933611096 +- 1.3718758401742894
-trace_rays_grid 597.2399807721376 +- 1.9672694575245235
-collect_stimuli 275.7592362921685 +- 0.533262782880255
-think 1101.3345553658903 +- 2.3915887145288726
-rotate_creatures 920.5014999762177 +- 1.9111978756777044
-only_move_creatures 455.2341208655387 +- 0.6508250423657339
-compute_gridded_attacks 266.3877790927887 +- 1.8072232657506504
-only_do_attacks 194.22384267919696 +- 0.12167123525153227
-_kill_dead 796.6284264333547 +- 8.081302892973936
-_reproduce 3994.457520944811 +- 45.91538070955325
-fused_kill_reproduce 4609.480364069063 +- 51.6521775443228
-creatures_eat_grow 472.77455417402086 +- 0.3659262050781333
+compute_grid_setup 53692.75039097667 +- 20.19830530762004
+trace_rays_grid 2757.452476482489 +- 29.737342925962313
+collect_stimuli 5786.189814642072 +- 74.42757561644584
+think 51215.3072708603 +- 681.996083486991
+rotate_creatures 17917.481818640605 +- 229.8669914487292
+only_move_creatures 1802.0272597642615 +- 1.6330036558314653
+compute_gridded_attacks 724.0041976823122 +- 1.902282685647933
+only_do_attacks 731.9873527185991 +- 0.3991855130358173
+fused_kill_reproduce 25216.593125466257 +- 41.99008727946535
+creatures_eat_grow 6653.306500054896 +- 11.298172678878707
 n_maxxed 0.0 +- 0.0
+algo_max 2537.0 +- 71.33973046526839
+algo_fill 4493.875 +- 69.6071726343116
+algo_move 870.375 +- 8.914149066031404
+
 """
