@@ -82,7 +82,7 @@ class CreatureState:
         if self:
             self.post_rot_energy = self.world.creatures.energies[self._selected_creature].item()
             self.rotate_logit = logits[self._selected_creature].item()
-            self.rotate_angle = np.arccos(rotation_matrix[self._selected_creature, 0, 0].item()) * 180.0 / np.pi
+            self.rotate_angle = np.arcsin(rotation_matrix[self._selected_creature, 1, 0].item()) * 180.0 / np.pi
             self.rotate_energy = self.post_rot_energy - self.pre_rot_energy
             self.energy = self.post_rot_energy      
         

@@ -13,7 +13,7 @@ from .cuda_utils import checkCudaErrors
     
 
 class CUDAKernelManager:
-    def __init__(self, cfg: config.Config):
+    def __init__(self, cfg: config.Config, debug=False):
         self.cfg = cfg
         self.encoding = 'ascii'
         checkCudaErrors(cuda.cuInit(0))
@@ -25,7 +25,9 @@ class CUDAKernelManager:
                                                           self.cuDevice))
         arch_arg = f'--gpu-architecture=compute_{major}{minor}'.encode(self.encoding)
         debug_args =  [b'--device-debug', b'--generate-line-info']
-        self.compile_args = [b'--use_fast_math', b'--extra-device-vectorization', arch_arg] + debug_args
+        self.compile_args = [b'--use_fast_math', b'--extra-device-vectorization', arch_arg]
+        if debug:
+            self.compile_args += debug_args
         self.kernels = self.compile_kernels()
         self.stream = checkCudaErrors(cuda.cuStreamCreate(0))
 

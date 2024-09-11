@@ -90,19 +90,22 @@ class Controller:
         self.key_mgr.register_key(self.wnd.keys.T, lambda m:  # jump to tiniest creature
             self.set_selected_creature(self.world.creatures.sizes.argmin()))
         
-        def speed_adjustment(modifiers):
+        def speed_adjustment(modifiers, add=True):
             amt = 1
             if modifiers.shift:
                 amt *= 10
             if modifiers.ctrl:
                 amt *= 10
-            return amt
+            if add:
+                self.state.game_speed += amt
+            else:
+                self.state.game_speed -= amt
         
         self.key_mgr.register_key(self.wnd.keys.UP, lambda modifiers:  # speed up simulation so that we do 1 more step per frame
-            self.state.game_speed.__iadd__(speed_adjustment(modifiers)))
+            speed_adjustment(modifiers, add=True))
         
         self.key_mgr.register_key(self.wnd.keys.DOWN, lambda modifiers:  # slow down simulation so that we do 1 less step per frame
-            self.state.game_speed.__isub__(speed_adjustment(modifiers)))
+            speed_adjustment(modifiers, add=False))
         
         self.key_mgr.register_key(self.wnd.keys.B, lambda m:
             self.state.toggle_hitboxes())  # turn hitboxes on/off

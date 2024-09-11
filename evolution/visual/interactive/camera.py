@@ -6,19 +6,15 @@ from moderngl_window import BaseWindow
 
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
-from evolution.utils.subscribe import Subscriber
-from evolution.state.game_state import GameState
 
-class Camera(Subscriber):
-    def __init__(self, cfg: Config, ctx: Context, window: BaseWindow, world: GWorld):
-        super().__init__()
-        world.state.creature_publisher.subscribe(self)
-        
+class Camera:
+    def __init__(self, cfg: Config, ctx: Context, window: BaseWindow, world: GWorld):        
         self.ctx = ctx
         self.cfg = cfg
         self.ubo = self.ctx.buffer(reserve=2 * 4*4 * 4)  # 2 mat4s, 4x4 floats of 4 bytes
         self.window = window
         self.world = world
+        self.state = self.world.state
 
         self.reset_camera()
 
@@ -61,7 +57,8 @@ class Camera(Subscriber):
     def drag(self, old_pos: glm.vec2, click_pos: glm.vec2, drag_pos: glm.vec2):
         # compute game delta coordinates between cursor position now and when the click started
         delta = self.pixel_to_game_delta(drag_pos - click_pos)
-        self.position.xy = old_pos - delta.xy  # and move the camera by that delta
+        if not self.following:
+            self.position.xy = old_pos - delta.xy  # and move the camera by that delta
 
     def zoom_into_point(self, yoffset, mouse_pos):
         # we'd like the game position of the cursor to be the same before and after the zoom
@@ -73,7 +70,8 @@ class Camera(Subscriber):
         self.zoom = np.clip(self.zoom, 0.001, 200) # prevent zooming in/out too far
         # print(self.zoom)
         new_cursor_pos = self.pixel_to_game_coords(*mouse_pos)
-        self.position.xy -= (new_cursor_pos - old_cursor_pos).xy
+        if not self.following:
+            self.position.xy -= (new_cursor_pos - old_cursor_pos).xy
 
     def get_camera_matrix(self):
         return self.get_projection_matrix() * self.get_view_matrix()
@@ -112,10 +110,17 @@ class Camera(Subscriber):
 
     def toggle_follow(self):
         self.following = not self.following
+    #     self.move_to_selected_creature()
+        
+    # def move_to_selected_creature(self):
+    #     self.position.xy = glm.vec2(self.world.state.selected_creature.position.cpu().numpy())
     
-    def _update(self, creature_id):
-        if not creature_id:
+    def update(self):
+        selected_creature = self.world.state.selected_creature
+        if not selected_creature:
+            self.following = False
             return
         if self.following:
-            self.position.xy = glm.vec2(self.world.creatures.positions[creature_id].cpu().numpy())
+            self.position.xy = glm.vec2(selected_creature.position.cpu().numpy())
+
         # self.rotate_to(glm.vec2(self.world.creatures.head_dirs[creature_id].cpu().numpy()))

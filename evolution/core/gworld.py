@@ -27,7 +27,7 @@ class GWorld():
         self.food_grid = torch.rand((cfg.size, cfg.size), device=self.device) * cfg.init_food_scale
         # pad with -inf on all sides
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
-        self.kernels = cu_algorithms.CUDAKernelManager(cfg)
+        self.kernels = cu_algorithms.CUDAKernelManager(cfg, debug=False)
         self.creatures: Creatures = Creatures(cfg, self.kernels, self.device)
         self.creatures.generate_from_cfg()
         self.n_maxxed = 0
@@ -201,7 +201,7 @@ class GWorld():
             self.food_grid = fgrid
             
             self.creatures.load_state_dict(checkpoint['creatures'], self.device)
-            self.cfg = checkpoint['cfg']
+            self.cfg.update_in_place(checkpoint['cfg'])
             self.time = checkpoint.get('time', 0)
             torch.random.manual_seed(checkpoint['seed'])
     
@@ -230,7 +230,8 @@ class GWorld():
         """Compute the decisions of all creatures. This includes running the neural networks, computing memories, and
         running vision ray tracing. Sets `outputs`, `collisions`, and `celled_world`."""
         self.celled_world = self.compute_grid_setup()
-        self.n_maxxed += (self.celled_world[1] >= self.cfg.max_per_cell).sum()
+        if cuda_utils.BENCHMARK:
+            self.n_maxxed += (self.celled_world[1] >= self.cfg.max_per_cell).sum()
         # input()
         self.collisions = self.trace_rays_grid(*self.celled_world)
         stimuli = self.collect_stimuli(self.collisions)

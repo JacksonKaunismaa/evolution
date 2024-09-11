@@ -211,8 +211,8 @@ class Creatures(CreatureArray):
     def rotate_creatures(self, outputs: Tensor, state: GameState):
         """Given the neural network outputs `outputs`, rotate each creature accordingly.
         Rotation is a scalar between -1 and 1, which is combined with the creatures' size
-        to compute the number of radians that are rotated. Negative rotation is rightwards, 
-        positive is leftwards. We also take a small energy penalty for rotating."""
+        to compute the number of radians that are rotated. Negative rotation is leftwards, 
+        positive is rightwards. We also take a small energy penalty for rotating."""
         # rotation => need to rotate the rays and the object's direction
         
         state.selected_creature.extract_pre_rotate_state()

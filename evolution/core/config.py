@@ -198,6 +198,11 @@ class Config:
     
     ## Game Settings
     max_game_speed: int = 1000 # maximum game speed (steps per frame)
+    
+    def update_in_place(self, other: 'Config'):
+        for field in dataclasses.fields(self):
+            setattr(self, field.name, getattr(other, field.name))
+        return self
 
 
 def simple_cfg(**kwargs):
