@@ -110,10 +110,6 @@ class Camera:
 
     def toggle_follow(self):
         self.following = not self.following
-    #     self.move_to_selected_creature()
-        
-    # def move_to_selected_creature(self):
-    #     self.position.xy = glm.vec2(self.world.state.selected_creature.position.cpu().numpy())
     
     def update(self):
         selected_creature = self.world.state.selected_creature
@@ -121,6 +117,5 @@ class Camera:
             self.following = False
             return
         if self.following:
-            self.position.xy = glm.vec2(selected_creature.position.cpu().numpy())
-
+            self.position.xy = glm.vec2(selected_creature.position)
         # self.rotate_to(glm.vec2(self.world.creatures.head_dirs[creature_id].cpu().numpy()))
