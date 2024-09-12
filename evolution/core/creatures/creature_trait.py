@@ -189,7 +189,7 @@ class CreatureTrait:
                 child.data = self.init(torch.empty(num_reproducers, *self._shape, device=self.device))
         return child
             
-    #@cuda_profile
+    @cuda_profile
     def reproduce_mutable(self, name: str, rng: 'BatchedRandom', reproducers: Tensor, mut: Tensor):
         """Generate child traits from the current CreatureTrait by adding random noise to the
         parent's traits, and then normalizing. The noise is scaled by the mut Tensor, which is
@@ -231,7 +231,7 @@ class CreatureTrait:
         elif self.init.style == InitializerStyle.MUTABLE:
             return self.reproduce_mutable(name, rng, reproducers, mut)
             
-    #@cuda_profile
+    @cuda_profile
     def normalize(self):  # technically we should add support for list-type CreatureTraits, but we don't use that
         """Apply normalization function to the trait."""
         if self.normalize_func is not None:

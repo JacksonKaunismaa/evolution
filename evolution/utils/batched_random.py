@@ -31,12 +31,12 @@ class BatchedRandom:
         self.buffer = None
         self.idx = 0
         
-    #@cuda_profile
+    @cuda_profile
     def generate(self, num):
         self.buffer = torch.randn(num, self.gen_size, device=self.device)
         self.idx = 0
     
-    #@cuda_profile
+    @cuda_profile
     def fetch_params(self, param, idx=None):
         if idx is not None:
             acc_size = self.param_elems[param][idx]

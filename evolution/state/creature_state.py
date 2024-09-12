@@ -41,13 +41,13 @@ class CreatureState:
     def extract_general_state(self):
         """Extract basic attributes for the selected creature."""
         singular_name_exceptions = {'n_children': 'n_children',
-                                    'energies': 'energy'}
+                                    'energies': 'energy',
+                                    'reproduce_energies': 'reproduce_energy'}
         for k, v in self.world.creatures.variables.items():
             singular_name = singular_name_exceptions.get(k, k[:-1])
             if not v.is_list and v.dim() <= 2:
                 setattr(self, singular_name, v[self._selected_creature].cpu().numpy())
                 
-        self.reproduce_energy = self.world.cfg.reproduce_thresh(self.size)
         self.max_health = self.world.cfg.init_health(self.size)
         self.set_age_stage()
         self.update_state_available = False

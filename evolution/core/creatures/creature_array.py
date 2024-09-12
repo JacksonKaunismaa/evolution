@@ -82,6 +82,11 @@ class CreatureArray:
         self.energies: CreatureTrait = CreatureTrait(tuple(), 
                                                      Initializer.other_dependent('sizes', self.cfg.init_energy), 
                                                      None, self.device)
+        
+        self.reproduce_energies: CreatureTrait = CreatureTrait(tuple(),
+                                                               Initializer.other_dependent('sizes', self.cfg.reproduce_thresh),
+                                                               None, self.device)
+        
         self.healths: CreatureTrait = CreatureTrait(tuple(), 
                                                     Initializer.other_dependent('sizes', self.cfg.init_health),
                                                     None, self.device)
@@ -159,14 +164,14 @@ class CreatureArray:
         self.rng = BatchedRandom(self.variables, self.device)
         self.algos = {'max': 0, 'fill_gaps': 0, 'move_block': 0}
         
-    #@cuda_profile
+    @cuda_profile
     def reproduce_most(self, reproducers: Tensor, num_reproducers: int, children: 'CreatureArray', mut: Tensor):
         for name, v in self.variables.items():   # handle mutable parameters
             child_trait = v.reproduce(name, self.rng, reproducers, num_reproducers, mut)
             if child_trait is not None:
                 setattr(children, name, child_trait)
                 
-    #@cuda_profile
+    @cuda_profile
     def reproduce_extra(self, reproducers: Tensor, children: 'CreatureArray'):
         children.positions = self.positions.reproduce_mutable('positions', self.rng, reproducers, 
                                                               self.cfg.reproduce_dist)
@@ -182,7 +187,7 @@ class CreatureArray:
                                          " for reproduction, but it does not exist in child.")
         
 
-    #@cuda_profile
+    @cuda_profile
     def reproduce_traits(self, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
         """Generate descendant traits from the set of indices in reproducers and store it in 
         a new CreatureArray.
