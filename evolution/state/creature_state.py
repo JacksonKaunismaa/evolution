@@ -92,6 +92,7 @@ class CreatureState:
             self.move_amt = move[self._selected_creature].item()
             self.move_energy = -move_cost[self._selected_creature].item()
             self.energy = self.world.creatures.energies[self._selected_creature].item()
+            self.position = self.world.creatures.positions[self._selected_creature].cpu().numpy()
             
     def extract_attack_state(self, attacks: Tensor, attack_cost: Tensor):
         if self._selected_creature is not None:
