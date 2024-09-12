@@ -18,9 +18,9 @@ cfg = config.Config(start_creatures=8192, max_creatures=262144, size=5000, food_
 # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
 #                 init_size_range=(0.2, 0.2), num_rays=3, immortal=False, init_food_scale=15.)
 
-# evolution.visual.main.main(cfg)
+evolution.visual.main.main(cfg)
 
-evolution.core.gworld.multi_benchmark(cfg, max_steps=8000, N=8)
+# evolution.core.gworld.multi_benchmark(cfg, max_steps=8000, N=8)
  
 # evolution.core.gworld.hyperparameter_search(cfg, {'cell_size': [15.0, 16.0, 17.0], 
 #                                                   'max_per_cell': [20, 40, 60, 80, 90, 100]}, 
