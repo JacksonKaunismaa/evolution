@@ -167,6 +167,8 @@ class Config:
 
 
     ### Attack
+    # anywhere along size * head_dir * t + position, t \in [attack_range[0], attack_range[1]] can do damage
+    attack_range: Tuple[float, float] = (1.35, 1.96)  # emprically measured based on creature sprite to match it as closely as possible
     # func(num_attacks, size) to determine attack cost
     attack_cost: ConfigFunction = ConfigFunction('bilinear', 0.05)  
     # func(size) to determine the amount of damage done in an attack

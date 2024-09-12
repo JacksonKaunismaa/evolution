@@ -10,10 +10,11 @@ from evolution.core import config
 from evolution.core.creatures.creature_trait import CreatureTrait
 
 from .cuda_utils import checkCudaErrors
-    
+
+DEBUG = False
 
 class CUDAKernelManager:
-    def __init__(self, cfg: config.Config, debug=False):
+    def __init__(self, cfg: config.Config):
         self.cfg = cfg
         self.encoding = 'ascii'
         checkCudaErrors(cuda.cuInit(0))
@@ -26,7 +27,7 @@ class CUDAKernelManager:
         arch_arg = f'--gpu-architecture=compute_{major}{minor}'.encode(self.encoding)
         debug_args =  [b'--device-debug', b'--generate-line-info']
         self.compile_args = [b'--use_fast_math', b'--extra-device-vectorization', arch_arg]
-        if debug:
+        if DEBUG:
             self.compile_args += debug_args
         self.kernels = self.compile_kernels()
         self.stream = checkCudaErrors(cuda.cuStreamCreate(0))

@@ -30,7 +30,7 @@ class GWorld():
         self.food_grid = torch.rand((cfg.size, cfg.size), device=self.device) * cfg.init_food_scale
         # pad with -inf on all sides
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
-        self.kernels = cu_algorithms.CUDAKernelManager(cfg, debug=False)
+        self.kernels = cu_algorithms.CUDAKernelManager(cfg)
         self.creatures: Creatures = Creatures(cfg, self.kernels, self.device)
         self.creatures.generate_from_cfg()
         self.n_maxxed = 0
@@ -361,9 +361,4 @@ def main(cfg=None, max_steps=99999):
     for i in trange(max_steps):
         if not game.step():
             break
-    return cuda_utils.times, game
-
-        
-
-        
-        
+    return cuda_utils.times, game      

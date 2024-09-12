@@ -1,3 +1,12 @@
+__device__ inline void write_ray_intersection(float* results, int ray_idx, float* colors, int other_organism) {
+    for (int c = 0; c < 3; c++) {
+        // using ray_idx here is a bit fallacious, since technically the '3' in indexing (c.f. x,y,len)
+        // rays is different from the '3' in indexing results (c.f. colors)
+        results[ray_idx + c] = colors[other_organism * 3 + c];
+    }
+}
+
+
 extern "C" __global__
 void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors, 
                      int* cells, int* cell_counts, float* results,
@@ -31,8 +40,8 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     float ray_len = rays[ray_idx + 2];
 
     int organism_idx = organism * 2;
-    float our_loc_x = positions[organism_idx + 0];  // extract organism information
-    float our_loc_y = positions[organism_idx + 1];
+    float center_x = positions[organism_idx + 0];  // extract organism information
+    float center_y = positions[organism_idx + 1];
 
     float t_best = ray_len+1.0f;  // initialize the best t value to the max length of the ray
 
@@ -47,10 +56,10 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     #endif
 
     // getting our starting and ending grid coordinates
-    int x = int(our_loc_x / CFG_cell_size);
-    int y = int(our_loc_y / CFG_cell_size);
-    int end_x = int((our_loc_x + ray_len * ray_dir_x) / CFG_cell_size);
-    int end_y = int((our_loc_y + ray_len * ray_dir_y) / CFG_cell_size);
+    int x = int(center_x / CFG_cell_size);
+    int y = int(center_y / CFG_cell_size);
+    int end_x = int((center_x + ray_len * ray_dir_x) / CFG_cell_size);
+    int end_y = int((center_y + ray_len * ray_dir_y) / CFG_cell_size);
     end_x = max(0, min(end_x, num_cells-1));
     end_y = max(0, min(end_y, num_cells-1));
 
@@ -58,8 +67,8 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     // https://www.desmos.com/calculator/yh3hevkyc5
     float t_delta_x = CFG_cell_size / abs(ray_dir_x);
     float t_delta_y = CFG_cell_size / abs(ray_dir_y);
-    float t_x = -(our_loc_x - x * CFG_cell_size) / ray_dir_x;
-    float t_y = -(our_loc_y - y * CFG_cell_size) / ray_dir_y;
+    float t_x = -(center_x - x * CFG_cell_size) / ray_dir_x;
+    float t_y = -(center_y - y * CFG_cell_size) / ray_dir_y;
     float t_max_x = ray_dir_x > 0 ? t_delta_x + t_x : t_x;
     float t_max_y = ray_dir_y > 0 ? t_delta_y + t_y : t_y;
     int sx = x < end_x ? 1 : -1;
@@ -97,17 +106,13 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
             float sq_other_rad = other_rad * other_rad;
 
             // calculate distance from our center to their center
-            float diff_x = other_x - our_loc_x;
-            float diff_y = other_y - our_loc_y;
+            float diff_x = other_x - center_x;
+            float diff_y = other_y - center_y;
             float sq_center_dist = diff_x * diff_x + diff_y * diff_y;
 
             // if we are inside, we are done immediately
             if (sq_center_dist < sq_other_rad){
-                for (int c = 0; c < 3; c++) {
-                    // using ray_idx here is a bit fallacious, since technically the '3' in indexing (c.f. x,y,len)
-                    // rays is different from the '3' in indexing results (c.f. colors)
-                    results[ray_idx + c] = colors[other_organism * 3 + c];
-                }
+                write_ray_intersection(results, ray_idx, colors, other_organism);
                 return;
             }
 
@@ -128,14 +133,11 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
             found_intersect = true;
 
             if (t_intersect < t_best) {  // closer than previous object
-                for (int c = 0; c < 3; c++) {
-                    // using ray_idx here is a bit fallacious, since technically the '3' in indexing (c.f. x,y,len)
-                    // rays is different from the '3' in indexing results (c.f. colors)
-                    results[ray_idx + c] = colors[other_organism * 3 + c];
-                }
+                write_ray_intersection(results, ray_idx, colors, other_organism);
                 t_best = t_intersect;
             }
         }
+
         if (x == end_x && y == end_y) break;   // includes being outside the grid
 
         // do Voxel Traversal

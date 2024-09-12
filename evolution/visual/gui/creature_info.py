@@ -92,7 +92,7 @@ class CreatureInfo(Window):
                 
                 self.attack_panel.render([
                     f"Num Attacking: {creat.n_attacking}",
-                    f"Attack Damage Taken: {creat.dmg_taken:.2f}",
+                    f"Attack Damage Taken: {creat.dmg_taken:.5f}",
                     f"Attack Energy: {creat.attack_cost:.2f}"
                 ])
                 self.eating_panel.render([
