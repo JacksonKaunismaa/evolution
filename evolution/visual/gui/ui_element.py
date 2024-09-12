@@ -99,6 +99,17 @@ class Checkbox(UIElement):
     
     
 class Slider(UIElement):
+    def __init__(self, slider_type):
+        self.slider_type = slider_type
+        
+    @classmethod
+    def slider_int(cls) -> 'Slider':
+        return cls(imgui.slider_int)
+    
+    @classmethod
+    def slider_float() -> 'Slider':
+        return Slider(imgui.slider_float)
+        
     @property
     def height(self):
         return self.SLIDER_SIZE
@@ -107,4 +118,7 @@ class Slider(UIElement):
         if text is not None:
             imgui.text(text)
             imgui.same_line()
-        return imgui.slider_float(label, value, min_value, max_value, flags=flags)
+            
+        return self.slider_type(label, value, min_value, max_value, flags=flags)
+    
+

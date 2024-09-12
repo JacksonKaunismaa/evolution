@@ -7,7 +7,7 @@ from evolution.core.gworld import GWorld
 from evolution.state.game_state import GameState
 from evolution.core.creatures.creature_trait import InitializerStyle
 
-from .ui_element import CollapseableHeader, Window, Lines
+from .ui_element import CollapseableHeader, Window, Lines, UIElement
 
 
 class CreatureInfo(Window):
@@ -27,11 +27,11 @@ class CreatureInfo(Window):
         self.move_panel = CollapseableHeader('Movement')
         self.attack_panel = CollapseableHeader('Attacking')
         self.eating_panel = CollapseableHeader('Eating')
-        self.dynamic_panels = [self.delta_text,
-                               self.rotate_panel,
-                               self.move_panel,
-                               self.attack_panel,
-                               self.eating_panel]
+        self.dynamic_panels: List[UIElement] = [self.delta_text,
+                                                self.rotate_panel,
+                                                self.move_panel,
+                                                self.attack_panel,
+                                                self.eating_panel]
         
     def render(self):
         # Set the position dynamically based on collapsing header state
@@ -74,7 +74,7 @@ class CreatureInfo(Window):
             self.mutation_panel.render([
                 f"{name.replace('_', ' ').title()}: {creat.mutation_rate[param.init.mut_idx]:.6f}" 
                 for name,param in self.world.creatures.variables.items() 
-                    if param.init.style == InitializerStyle.MUTABLE
+                    if param.init.style == InitializerStyle.MUTABLE  # => has a mutation rate
             ])
             
             if creat.update_state_available:

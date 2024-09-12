@@ -17,7 +17,7 @@ class GameStatus(Window):
         self.wnd = window
         self.food_decr_checkbox = Checkbox()
         self.text = Lines()
-        self.speed_slider = Slider()
+        self.speed_slider = Slider.slider_int()
         self.width = 300 / 13
         self.x_pos = 0  # y pos is adjustable, and height depends on n_lines * LINE_SIZE
         
@@ -41,13 +41,13 @@ class GameStatus(Window):
             _, self.state.increasing_food_decr = \
                 self.food_decr_checkbox.render("Increasing?",
                                                self.state.increasing_food_decr,
-                                               f"food_cover_decr: {self.cfg.food_cover_decr:.6f}")
+                                               f"Food Cover Decr: {self.cfg.food_cover_decr:.6f}")
 
             self.text.render([f"Epoch: {self.world.time}",
                               f"Population: {self.world.population}"])                
 
             changed, new_speed = \
-                self.speed_slider.render('game_speed', self.state.game_speed, 
+                self.speed_slider.render('Game Speed', self.state.game_speed, 
                                          1, self.cfg.max_game_speed, 
                                          flags=imgui.SliderFlags_.always_clamp | imgui.SliderFlags_.logarithmic)
             if changed:

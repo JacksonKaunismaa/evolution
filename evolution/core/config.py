@@ -42,7 +42,7 @@ class ConfigFunction:   # for replacing functions in regular python code
         return self.func(*args, *self.extra_args)
     
     def __repr__(self):
-        return f'{self.name}'
+        return f'{self.name}({self.extra_args})'
     
 class FunctionExpression():  # for code preprocessor in cu_algorithms
     def __init__(self, symbols, expr):
