@@ -37,7 +37,8 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     int ray_idx = (organism * CFG_num_rays + ray) * 3;
     float ray_dir_x = rays[ray_idx + 0];  // extract ray information
     float ray_dir_y = rays[ray_idx + 1];
-    float ray_len = rays[ray_idx + 2];
+    float size = sizes[organism];
+    float ray_len = rays[ray_idx + 2] * size;
 
     int organism_idx = organism * 2;
     float center_x = positions[organism_idx + 0];  // extract organism information

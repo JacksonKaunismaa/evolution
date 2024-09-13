@@ -3,8 +3,6 @@
 in vec2 hbox_coord;
 in vec2 head_dir;  // cos theta, sin theta
 
-uniform vec2 position;  // center of creature
-uniform float size;
 uniform float head_len;
 uniform float head_start;
 uniform vec3 color;
@@ -12,6 +10,9 @@ uniform vec3 color;
 layout (std140) uniform Matrices{
     mat4 camera;
 };
+
+uniform float size;
+uniform vec2 position;
 
 // out vec2 TexCoord;
 out vec3 Color;

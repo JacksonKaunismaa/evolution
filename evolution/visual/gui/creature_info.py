@@ -65,7 +65,8 @@ class CreatureInfo(Window):
                 f"Size: {creat.size:.4f}",
                 f"Position: {creat.position[0]:.2f}, {creat.position[1]:.2f}",
                 f"Color: {int(creat.color[0])}, {int(creat.color[1])}, {int(creat.color[2])}",
-                f"Eat pct: {100.*float(creat.eat_pct):.4f}"
+                f"Eat pct: {100.*float(creat.eat_pct):.4f}",
+                f"ID: {creat._selected_creature}"
             ])
             
             if creat.update_state_available:

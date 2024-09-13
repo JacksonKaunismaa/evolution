@@ -54,7 +54,7 @@ class Creatures(CreatureArray):
         """If any creature drops below 0 health or energy, kill it. Update the food grid by depositing an amount of food
         that depends on the creature's size at death."""
         if self.cfg.immortal:
-            return None, 0
+            return torch.zeros(self.population, dtype=torch.bool, device=self.device), 0
         health_deaths = (self.healths <= 0)
         energy_deaths = (self.energies <= 0)
         self.dead = health_deaths | energy_deaths   # congiuous boolean tensor
@@ -187,7 +187,11 @@ class Creatures(CreatureArray):
                           self.memories, 
                           food, 
                           self.healths.unsqueeze(1), 
-                          self.energies.unsqueeze(1)
+                          self.energies.unsqueeze(1),
+                          self.head_dirs,
+                          self.age_mults.unsqueeze(1),
+                          self.colors,
+                          self.sizes.unsqueeze(1),
                         ], 
                         dim=1)  # [N, F]
 

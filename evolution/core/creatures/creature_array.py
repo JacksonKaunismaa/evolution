@@ -14,11 +14,11 @@ from evolution.state.game_state import GameState
 
 from .creature_trait import CreatureTrait, Initializer, InitializerStyle
 
-def normalize_rays(rays: 'CreatureTrait', sizes: 'CreatureTrait', cfg: Config):
+def _normalize_rays(rays: 'CreatureTrait', cfg: Config):
     rays[..., :2] /= torch.norm(rays[..., :2], dim=2, keepdim=True)
     rays[..., 2] = torch.clamp(torch.abs(rays[..., 2]),
-                cfg.ray_dist_range[0]*sizes.unsqueeze(1),
-                cfg.ray_dist_range[1]*sizes.unsqueeze(1))
+                cfg.ray_dist_range[0], 
+                cfg.ray_dist_range[1])
     
 def normalize_head_dirs(head_dirs: 'CreatureTrait'):
     head_dirs /= torch.norm(head_dirs, dim=1, keepdim=True)
@@ -67,9 +67,12 @@ class CreatureArray:
                                                    Initializer.mutable(1, 'uniform_', 1, 255),
                                                    partial(clamp, bounds=(1,255)), self.device)
         
+        normalize_rays = partial(_normalize_rays, cfg=self.cfg)
+        # the initializer here isn't fully correct, as it should be normal(0, 1) for the first 2 dimensions and 
+        # uniform on the last dimension, but I guess that's what you get for combining 2 traits that really should have been separate
         self.rays: CreatureTrait = CreatureTrait((self.cfg.num_rays, 3), 
-                                                 Initializer.mutable(2, 'normal_', 0, 1),
-                                                 None, self.device)
+                                                 Initializer.mutable(2, 'normal_', 0, self.cfg.ray_dist_range[1]),
+                                                 normalize_rays, self.device)
         
         self.mutation_rates: CreatureTrait = CreatureTrait((6,), 
                                                   Initializer.mutable(5, 'uniform_', *self.cfg.init_mut_rate_range),
@@ -118,8 +121,14 @@ class CreatureArray:
                                        Initializer.fillable('normal_', 0, 1), 
                                        normalize_head_dirs, self.device)
         
-        layer_sizes = [self.cfg.num_rays*3 + self.cfg.mem_size + self.num_food + 2, 
-            *self.cfg.brain_size, self.cfg.mem_size + 2]
+        # input: rays (num_rays*color_dims) + memory (mem_size) + num_food ((2*food_sight+1)**2) + health (1) + energy (1) + 
+        #         head_dir (2) + age_mult (1) + color (color_dims) + size (1)
+        # output: move (1) + rotate (1) + memory (mem_size)
+        layer_sizes = [
+            self.cfg.num_rays*self.colors._shape[0] + self.cfg.mem_size + self.num_food + 1 + 1 + 2 + 1 + self.colors._shape[0] + 1, 
+            *self.cfg.brain_size, 
+            self.cfg.mem_size + 2
+        ]
         weight_sizes = [(prev_layer, next_layer) for prev_layer, next_layer in zip(layer_sizes[:-1], layer_sizes[1:])]
         bias_sizes = [(1, next_layer) for next_layer in layer_sizes[1:]]
         weight_inits = []
@@ -156,7 +165,7 @@ class CreatureArray:
                 except AttributeError:
                     raise AttributeError(f"CreatureTrait '{k}' depends on trait '{v.init.name}'"
                                          " for initialization, but it does not exist.")
-        normalize_rays(self.rays, self.sizes, self.cfg)
+        # normalize_rays(self.rays, self.sizes, self.cfg)
 
         self.start_idx = 0
         self.alive = torch.zeros(self.cfg.max_creatures, dtype=torch.float32, device=self.device)
@@ -176,7 +185,7 @@ class CreatureArray:
         children.positions = self.positions.reproduce_mutable('positions', self.rng, reproducers, 
                                                               self.cfg.reproduce_dist)
         # need to call normalization weird for rays since it depends on sizes
-        normalize_rays(children.rays, children.sizes, self.cfg)
+        # normalize_rays(children.rays, children.sizes, self.cfg)
         # need to initialize these weird as well because they depend on sizes
         for name, v in self.variables.items():
             if v.init.style == InitializerStyle.OTHER_DEPENDENT:

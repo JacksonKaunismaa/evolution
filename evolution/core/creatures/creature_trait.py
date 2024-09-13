@@ -35,46 +35,46 @@ class Initializer:
         if self.args is not None and len(self.args) == 1 and isinstance(self.args[0], Iterable):  # unwrap list of args
             self.args = self.args[0]
             
-        if self.args is not None and isinstance(self.args, Iterable) and \
-            len(self.args) > 0 and isinstance(self.args[0], Iterable):
+        if self.args is not None and isinstance(self.args, list) and \
+            len(self.args) > 0 and isinstance(self.args[0], tuple):
             self.is_list = True
     
-    @staticmethod
-    def mutable(mut_idx: int, name: str, *args):
+    @classmethod
+    def mutable(cls, mut_idx: int, name: str, *args) -> 'Initializer':
         """Create an Initializer object for a mutable trait. 
         Args:
             mut_idx: index into the creature's mut_rate tensor that corresponds to this trait.
             name: Torch name of the intializer function when first seeding the world (non-reproductive).
             args: Arguments to pass to the initializer function."""
-        return Initializer(style=InitializerStyle.MUTABLE, mut_idx=mut_idx, name=name, args=args)
+        return cls(style=InitializerStyle.MUTABLE, mut_idx=mut_idx, name=name, args=args)
     
     
-    @staticmethod
-    def fillable(name: str, *args):
+    @classmethod
+    def fillable(cls, name: str, *args) -> 'Initializer':
         """Create an Initializer object for a fillable trait.
         Args:
             name: Torch name of the intializer function (e.g. ('zeros_', 'normal_')).
             args: Arguments to pass to the initializer function"""
-        return Initializer(style=InitializerStyle.FILLABLE, name=name, args=args)
+        return cls(style=InitializerStyle.FILLABLE, name=name, args=args)
     
-    @staticmethod
-    def other_dependent(name: str, func: Callable):
+    @classmethod
+    def other_dependent(cls, name: str, func: Callable) -> 'Initializer':
         """Create an Initializer object for a trait that depends on another trait. (e.g. energy and health
         are always initialized as functions of size).
         
         Args:
             name: Name of the trait that this trait depends on.
             func: Function that takes the other trait as an argument and returns the initialized trait."""
-        return Initializer(style=InitializerStyle.OTHER_DEPENDENT, name=name, func=func)
+        return cls(style=InitializerStyle.OTHER_DEPENDENT, name=name, func=func)
     
-    @staticmethod
-    def force_mutable(name: str, *args):
+    @classmethod
+    def force_mutable(cls, name: str, *args) -> 'Initializer':
         """Create an Initializer object for a trait that is treated as mutable even if it isn't (e.g. position).
         
         Args:
             name: Torch name of the intializer function when first seeding the world (non-reproductive).
             args: Arguments to pass to the initializer function."""
-        return Initializer(style=InitializerStyle.FORCE_MUTABLE, name=name, args=args)
+        return cls(style=InitializerStyle.FORCE_MUTABLE, name=name, args=args)
     
     def __call__(self, arg, i=None):
         if self.style == InitializerStyle.OTHER_DEPENDENT:

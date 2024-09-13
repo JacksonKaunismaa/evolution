@@ -112,6 +112,9 @@ class Camera:
         self.following = not self.following
     
     def update(self):
+        self.ubo.write(self.get_camera_matrix())
+        self.ubo.bind_to_uniform_block()
+        
         selected_creature = self.world.state.selected_creature
         if not selected_creature:
             self.following = False

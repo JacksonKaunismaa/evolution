@@ -33,13 +33,15 @@ from evolution.utils.subscribe import Publisher
 class Game:
     def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders', load_path=None):
         # super().__init__(**kwargs)
+        if load_path is not None and osp.exists(load_path):
+            self.world = gworld.GWorld.from_checkpoint(load_path)
+            cfg = self.world.cfg
+        else:
+            self.world = gworld.GWorld(cfg)
+            
         self.wnd: mglw.BaseWindow = window
-        self.world: gworld.GWorld = gworld.GWorld(cfg)
         self.state = self.world.state
         
-        if load_path is not None:
-            self.world.load_checkpoint(load_path)
-            cfg = self.world.cfg
 
         self.cfg = cfg
         self.ctx: mgl.Context = window.ctx
@@ -96,8 +98,6 @@ class Game:
     def render(self):
         self.ctx.clear(0.0, 0.0, 0.0)
                 
-        self.camera.ubo.write(self.camera.get_camera_matrix())
-        self.camera.ubo.bind_to_uniform_block()
         self.camera.update()
 
         self.heatmap.render()

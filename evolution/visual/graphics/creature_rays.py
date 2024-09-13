@@ -74,6 +74,7 @@ class CreatureRays(Subscriber):
         self.head_prog['head_start'] = self.cfg.attack_range[0]
         self.head_prog['head_len'] = self.cfg.attack_range[1] - self.cfg.attack_range[0]
         self.head_prog['color'] = (0.5, 0.5, 0.5)
+        
 
     def _update(self, creature_id):
         if not creature_id:
@@ -83,10 +84,13 @@ class CreatureRays(Subscriber):
         cuda_utils.copy_to_buffer(self.world.creatures.rays[creature_id], self.cuda_rays)
         cuda_utils.copy_to_buffer(self.world.collisions[creature_id], self.cuda_ray_colors)
         cuda_utils.copy_to_buffer(self.world.creatures.head_dirs[creature_id], self.cuda_head_dir)
+        
         self.ray_prog['position'] = self.world.creatures.positions[creature_id]
         self.head_prog['position'] = self.world.creatures.positions[creature_id]
+        
+        self.ray_prog['size'] = self.world.creatures.sizes[creature_id]
         self.head_prog['size'] = self.world.creatures.sizes[creature_id]
-
+        
     def render(self):
         self.update()
         if not self.visible:

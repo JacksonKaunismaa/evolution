@@ -183,30 +183,35 @@ class GWorld():
                     'creatures': self.creatures.state_dict(quantized), 
                     'cfg': self.cfg,
                     'time': self.time,
-                    'seed': seed
+                    'seed': seed,
+                    'device': self.device
                     }, path)
         torch.random.manual_seed(seed)
         
-    def load_checkpoint(self, path):
+    @classmethod
+    def from_checkpoint(cls, path) -> 'GWorld':
         if not osp.exists(path):
-            print(f"Warning: checkpoint file '{path}' not found, continuing anyway...")
+            raise FileNotFoundError(f"Checkpoint file '{path}' not found.")
         else:
             print(f"Loading checkpoint '{path}'...")
             
-            self.creatures.unset_data()
-            del self.food_grid
-            
             checkpoint = torch.load(path)
+            # we nede to recreate the GWorld object so that it has the right config from the get go
+            # since for example Creature objects are created based on the state of the config as the object is created
+            instance = cls(checkpoint['cfg'], device=checkpoint['device'])
+                        
+            instance.creatures.unset_data()
+            del instance.food_grid
             
             fgrid = checkpoint['food_grid']
             if isinstance(fgrid, QuantizedData):
-                fgrid = fgrid.dequantize(map_location=self.device)
-            self.food_grid = fgrid
+                fgrid = fgrid.dequantize(map_location=instance.device)
+            instance.food_grid = fgrid
             
-            self.creatures.load_state_dict(checkpoint['creatures'], self.device)
-            self.cfg.update_in_place(checkpoint['cfg'])
-            self.time = checkpoint.get('time', 0)
+            instance.creatures.load_state_dict(checkpoint['creatures'], instance.device)
+            instance.time = checkpoint.get('time', 0)
             torch.random.manual_seed(checkpoint['seed'])
+            return instance
     
     @cuda_profile
     def fused_kill_reproduce(self):
