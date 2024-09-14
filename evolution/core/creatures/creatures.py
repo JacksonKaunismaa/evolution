@@ -156,7 +156,7 @@ class Creatures(CreatureArray):
         
             
         self.kernels('grow', blocks_per_grid, threads_per_block,
-                     food_grid_updates, food_grid, food_grid.shape[0], self.pad, step_size)
+                     food_grid_updates, food_grid, food_grid.shape[0], self.pad, step_size, self.cfg.max_food)
         
         state.selected_cell.extract_post_grow_state(pct_eaten, food_grid_updates, step_size)
         state.selected_creature.extract_post_eat_state(pos, alive_costs)
@@ -264,3 +264,6 @@ class Creatures(CreatureArray):
         self.healths -= attacks[:,1]
 
         state.selected_creature.extract_attack_state(attacks, attack_cost)
+        
+    def total_energy(self):
+        return torch.sum(self.energies).item()

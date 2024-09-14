@@ -42,7 +42,6 @@ class GWorld():
         self.outputs = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions = None   # the set of ray collisions for each creature
         self.dead_updated = False
-        self.time = 0
 
     @cuda_profile
     def compute_grid_setup(self):
@@ -107,6 +106,9 @@ class GWorld():
         nonzero = torch.nonzero(close_enough)
         creature = nonzero[0].item() if nonzero.shape[0] != 0 else None
         return creature
+    
+    def total_energy(self):
+        return np.log10(F.relu(self.food_grid).sum().item() + self.creatures.total_energy())
 
     @cuda_profile
     def collect_stimuli(self, collisions):
@@ -177,12 +179,12 @@ class GWorld():
         return self.creatures.population
 
     def write_checkpoint(self, path, quantized=True):
-        seed = self.time
+        seed = self.state.time
         fgrid = quantize(self.food_grid, map_location='cpu') if quantized else self.food_grid
         torch.save({'food_grid': fgrid, 
                     'creatures': self.creatures.state_dict(quantized), 
                     'cfg': self.cfg,
-                    'time': self.time,
+                    'time': self.state.time,
                     'seed': seed,
                     'device': self.device
                     }, path)
@@ -209,7 +211,7 @@ class GWorld():
             instance.food_grid = fgrid
             
             instance.creatures.load_state_dict(checkpoint['creatures'], instance.device)
-            instance.time = checkpoint.get('time', 0)
+            instance.state.time = checkpoint.get('time', 0)
             torch.random.manual_seed(checkpoint['seed'])
             return instance
     
@@ -267,7 +269,7 @@ class GWorld():
         #     if visualize:
         #         self.visualize(None, show_rays=False) 
 
-        self.time += 1
+        self.state.time += 1
         if self.state.increasing_food_decr:
             self.cfg.food_cover_decr += self.cfg.food_cover_decr_incr_amt
         return True

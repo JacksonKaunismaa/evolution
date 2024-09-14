@@ -1,6 +1,5 @@
 extern "C" __global__ 
-void grow(float* food_grid_updates, float* food_grid, int num_cells, int pad, float step_size
-    ) {
+void grow(float* food_grid_updates, float* food_grid, int num_cells, int pad, float step_size, float max_food) {
     /* 
     Read from:
         food_grid_updates: [S, S], where the coordinate is the amount of food that has been lost to eating
@@ -26,13 +25,13 @@ void grow(float* food_grid_updates, float* food_grid, int num_cells, int pad, fl
     float food = food_grid[cell_idx];
     food -= food_grid_updates[cell_idx];  // apply eating update
 
-    float growth_amt = step_size * (CFG_max_food - food);
+    float growth_amt = step_size * (max_food - food);
 
     // grow the food
     if (food < 0.0){
         food += growth_amt*CFG_food_recovery_rate;
     }
-    else if (food > CFG_max_food){
+    else if (food > max_food){
         food += growth_amt*CFG_food_decay_rate;
     }
     else{

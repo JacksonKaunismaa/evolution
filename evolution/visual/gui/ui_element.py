@@ -107,18 +107,18 @@ class Slider(UIElement):
         return cls(imgui.slider_int)
     
     @classmethod
-    def slider_float() -> 'Slider':
-        return Slider(imgui.slider_float)
+    def slider_float(cls) -> 'Slider':
+        return cls(imgui.slider_float)
         
     @property
     def height(self):
         return self.SLIDER_SIZE
     
-    def render(self, label, value, min_value, max_value, flags=0, text=None):
+    def render(self, label, value, min_value, max_value, flags=0, text=None, **kwargs):
         if text is not None:
             imgui.text(text)
             imgui.same_line()
             
-        return self.slider_type(label, value, min_value, max_value, flags=flags)
+        return self.slider_type(label, value, min_value, max_value, flags=flags, **kwargs)
     
 

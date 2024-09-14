@@ -14,6 +14,7 @@ from .game_status import GameStatus
 from .creature_info import CreatureInfo
 from .cell_info import CellInfo
 from .ui_element import UIElement
+from .energy_plot import EnergyPlot
 
 
 # Mixin allows us to forward events to imgui
@@ -35,6 +36,7 @@ class UIManager:#(ModernglWindowMixin):
         self.game_status = GameStatus(cfg, world, window, state)
         self.creature_info = CreatureInfo(cfg, world, window, state)
         self.cell_info = CellInfo(cfg, world, window, state)
+        self.energy_plot = EnergyPlot(cfg, world, window, state)
         
     def __setattr__(self, name, value):
         if isinstance(value, UIElement):

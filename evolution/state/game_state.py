@@ -28,6 +28,7 @@ class GameState:
         self.game_paused = False
         self.creatures_visible = True
         self.hitboxes_enabled = False
+        self.time = 0
         
     @property
     def selected_creature(self) -> CreatureState:

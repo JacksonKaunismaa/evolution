@@ -18,6 +18,8 @@ class GameStatus(Window):
         self.food_decr_checkbox = Checkbox()
         self.text = Lines()
         self.speed_slider = Slider.slider_int()
+        self.step_size_slider = Slider.slider_float()
+        self.max_food_slider = Slider.slider_float()
         self.width = 300 / 13
         self.x_pos = 0  # y pos is adjustable, and height depends on n_lines * LINE_SIZE
         
@@ -43,7 +45,7 @@ class GameStatus(Window):
                                                self.state.increasing_food_decr,
                                                f"Food Cover Decr: {self.cfg.food_cover_decr:.6f}")
 
-            self.text.render([f"Epoch: {self.world.time}",
+            self.text.render([f"Epoch: {self.state.time}",
                               f"Population: {self.world.population}"])                
 
             changed, new_speed = \
@@ -52,3 +54,18 @@ class GameStatus(Window):
                                          flags=imgui.SliderFlags_.always_clamp | imgui.SliderFlags_.logarithmic)
             if changed:
                 self.state.game_speed = new_speed
+                
+            changed, new_step_size = \
+                self.step_size_slider.render('Step Size', self.cfg.food_step_size, 
+                                             1e-6, 1e-4, 
+                                             flags=imgui.SliderFlags_.always_clamp | imgui.SliderFlags_.logarithmic,
+                                             format='%.6f')
+            if changed:
+                self.cfg.food_step_size = new_step_size
+                
+            changed, new_max_food = \
+                self.max_food_slider.render('Max Food', self.cfg.max_food, 
+                                            14.0, 18.0, 
+                                            flags=imgui.SliderFlags_.always_clamp)
+            if changed:
+                self.cfg.max_food = new_max_food
