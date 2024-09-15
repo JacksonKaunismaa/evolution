@@ -5,11 +5,14 @@ from abc import ABC, abstractmethod
 
 
 class UIElement:
+    # all measurements are divided by 13 since that's the default font size
     LINE_SIZE = 17/13  # line size for text in pixels
     HEADER_SIZE = 19/13  # header size in pixels (not including 2*HEADER_PAD)
     HEADER_PAD = 2/13  # padding between the header and the text
     SLIDER_SIZE = 23/13 # slider size in pixels (including 2*SLIDER_PAD = 4)
     PADDING = 6/13  # padding between the top header and the start of the first line (and the last line -> bottom of window)
+    PLOT_HEIGHT = 220/13  # height of the plot in pixels
+    HEADER_WIDTH_PAD = 55/13  # padding between the header and the right side of the window
     
     @abstractmethod
     def render(self): ...
@@ -20,17 +23,26 @@ class UIElement:
         
         
 class Window(UIElement):
-    def __init__(self, title):
+    def __init__(self, title, max_width):
         self.title = title
+        self.max_width = max_width
         self.open = True
         self.elements: Dict[str, UIElement] = {}
         
     @property
     def height(self):
         if self.open:
-            return self.HEADER_SIZE + 2*self.PADDING + sum([el.height for el in self.elements.values()])
+            return imgui.get_font_size() * (self.HEADER_SIZE + 2*self.PADDING) + \
+                                            sum([el.height for el in self.elements.values()])
         else:
-            return self.HEADER_SIZE
+            return imgui.get_font_size() * self.HEADER_SIZE
+        
+    @property
+    def width(self):
+        if self.open:
+            return imgui.get_font_size() * self.max_width
+        else:
+            return imgui.calc_text_size(self.title)[0] + imgui.get_font_size() * self.HEADER_WIDTH_PAD
     
     def __setattr__(self, key, value):
         if isinstance(value, UIElement):
@@ -56,9 +68,10 @@ class CollapseableHeader(UIElement):
     def height(self):
         header_size = self.HEADER_SIZE + 2*self.HEADER_PAD
         if self.open:
-            return header_size + self.n_lines*self.LINE_SIZE
+            size = header_size + self.n_lines*self.LINE_SIZE
         else:
-            return header_size
+            size = header_size
+        return imgui.get_font_size() * size
         
         
     def render(self, lines):
@@ -77,7 +90,7 @@ class Lines(UIElement):
         
     @property
     def height(self):
-        return self.n_lines*self.LINE_SIZE
+        return imgui.get_font_size() * self.n_lines*self.LINE_SIZE
         
     def render(self, lines):
         # if len(lines) != self.n_lines:
@@ -89,7 +102,7 @@ class Lines(UIElement):
 class Checkbox(UIElement):
     @property
     def height(self):
-        return self.SLIDER_SIZE
+        return imgui.get_font_size() * self.SLIDER_SIZE
     
     def render(self, label, value, text=None):
         if text is not None:
@@ -112,7 +125,7 @@ class Slider(UIElement):
         
     @property
     def height(self):
-        return self.SLIDER_SIZE
+        return imgui.get_font_size() * self.SLIDER_SIZE
     
     def render(self, label, value, min_value, max_value, flags=0, text=None, **kwargs):
         if text is not None:
@@ -120,5 +133,16 @@ class Slider(UIElement):
             imgui.same_line()
             
         return self.slider_type(label, value, min_value, max_value, flags=flags, **kwargs)
+    
+    
+class PlotElement(UIElement):
+    @property
+    def height(self):
+        return self.plot_height + imgui.get_font_size() *  2*self.HEADER_PAD
+    
+    @property
+    def plot_height(self):
+        # needs to return value in pixels, since it doesn't get passed through Window.width or Window.height
+        return imgui.get_font_size() * self.PLOT_HEIGHT
     
 

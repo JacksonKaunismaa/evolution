@@ -8,9 +8,9 @@ from evolution.state.game_state import GameState
 from .ui_element import UIElement, Lines, Window, Checkbox, Slider
 
 
-class GameStatus(Window):
+class GameStatusWindow(Window):
     def __init__(self, cfg: Config, world: GWorld, window: BaseWindow, state: GameState):
-        super().__init__('Game Status')
+        super().__init__('Game Status', 300/13)
         self.cfg = cfg
         self.world = world
         self.state = state
@@ -20,19 +20,16 @@ class GameStatus(Window):
         self.speed_slider = Slider.slider_int()
         self.step_size_slider = Slider.slider_float()
         self.max_food_slider = Slider.slider_float()
-        self.width = 300 / 13
         self.x_pos = 0  # y pos is adjustable, and height depends on n_lines * LINE_SIZE
         
     def render(self):
         # Set the position dynamically based on collapsing header state
         window_width, window_height = self.wnd.size
         
-        pos = imgui.ImVec2(imgui.get_font_size() * self.x_pos, 
-                           window_height - imgui.get_font_size() * self.height)
+        pos = (self.x_pos, window_height - self.height)
         imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)
         
-        sz = imgui.ImVec2(imgui.get_font_size() * self.width, 
-                          imgui.get_font_size() * self.height)
+        sz = (self.width, self.height)
         imgui.set_next_window_size(sz, cond=imgui.Cond_.always)
         
         # Begin a new ImGui window
@@ -45,7 +42,7 @@ class GameStatus(Window):
                                                self.state.increasing_food_decr,
                                                f"Food Cover Decr: {self.cfg.food_cover_decr:.6f}")
 
-            self.text.render([f"Epoch: {self.state.time}",
+            self.text.render([f"Time: {self.state.time}",
                               f"Population: {self.world.population}"])                
 
             changed, new_speed = \

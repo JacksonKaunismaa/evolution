@@ -1,4 +1,4 @@
-from typing import List
+from typing import Any, List
 
 
 class Subscriber:
@@ -11,10 +11,16 @@ class Subscriber:
         self.args_pending = tuple()
         self.kwargs_pending = dict()
 
-    def update(self):
+    def update(self) -> Any:
+        """Update the subscriber if the number of updates pending is greater than or equal to the frequency.
+        
+        Returns:
+            Whatever _update returns (if any)
+        """
         if self.updates_pending >= self.freq:
-            self._update(*self.args_pending, **self.kwargs_pending)
+            retval = self._update(*self.args_pending, **self.kwargs_pending)
             self.reset()
+            return retval
             
     def _update(self, *args, **kwargs):
         raise NotImplementedError
@@ -26,7 +32,6 @@ class Subscriber:
     
     
 class Publisher:
-    MAX_AMT = 'max'
     def __init__(self):
         self.subscribers: List[Subscriber] = []
         
@@ -36,17 +41,19 @@ class Publisher:
         self.subscribers.append(obj)
         
     def publish(self, *args, amt=1, **kwargs):
-        if amt == self.MAX_AMT:
-            amt = max(self.subscribers, key=lambda x: x.freq).fre
-        
         for sub in self.subscribers:
             sub.notify(amt, *args, **kwargs)
             
     def init_publish(self, *args, **kwargs):
         """Force push an 'initilization' update to all subscribers."""
+        if not self.subscribers:
+            return
         amt = max(self.subscribers, key=lambda x: x.freq).freq
+        self.publish(*args, amt=amt, **kwargs)
+            
+    def update_all(self):
         for sub in self.subscribers:
-            sub.notify(amt, *args, **kwargs)
+            sub.update()
     
     def unsubscribe(self, obj: Subscriber):
         self.subscribers.remove(obj)

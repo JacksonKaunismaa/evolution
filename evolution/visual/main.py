@@ -58,7 +58,7 @@ class Game:
         
         self.ui_manager = UIManager(cfg, self.world, window, self.state)
 
-        self.state.game_publisher.init_publish()
+        self.state.init_publish()
         self.setup_events()
 
     def setup_events(self):
@@ -88,12 +88,6 @@ class Game:
                 return False
         # torch.cuda.synchronize()
         return True
-
-    def selected_creature_updates(self):
-        creature = self.state.selected_creature
-        for sub in self.creature_publisher:
-            sub.update(creature)
-        
 
     def render(self):
         self.ctx.clear(0.0, 0.0, 0.0)

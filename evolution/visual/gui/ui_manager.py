@@ -10,17 +10,17 @@ from evolution.core.config import Config
 from evolution.core.gworld import GWorld
 from evolution.state.game_state import GameState
 
-from .game_status import GameStatus
-from .creature_info import CreatureInfo
-from .cell_info import CellInfo
-from .ui_element import UIElement
-from .energy_plot import EnergyPlot
+from .game_status_window import GameStatusWindow
+from .creature_status_window import CreatureStatusWindow
+from .cell_status_window import CellStatusWindow
+from .ui_element import Window
+from .plots.energy_plot import EnergyPlot
 
 
 # Mixin allows us to forward events to imgui
-class UIManager:#(ModernglWindowMixin):
+class UIManager:
     def __init__(self, cfg: Config, world: GWorld, window: BaseWindow, state: GameState):
-        self.ui_elements: List[UIElement] = []
+        self.ui_elements: List[Window] = []
         
         imgui.create_context()
         implot.create_context()
@@ -33,13 +33,13 @@ class UIManager:#(ModernglWindowMixin):
         self.reverse_mouse_map = {v:k for k,v in self.wnd._mouse_button_map.items()}
         
         # add widgets
-        self.game_status = GameStatus(cfg, world, window, state)
-        self.creature_info = CreatureInfo(cfg, world, window, state)
-        self.cell_info = CellInfo(cfg, world, window, state)
+        self.game_status = GameStatusWindow(cfg, world, window, state)
+        self.creature_info = CreatureStatusWindow(cfg, world, window, state)
+        self.cell_info = CellStatusWindow(cfg, world, window, state)
         self.energy_plot = EnergyPlot(cfg, world, window, state)
         
     def __setattr__(self, name, value):
-        if isinstance(value, UIElement):
+        if isinstance(value, Window):
             self.ui_elements.append(value)
         super().__setattr__(name, value)
         

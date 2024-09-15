@@ -21,8 +21,9 @@ class GameState:
         self._selected_cell = CellState(cfg, world)  
         self._selected_creature = CreatureState(world)
         
-        self.creature_publisher = Publisher()
-        self.game_publisher = Publisher()
+        self.creature_publisher = Publisher()   # updates when selected_creature changes
+        self.game_publisher = Publisher()   # updates when game state changes (call update yourself)
+        self.game_step_publisher = Publisher()   # publish and updates will be called for you every game step
         self.increasing_food_decr = False
         self._game_speed = 1
         self.game_paused = False
@@ -50,6 +51,14 @@ class GameState:
     def publish_all(self):
         self.game_publisher.publish()
         self.creature_publisher.publish(self.selected_creature)
+        
+        self.game_step_publisher.publish()
+        self.game_step_publisher.update_all()
+        
+    def init_publish(self):
+        self.game_publisher.init_publish()
+        self.game_step_publisher.init_publish()
+        self.game_step_publisher.update_all()
         
     @property
     def game_speed(self):

@@ -10,28 +10,27 @@ from evolution.core.creatures.creature_trait import InitializerStyle
 from .ui_element import CollapseableHeader, Window, Lines, UIElement
 
 
-class CreatureInfo(Window):
+class CreatureStatusWindow(Window):
     def __init__(self, cfg: Config, world: GWorld, window: BaseWindow, state: GameState):
-        super().__init__('Creature Stats')
+        super().__init__('Creature Stats', 250/13)
         self.cfg = cfg
         self.world = world
         self.state = state
         self.wnd = window
-        self.width = 250 / 13
         self.y_pos = 0
         self.main_text = Lines()
-        self.mutation_panel = CollapseableHeader('Mutation Rates')
+        self.mutation_element = CollapseableHeader('Mutation Rates')
         
         self.delta_text = Lines()
-        self.rotate_panel = CollapseableHeader('Rotation')
-        self.move_panel = CollapseableHeader('Movement')
-        self.attack_panel = CollapseableHeader('Attacking')
-        self.eating_panel = CollapseableHeader('Eating')
-        self.dynamic_panels: List[UIElement] = [self.delta_text,
-                                                self.rotate_panel,
-                                                self.move_panel,
-                                                self.attack_panel,
-                                                self.eating_panel]
+        self.rotate_element = CollapseableHeader('Rotation')
+        self.move_element = CollapseableHeader('Movement')
+        self.attack_element = CollapseableHeader('Attacking')
+        self.eating_element = CollapseableHeader('Eating')
+        self.dynamic_elements: List[UIElement] = [self.delta_text,
+                                                self.rotate_element,
+                                                self.move_element,
+                                                self.attack_element,
+                                                self.eating_element]
         
     def render(self):
         # Set the position dynamically based on collapsing header state
@@ -42,14 +41,12 @@ class CreatureInfo(Window):
         
         height = self.height
         if not creat.update_state_available:
-            height -= sum([p.height for p in self.dynamic_panels])
+            height -= sum([p.height for p in self.dynamic_elements])
         
-        pos = imgui.ImVec2(window_width - imgui.get_font_size() * self.width, 
-                           imgui.get_font_size() * self.y_pos)
+        pos = (window_width - self.width, self.y_pos)
         imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)
 
-        sz = imgui.ImVec2(imgui.get_font_size() * self.width, 
-                          imgui.get_font_size() * height)
+        sz = (self.width, height)
         imgui.set_next_window_size(sz, cond=imgui.Cond_.always)
         
         # Begin a new ImGui window
@@ -72,31 +69,31 @@ class CreatureInfo(Window):
             if creat.update_state_available:
                 self.delta_text.render([f"Net Energy Delta: {creat.net_energy_delta:.6f}"])
             
-            self.mutation_panel.render([
+            self.mutation_element.render([
                 f"{name.replace('_', ' ').title()}: {creat.mutation_rate[param.init.mut_idx]:.6f}" 
                 for name,param in self.world.creatures.variables.items() 
                     if param.init.style == InitializerStyle.MUTABLE  # => has a mutation rate
             ])
             
             if creat.update_state_available:
-                self.rotate_panel.render([
+                self.rotate_element.render([
                     f"Rotate Logit: {creat.rotate_logit:.2f}",
                     f"Rotate Angle: {creat.rotate_angle:.2f}°",
                     f"Rotate Energy: {creat.rotate_energy:.6f}"
                 ])
                 
-                self.move_panel.render([
+                self.move_element.render([
                     f"Move Logit: {creat.move_logit:.2f}",
                     f"Move Amount: {creat.move_amt:.2f}",
                     f"Move Energy: {creat.move_energy:.6f}"
                 ])
                 
-                self.attack_panel.render([
+                self.attack_element.render([
                     f"Num Attacking: {creat.n_attacking}",
                     f"Attack Damage Taken: {creat.dmg_taken:.5f}",
                     f"Attack Energy: {creat.attack_cost:.2f}"
                 ])
-                self.eating_panel.render([
+                self.eating_element.render([
                     f"Alive Energy: {creat.alive_cost:.6f}",
                     f"Food Eaten: {creat.food_eaten:.6f}",
                     f"Cell Eaten Energy: {creat.cell_energy:.6f}",

@@ -8,14 +8,13 @@ from evolution.state.game_state import GameState
 from .ui_element import UIElement, Window, Lines
 
 
-class CellInfo(Window):
+class CellStatusWindow(Window):
     def __init__(self, cfg: Config, world: GWorld, window: BaseWindow, state: GameState):
-        super().__init__('Cell Stats')
+        super().__init__('Cell Stats', 250/13)
         self.cfg = cfg
         self.world = world
         self.state = state
         self.wnd = window
-        self.width = 250 / 13
         self.y_pos = 0
         self.main_text = Lines()
         self.delta_text = Lines()
@@ -31,12 +30,10 @@ class CellInfo(Window):
         if not cell.update_state_available:
             height -= self.delta_text.height
         
-        pos = imgui.ImVec2(window_width - imgui.get_font_size() * self.width,
-                           imgui.get_font_size() * self.y_pos)
+        pos = (window_width - self.width, self.y_pos)
         imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)
 
-        sz = imgui.ImVec2(imgui.get_font_size() * self.width, 
-                          imgui.get_font_size() * height)
+        sz = (self.width, height)
         imgui.set_next_window_size(sz, cond=imgui.Cond_.always)
         
         # Begin a new ImGui window
