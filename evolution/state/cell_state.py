@@ -21,7 +21,10 @@ class CellState:
         if cell is None:
             self._selected_cell = cell
             return
-        self._selected_cell = (int(cell.x), int(cell.y))
+        if isinstance(cell, tuple):
+            self._selected_cell = cell
+        else:
+            self._selected_cell = (int(cell.x), int(cell.y))
         self.extract_general_state()
         
     def __bool__(self):

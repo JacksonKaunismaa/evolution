@@ -67,7 +67,7 @@ class Controller:
             self.world.step())   # force step simulation by 1
         
         self.key_mgr.register_key(self.wnd.keys.C, lambda m: 
-            self.world.write_checkpoint('game.ckpt'))  # save current state to 'game.ckpt'
+            self.world.write_checkpoint('game.ckpt', camera=self.camera))  # save current state to 'game.ckpt'
         
         self.key_mgr.register_key(self.wnd.keys.NUMBER_0, lambda m: 
             self.set_selected_creature(0))  # select creature 0

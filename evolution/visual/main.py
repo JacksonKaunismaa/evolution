@@ -33,8 +33,9 @@ from evolution.utils.subscribe import Publisher
 class Game:
     def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders', load_path=None):
         # super().__init__(**kwargs)
+        other_state_dicts = {}
         if load_path is not None and osp.exists(load_path):
-            self.world = gworld.GWorld.from_checkpoint(load_path)
+            self.world, other_state_dicts = gworld.GWorld.from_checkpoint(load_path)
             cfg = self.world.cfg
         else:
             self.world = gworld.GWorld(cfg)
@@ -42,7 +43,6 @@ class Game:
         self.wnd: mglw.BaseWindow = window
         self.state = self.world.state
         
-
         self.cfg = cfg
         self.ctx: mgl.Context = window.ctx
         self.ctx.enable(mgl.BLEND)
@@ -55,6 +55,9 @@ class Game:
         self.thoughts_visual = ThoughtsVisualizer(cfg, self.ctx, self.world, window, self.state, self.shaders)
         self.controller = Controller(self.world, window, self.camera, self.state)
         self.fps_tracker = FPSTracker()
+        
+        if 'camera' in other_state_dicts:
+            self.camera.load_state_dict(other_state_dicts['camera'])
         
         self.ui_manager = UIManager(cfg, self.world, window, self.state)
 

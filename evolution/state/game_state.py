@@ -1,9 +1,10 @@
-from typing import Tuple, Union, TYPE_CHECKING
+from typing import Dict, Tuple, Union, TYPE_CHECKING
 import numpy as np
 
 
 from .creature_state import CreatureState
 from .cell_state import CellState
+from .scalar_tracker import ScalarTracker
 
 from evolution.utils.subscribe import Publisher
 from evolution.core.config import Config
@@ -30,6 +31,14 @@ class GameState:
         self.creatures_visible = True
         self.hitboxes_enabled = False
         self.time = 0
+        
+        self.trackers: Dict[str, ScalarTracker] = {}
+        self.energy_tracker = ScalarTracker(self, world.total_energy, 25)
+        
+    def __setattr__(self, name, value):
+        if isinstance(value, ScalarTracker):
+            self.trackers[name] = value
+        super().__setattr__(name, value)
         
     @property
     def selected_creature(self) -> CreatureState:
@@ -59,6 +68,8 @@ class GameState:
         self.game_publisher.init_publish()
         self.game_step_publisher.init_publish()
         self.game_step_publisher.update_all()
+        if self.selected_creature:
+            self.creature_publisher.init_publish(self.selected_creature)
         
     @property
     def game_speed(self):
@@ -79,3 +90,26 @@ class GameState:
         
     def toggle_hitboxes(self):
         self.hitboxes_enabled = not self.hitboxes_enabled
+        
+    def state_dict(self):
+        return {
+            'selected_creature': self.selected_creature._selected_creature,
+            'selected_cell': self.selected_cell._selected_cell,
+            'game_speed': self.game_speed,
+            # 'game_paused': self.game_paused,  # we'd rather always start the game paused
+            'creatures_visible': self.creatures_visible,
+            'hitboxes_enabled': self.hitboxes_enabled,
+            'time': self.time,
+            'trackers': {k: tracker.state_dict() for k, tracker in self.trackers.items()}
+        }
+        
+    def load_state_dict(self, state_dict):
+        self.selected_creature = state_dict['selected_creature']
+        self.selected_cell = state_dict['selected_cell']
+        self.game_speed = state_dict['game_speed']
+        self.creatures_visible = state_dict['creatures_visible']
+        self.hitboxes_enabled = state_dict['hitboxes_enabled']
+        self.time = state_dict['time']
+        
+        for k, tracker_state in state_dict['trackers'].items():
+            self.trackers[k].load_state_dict(tracker_state)

@@ -2,13 +2,15 @@ import glm
 from moderngl import Context
 import numpy as np
 from moderngl_window import BaseWindow
+from typing import TYPE_CHECKING
 
 
 from evolution.core.config import Config
-from evolution.core.gworld import GWorld
+if TYPE_CHECKING:
+    from evolution.core.gworld import GWorld
 
 class Camera:
-    def __init__(self, cfg: Config, ctx: Context, window: BaseWindow, world: GWorld):        
+    def __init__(self, cfg: Config, ctx: Context, window: BaseWindow, world: 'GWorld'):        
         self.ctx = ctx
         self.cfg = cfg
         self.ubo = self.ctx.buffer(reserve=2 * 4*4 * 4)  # 2 mat4s, 4x4 floats of 4 bytes
@@ -38,17 +40,6 @@ class Camera:
                                self.window.size[0] / self.window.size[1], 
                                0.1, 100.0),
                             glm.vec3(1./self.zoom, 1./self.zoom, 1.0))
-    
-    def process_keyboard(self, direction, delta_time):
-        velocity = self.movement_speed * delta_time
-        if direction == 'FORWARD':
-            self.position += self.up * velocity
-        if direction == 'BACKWARD':
-            self.position -= self.up * velocity
-        if direction == 'LEFT':
-            self.position -= self.right * velocity
-        if direction == 'RIGHT':
-            self.position += self.right * velocity
 
     def rotate_to(self, dir_vec):
         self.up = glm.vec3(dir_vec, 0.0)
@@ -122,3 +113,27 @@ class Camera:
         if self.following:
             self.position.xy = glm.vec2(selected_creature.position)
         # self.rotate_to(glm.vec2(self.world.creatures.head_dirs[creature_id].cpu().numpy()))
+        
+    def state_dict(self):
+        return {
+            'position': self.position,
+            'front': self.front,
+            'up': self.up,
+            'right': self.right,
+            'movement_speed': self.movement_speed,
+            'mouse_sensitivity': self.mouse_sensitivity,
+            'fov': self.fov,
+            'zoom': self.zoom,
+            'following': self.following
+        }
+    
+    def load_state_dict(self, state):
+        self.position = state['position']
+        self.front = state['front']
+        self.up = state['up']
+        self.right = state['right']
+        self.movement_speed = state['movement_speed']
+        self.mouse_sensitivity = state['mouse_sensitivity']
+        self.fov = state['fov']
+        self.zoom = state['zoom']
+        self.following = state['following']

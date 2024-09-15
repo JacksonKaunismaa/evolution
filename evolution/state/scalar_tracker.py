@@ -1,11 +1,13 @@
-from typing import Callable
+from typing import Callable, TYPE_CHECKING
 import numpy as np
 
+if TYPE_CHECKING:
+    from  .game_state import GameState
+
 from evolution.utils.subscribe import Subscriber
-from evolution.state.game_state import GameState
 
 class ScalarTracker(Subscriber):
-    def __init__(self, state: GameState, func: Callable, poll_rate: float):
+    def __init__(self, state: 'GameState', func: Callable, poll_rate: float):
         super().__init__(poll_rate)
         state.game_step_publisher.subscribe(self)
         
@@ -51,6 +53,22 @@ class ScalarTracker(Subscriber):
         retval = self._updated
         self._updated = False
         return retval
+    
+    def state_dict(self):
+        return {
+            'times': self.times.copy(),  # .copy() to ensure that we don't store empty values to disk
+            'values': self.values.copy(),
+            'min_val': self.min_val,
+            'max_val': self.max_val,
+            'length': self.length
+        }
+        
+    def load_state_dict(self, state_dict):
+        self._times = state_dict['times']
+        self._values = state_dict['values']
+        self.min_val = state_dict['min_val']
+        self.max_val = state_dict['max_val']
+        self.length = state_dict['length']
         
         
        

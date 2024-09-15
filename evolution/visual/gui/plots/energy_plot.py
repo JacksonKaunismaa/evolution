@@ -4,8 +4,6 @@ from imgui_bundle import imgui, implot
 from moderngl_window import BaseWindow
 import numpy as np
 
-from .scalar_tracker import ScalarTracker
-
 from evolution.visual.gui.ui_element import Window, PlotElement
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
@@ -19,8 +17,7 @@ class EnergyPlot(Window):
         self.world = world
         self.state = state
         self.wnd = window
-        self.poll_interval = 25
-        self.energy_tracker = ScalarTracker(self.state, self.world.total_energy, self.poll_interval)
+        self.energy_tracker = state.energy_tracker
         self.energy_plotter = PlotElement()
         
     def render(self):

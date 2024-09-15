@@ -19,6 +19,7 @@ from evolution.cuda.cuda_utils import cuda_profile
 from evolution.utils.subscribe import Publisher
 from evolution.utils.quantize import quantize, QuantizedData
 from evolution.state.game_state import GameState
+from evolution.visual.interactive.camera import Camera
 
 from .config import Config, simple_cfg
 from .creatures.creatures import Creatures
@@ -178,7 +179,7 @@ class GWorld():
     def population(self):
         return self.creatures.population
 
-    def write_checkpoint(self, path, quantized=True):
+    def write_checkpoint(self, path, quantized=True, camera: Camera=None):
         seed = self.state.time
         fgrid = quantize(self.food_grid, map_location='cpu') if quantized else self.food_grid
         torch.save({'food_grid': fgrid, 
@@ -186,7 +187,11 @@ class GWorld():
                     'cfg': self.cfg,
                     'time': self.state.time,
                     'seed': seed,
-                    'device': self.device
+                    'device': self.device,
+                    'state': self.state.state_dict(),
+                    'others': {
+                        'camera': camera.state_dict() if camera is not None else None
+                    }
                     }, path)
         torch.random.manual_seed(seed)
         
@@ -213,7 +218,9 @@ class GWorld():
             instance.creatures.load_state_dict(checkpoint['creatures'], instance.device)
             instance.state.time = checkpoint.get('time', 0)
             torch.random.manual_seed(checkpoint['seed'])
-            return instance
+            instance.state.load_state_dict(checkpoint['state'])
+
+            return instance, checkpoint.get('others', {})
     
     @cuda_profile
     def fused_kill_reproduce(self):
