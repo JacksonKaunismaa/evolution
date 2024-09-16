@@ -10,6 +10,7 @@ import gc
 
 BENCHMARK = False
 times = defaultdict(float)
+n_times = defaultdict(int)
 
 def cuda_profile(func):
     start = torch.cuda.Event(enable_timing=True)
@@ -23,6 +24,7 @@ def cuda_profile(func):
         end.record()
         torch.cuda.synchronize()
         times[func.__name__] += start.elapsed_time(end)
+        n_times[func.__name__] += 1
         return res
     return wrapper
 

@@ -270,7 +270,7 @@ class GWorld():
             self.n_maxxed += (self.celled_world[1]).topk(20).values.float().mean()
         self.state.publish_all()
         
-        # if self.time % 60 == 0:   # save this generation
+        # if self.state.time % 60 == 0:   # save this generation
         #     if save:
         #         self.write_checkpoint('game.ckpt')
         #     if visualize:
@@ -288,6 +288,7 @@ def _benchmark(cfg=None, max_steps=512):
     # import io, pstats
     cuda_utils.BENCHMARK = True
     cuda_utils.times.clear()
+    cuda_utils.n_times.clear()
 
     # torch.manual_seed(1)
     if cfg is None:
@@ -300,7 +301,7 @@ def _benchmark(cfg=None, max_steps=512):
         if not game.step():   # we did mass extinction before finishing
             return game
     
-    cuda_utils.times['n_maxxed'] = game.n_maxxed.item() / game.time
+    cuda_utils.times['n_maxxed'] = game.n_maxxed / game.state.time
     cuda_utils.times['algo_max'] = game.creatures.algos['max']
     cuda_utils.times['algo_fill'] = game.creatures.algos['fill_gaps']
     cuda_utils.times['algo_move'] = game.creatures.algos['move_block']
@@ -314,16 +315,19 @@ def _benchmark(cfg=None, max_steps=512):
     # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
     # ps.print_stats()
     # print(s.getvalue())
-    return cuda_utils.times
+    return cuda_utils.times, cuda_utils.n_times
 
 def multi_benchmark(cfg, max_steps=2500, N=20, skip_first=False):
     total_times = defaultdict(list)
     for i in range(N):
-        bmarks = _benchmark(cfg, max_steps=max_steps)
+        times, n_times = _benchmark(cfg, max_steps=max_steps)
         if i == 0 and skip_first:  # skip first iteration for compilation weirdness
             continue
-        for k, v in bmarks.items():
-            total_times[k].append(v)
+        for k, v in times.items():
+            if k in n_times:
+                total_times[k].append(v)
+            else:
+                total_times[k].append(float(v))
     results = {}
     for k, v in total_times.items():
         # compute mean and sample standard deviation
