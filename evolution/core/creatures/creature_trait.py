@@ -40,13 +40,14 @@ class Initializer:
             self.is_list = True
     
     @classmethod
-    def mutable(cls, mut_idx: int, name: str, *args) -> 'Initializer':
-        """Create an Initializer object for a mutable trait. 
+    def mutable(cls, name: str, *args) -> 'Initializer':
+        """Create an Initializer object for a mutable trait. mut_idx, which is required for this
+        type of initializer, will be set later, by the CreatureArray class, as this avoids needing
+        to provide a manual index for each trait.
         Args:
-            mut_idx: index into the creature's mut_rate tensor that corresponds to this trait.
             name: Torch name of the intializer function when first seeding the world (non-reproductive).
             args: Arguments to pass to the initializer function."""
-        return cls(style=InitializerStyle.MUTABLE, mut_idx=mut_idx, name=name, args=args)
+        return cls(style=InitializerStyle.MUTABLE, name=name, args=args)
     
     
     @classmethod

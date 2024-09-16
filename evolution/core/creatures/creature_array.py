@@ -53,30 +53,28 @@ class CreatureArray:
         self.posn_bounds = (0, cfg.size-1e-3)
         self.num_food = (cfg.food_sight*2+1)**2
         self.device = device
-        
+        self.variables: Dict[str, CreatureTrait] = {}
+        self.num_mutable = 0
         
     def generate_from_cfg(self):
         """Generate a new set of creatures from the configuration. This should only be called for
         the root CreatureArray, that represents all the creatures in the world."""
         self.sizes: CreatureTrait = CreatureTrait(tuple(), 
-                                                  Initializer.mutable(0, 'uniform_', *self.cfg.init_size_range), 
+                                                  Initializer.mutable('uniform_', *self.cfg.init_size_range), 
                                                   partial(clamp, bounds=self.cfg.size_range), 
                                                   self.device)
         
         self.colors: CreatureTrait = CreatureTrait((3,), 
-                                                   Initializer.mutable(1, 'uniform_', 1, 255),
+                                                   Initializer.mutable('uniform_', 1, 255),
                                                    partial(clamp, bounds=(1,255)), self.device)
         
         normalize_rays = partial(_normalize_rays, cfg=self.cfg)
         # the initializer here isn't fully correct, as it should be normal(0, 1) for the first 2 dimensions and 
         # uniform on the last dimension, but I guess that's what you get for combining 2 traits that really should have been separate
         self.rays: CreatureTrait = CreatureTrait((self.cfg.num_rays, 3), 
-                                                 Initializer.mutable(2, 'normal_', 0, self.cfg.ray_dist_range[1]),
+                                                 Initializer.mutable('normal_', 0, self.cfg.ray_dist_range[1]),
                                                  normalize_rays, self.device)
         
-        self.mutation_rates: CreatureTrait = CreatureTrait((6,), 
-                                                  Initializer.mutable(5, 'uniform_', *self.cfg.init_mut_rate_range),
-                                                  None, self.device)
         
         self.positions: CreatureTrait = CreatureTrait((2,), 
                                                       Initializer.force_mutable('uniform_', *self.posn_bounds),
@@ -139,15 +137,17 @@ class CreatureArray:
             weight_inits.append((-w_norm, w_norm))
             bias_inits.append((-b_norm, b_norm))
         self.weights: CreatureTrait = CreatureTrait(weight_sizes, 
-                                                    Initializer.mutable(3, 'uniform_', weight_inits), 
+                                                    Initializer.mutable('uniform_', weight_inits), 
                                                     None, self.device)
         self.biases: CreatureTrait = CreatureTrait(bias_sizes, 
-                                                   Initializer.mutable(4, 'uniform_', bias_inits),
+                                                   Initializer.mutable('uniform_', bias_inits),
                                                    None, self.device)
         
-        # select all CreatureTrait objects
-        self.variables: Dict[str, CreatureTrait] = {p: getattr(self, p) for p in dir(self) 
-                                               if isinstance(getattr(self, p), CreatureTrait)}
+        # this must be defined last, so that the right number of mutable parameters are set
+        self.mutation_rates: CreatureTrait = CreatureTrait((self.num_mutable+1,), 
+                                                  Initializer.mutable('uniform_', *self.cfg.init_mut_rate_range),
+                                                  None, self.device)
+        
         
         # set position, size, color, etc. as samples from their respective init methods
         for k, v in self.variables.items():
@@ -172,6 +172,19 @@ class CreatureArray:
         self.alive[:self.cfg.start_creatures] = 1.0
         self.rng = BatchedRandom(self.variables, self.device)
         self.algos = {'max': 0, 'fill_gaps': 0, 'move_block': 0}
+        
+    def __setattr__(self, name, value):
+        """Capture any CreatureTrait objects that are added to the CreatureArray, and store them
+        in the `variables` dictionary, so that we can iterate over CreatureTraits and apply the
+        same methods to each one. Additionally, we also can track how many mutable parametrs
+        have been added so far, so that each one can be assigned a unique mut_idx when reproducing."""
+        if isinstance(value, CreatureTrait):
+            if name not in self.variables:
+                self.variables[name] = value
+                if value.init.style == InitializerStyle.MUTABLE:
+                    value.init.mut_idx = self.num_mutable
+                    self.num_mutable += 1
+        super().__setattr__(name, value)
         
     @cuda_profile
     def reproduce_most(self, reproducers: Tensor, num_reproducers: int, children: 'CreatureArray', mut: Tensor):
