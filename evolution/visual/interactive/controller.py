@@ -7,6 +7,7 @@ from .camera import Camera
 
 from evolution.state.game_state import GameState
 from evolution.core.gworld import GWorld
+from evolution.utils.event_handler import EventHandler
 
 if TYPE_CHECKING:
     from evolution.visual.main import Game
@@ -25,7 +26,7 @@ class KeyManager:
         if key in self.keys:
             self.keys[key](modifiers)
 
-class Controller:
+class Controller(EventHandler):
     def __init__(self, world: GWorld, window: mglw.BaseWindow, camera: Camera, state: GameState):
         # add all attrs of controller that end in _func to window, since these are associated with events
 
@@ -109,22 +110,24 @@ class Controller:
         
         self.key_mgr.register_key(self.wnd.keys.B, lambda m:
             self.state.toggle_hitboxes())  # turn hitboxes on/off
-        
-    def key_event_func(self, key, action, modifiers):
-        if action == self.wnd.keys.ACTION_PRESS:
-            self.key_mgr.call(key, modifiers)
-            
+    
     def set_selected_creature(self, creature):
         self.camera.following = True
         self.state.selected_creature = creature
         if creature is not None:   # if setting creature, set cell to None
             self.set_selected_cell(None)
-        
+    
     def set_selected_cell(self, xy):
         self.state.selected_cell = xy
         if xy is not None:   # if setting cell None, set creature to None
             self.set_selected_creature(None)
-        
+            
+    def resize_func(self, width, height): ...
+    
+    def key_event_func(self, key, action, modifiers):
+        if action == self.wnd.keys.ACTION_PRESS:
+            self.key_mgr.call(key, modifiers)
+            
     def mouse_press_event_func(self, x, y, button):
         # need to store everything in pixel coords so that we are closest to the actual input 
         # this avoids jittering and weird camera behavior when dragging the map
@@ -140,7 +143,7 @@ class Controller:
                 self.set_selected_cell(game_click)
             else:
                 self.set_selected_cell(None)
-            
+    
     def mouse_scroll_event_func(self, xoffset, yoffset):
         self.camera.zoom_into_point(yoffset, self.mouse_pos)
 

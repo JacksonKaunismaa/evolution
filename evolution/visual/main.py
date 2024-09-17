@@ -1,4 +1,4 @@
-from typing import Dict
+from typing import Set
 from OpenGL.GL import *
 from contextlib import contextmanager
 import moderngl_window as mglw
@@ -8,8 +8,6 @@ import os.path as osp
 from cuda import cuda
 import torch
 torch.set_grad_enabled(False)
-
-
 
 from .interactive.controller import Controller
 from .interactive.camera import Camera
@@ -26,11 +24,11 @@ from evolution.state.game_state import GameState
 from evolution.core import config
 from evolution.core import gworld
 from evolution.cuda.cu_algorithms import checkCudaErrors
-from evolution.utils import loading
+from evolution.utils import loading, event_handler
 from evolution.utils.subscribe import Publisher
 
 
-class Game:
+class Game:    
     def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders', load_path=None):
         # super().__init__(**kwargs)
         other_state_dicts = {}
@@ -74,11 +72,11 @@ class Game:
                     getattr(self.controller, evt_func)(*args, **kwargs)
             return func
         
-        # pull possible event functions from the ui_manager and controller by looking for attributes
-        # of each that end in func
-        for evt_func in set(dir(self.ui_manager) + dir(self.controller)):
-            if evt_func.endswith('_func'):  # ends in _func => is an event function
-                setattr(self.wnd, evt_func, create_func(evt_func))
+        for func_name in event_handler.EventHandler.__abstractmethods__:
+            if hasattr(self.wnd, func_name):
+                setattr(self.wnd, func_name, create_func(func_name))
+            else:
+                raise AttributeError(f'Event function "{func_name}" not supported by window')
 
     def step(self, n=None) -> bool:
         if self.state.game_paused:

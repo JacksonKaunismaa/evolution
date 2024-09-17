@@ -1,14 +1,8 @@
-from typing import List
+from typing import List, TYPE_CHECKING
 from imgui_bundle import imgui, implot
 from imgui_bundle.python_backends.glfw_backend import GlfwRenderer
 import glfw
 from moderngl_window import BaseWindow
-# from moderngl_window.integrations.imgui import ModernglWindowMixin
-
-
-from evolution.core.config import Config
-from evolution.core.gworld import GWorld
-from evolution.state.game_state import GameState
 
 from .game_status_window import GameStatusWindow
 from .creature_status_window import CreatureStatusWindow
@@ -17,8 +11,15 @@ from .ui_element import Window
 from .plots.energy_plot import EnergyPlot
 
 
-# Mixin allows us to forward events to imgui
-class UIManager:
+from evolution.core.config import Config
+from evolution.core.gworld import GWorld
+from evolution.state.game_state import GameState
+from evolution.utils.event_handler import EventHandler
+if TYPE_CHECKING:
+    from evolution.visual.main import Game
+
+
+class UIManager(EventHandler):
     def __init__(self, cfg: Config, world: GWorld, window: BaseWindow, state: GameState):
         self.ui_elements: List[Window] = []
         
@@ -59,7 +60,6 @@ class UIManager:
         self.imgui.render(imgui.get_draw_data())
     
     
-    # ends in _func => its a event function
     # see moderngl_window.intergrations.imgui.ModernglWindowMixin
     def resize_func(self, width, height):
         self.imgui.resize_callback(self.wnd, width, height)
