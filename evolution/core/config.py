@@ -1,19 +1,17 @@
 import dataclasses
 from typing import Any, Dict, Tuple
 import torch
-torch.set_grad_enabled(False)
-
 
 class ConfigFunction:   # for replacing functions in regular python code
     def __init__(self, name, *args):
         self.name = name
         self.func = getattr(self, name)
         self.extra_args = args
-            
+
     @staticmethod
     def pow(x, m, a):
         return m * x**a
-    
+
     @staticmethod
     def square_add(x, m, a):
         return m*x**2 + a
@@ -25,7 +23,7 @@ class ConfigFunction:   # for replacing functions in regular python code
     @staticmethod
     def linear(x, m):
         return m*x
-    
+
     @staticmethod
     def bilinear(x, y, m):
         return x * y * m
@@ -33,18 +31,18 @@ class ConfigFunction:   # for replacing functions in regular python code
     @staticmethod
     def linear_frac(x, y, m):
         return x / (1 + y) * m
-    
+
     @staticmethod
     def abs_exp(x, y, m):
         return (1 - torch.exp(-torch.abs(x) * y)) * m
 
     def __call__(self, *args):
         return self.func(*args, *self.extra_args)
-    
+
     def __repr__(self):
         return f'{self.name}({self.extra_args})'
-    
-class FunctionExpression():  # for code preprocessor in cu_algorithms
+
+class FunctionExpression:  # for code preprocessor in cu_algorithms
     def __init__(self, symbols, expr):
         self.symbols = symbols
         self.expr = expr
@@ -109,9 +107,9 @@ class Config:
     ### Food
     init_food_scale: float = 8.0    # food will be initialized uniformly to be in [0, init_food_scale]
     # (pct of food a min. size creature can in a cell, pct of food a max. size creature can eat in a cell)
-    eat_pct: float = (0.001, 0.1)
+    eat_pct: Tuple[float, float] = (0.001, 0.1)
     # entry[0] -> scaling function for size, entry[1] -> scaling function for eat pct (https://www.desmos.com/calculator/kzkq5kfh0x)
-    eat_pct_scaling: Tuple[str] = ('log', 'log')
+    eat_pct_scaling: Tuple[str, str] = ('log', 'log')
     food_cover_decr: float = 0.2  # if a creature occupies a cell, the food in that cell be decreased by this amount each step
     # actual_food_decr = food_cover_decr * float_cover_decr_pct * creature_eat_pct
     food_cover_decr_pct: float = 10.
@@ -138,9 +136,9 @@ class Config:
     # vitality
     init_size_range: Tuple[float, float] = (0.5, 4.5)  # (min, max) size of creatures at the beginning
     # func(size)*scale to determine initial energy
-    init_energy: ConfigFunction = ConfigFunction('linear', 1.0) 
+    init_energy: ConfigFunction = ConfigFunction('linear', 1.0)
     # func(size)*scale to determine initial energy
-    init_health: ConfigFunction = ConfigFunction('square', 1.0)   
+    init_health: ConfigFunction = ConfigFunction('square', 1.0)
     size_range: Tuple[float, float] = (0.1, 5.0)  # (minimum,maximum) size of creatures (after mutating)
     immortal: bool = False  # if True, creatures don't die
 
@@ -151,28 +149,28 @@ class Config:
 
     ### Energy/Movement costs
     # func(size) that determines the cost of being alive at each step
-    # alive_cost: ConfigFunction = ConfigFunction('linear', 0.03)  
+    # alive_cost: ConfigFunction = ConfigFunction('linear', 0.03)
     alive_cost: FunctionExpression = FunctionExpression(['x'], '0.01f * x')
     # func(out, size) that determines the amt to rotate
-    # rotate_amt: ConfigFunction = ConfigFunction('linear_frac', torch.pi/10)  
+    # rotate_amt: ConfigFunction = ConfigFunction('linear_frac', torch.pi/10)
     rotate_amt: FunctionExpression = FunctionExpression(['x', 'y'], '(x / (1.0f + y)) * 0.314159f')
     # func(rotate_amt, size) to determine rotation cost
-    # rotate_cost: ConfigFunction = ConfigFunction('abs_exp', 0.2)  
+    # rotate_cost: ConfigFunction = ConfigFunction('abs_exp', 0.2)
     rotate_cost: FunctionExpression = FunctionExpression(['x', 'y'], '0.05f * (1.0f - (expf(-abs(x) * y)))')
     # func(output, size) to determine movement amount
     move_amt: ConfigFunction = ConfigFunction('linear_frac', 0.3)
-    # func(move_amt, size) to determine movement cost  
-    move_cost: ConfigFunction = ConfigFunction('abs_exp', 0.2)  
-    
+    # func(move_amt, size) to determine movement cost
+    move_cost: ConfigFunction = ConfigFunction('abs_exp', 0.2)
+
 
 
     ### Attack
     # anywhere along size * head_dir * t + position, t \in [attack_range[0], attack_range[1]] can do damage
     attack_range: Tuple[float, float] = (1.35, 1.96)  # emprically measured based on creature sprite to match it as closely as possible
     # func(num_attacks, size) to determine attack cost
-    attack_cost: ConfigFunction = ConfigFunction('bilinear', 0.05)  
+    attack_cost: ConfigFunction = ConfigFunction('bilinear', 0.05)
     # func(size) to determine the amount of damage done in an attack
-    attack_dmg: FunctionExpression = FunctionExpression(['x'], 'x*x*x * 0.1f') 
+    attack_dmg: FunctionExpression = FunctionExpression(['x'], 'x*x*x * 0.1f')
     attack_ignore_color_dist: float = 3.0 # if sum(abs(color1-color2)) < this, they don't hurt each other
     attack_dist_bonus: float = 0.0  # if creatures are within the dist_bonus, they can attack each other
     dead_drop_food: ConfigFunction = ConfigFunction('linear', 1.)  # func(size) to determine how much food a creature drops when it dies
@@ -181,7 +179,7 @@ class Config:
 
     ### Reproduction
     # func(size) to determine the energy threshold for reproduction
-    reproduce_thresh: ConfigFunction = ConfigFunction('square_add', 11., 1.0)  
+    reproduce_thresh: ConfigFunction = ConfigFunction('square_add', 11., 1.0)
     reproduce_energy_loss_frac: float = 15.  # factor to divide energy by after reproducing (and subtracting off init_energy costs)
     reproduce_dist: float = 3.  # standard deviation of distance from parent to place offspring
 
@@ -191,19 +189,19 @@ class Config:
     age_speed_size: ConfigFunction = ConfigFunction('pow', 1., 0.1323)  # (sz**0.133) is the speed at which creatures age
     age_mature_mul: float = 150.0  # age_speed * mature_age_mul is the age at which creatures can reproduce
     age_old_mul: float = 1600.0 # age_speed * age_old_mul is the age at which creatures start taking extra dmg/energy
-    
-    
+
+
     ## Algorithm parameters
     max_per_cell: int = 512 # maximum number of creatures in a cell when doing gridded/celled ray tracing
     cell_size: float = 4.0   # width of cells when doing gridded/celled ray tracing
     cache_size: int = 32    # number of creatures to cache when doing gridded/celled ray tracing (power of 2)
     use_cache: int = 0   # whether to use the cache when doing gridded ray tracing (1 = enabled, 0 = disabled)
-    
-    
-    
+
+
+
     ## Game Settings
     max_game_speed: int = 1000 # maximum game speed (steps per frame)
-    
+
     def update_in_place(self, other: 'Config' | Dict[str, Any]) -> 'Config':
         if isinstance(other, dict):
             for k, v in other.items():
@@ -215,8 +213,8 @@ class Config:
 
 
 def simple_cfg(**kwargs):
-    cfg = dict(size=10, start_creatures=5, max_creatures=10, mem_size=4, 
+    cfg = dict(size=10, start_creatures=5, max_creatures=10, mem_size=4,
                   init_food_scale=5.0, food_cover_decr=0.0, alive_cost=ConfigFunction('linear', 0.0),
                   init_size_range=(0.1, 2.5))
     cfg.update(kwargs)
-    return Config(**cfg)
+    return Config(**cfg)  # type: ignore

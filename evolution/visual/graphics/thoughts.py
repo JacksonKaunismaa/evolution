@@ -1,4 +1,4 @@
-from typing import Dict, List, TYPE_CHECKING
+from typing import Dict
 from moderngl import Context
 from moderngl_window import BaseWindow
 import numpy as np
@@ -17,17 +17,17 @@ class ThoughtsVisualizer(Subscriber):
                  state: GameState, shaders: Dict[str, str]):
         super().__init__()
         world.state.creature_publisher.subscribe(self)
-        
+
         self.cfg = cfg
         self.ctx = ctx
         self.shaders = shaders
         self.world = world
         self.state = state
         self.wnd = wnd
-        
+
         self.visible = False
 
-        self.thoughts_tex = loading.load_image_as_texture(self.ctx, 
+        self.thoughts_tex = loading.load_image_as_texture(self.ctx,
                                                           'assets/circle_outline_faded.png')
         self.thoughts_sampler = self.ctx.sampler(texture=self.thoughts_tex)
         filter_type = self.ctx.LINEAR
@@ -48,7 +48,7 @@ class ThoughtsVisualizer(Subscriber):
         # second row will be the ouptuts
 
         n_mems = self.cfg.mem_size
-        n_outs = 2 
+        n_outs = 2
         left_edge = -1.0 + self.pad
         right_edge = left_edge + self.width
         top_edge = 1.0 - self.pad

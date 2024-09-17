@@ -5,7 +5,7 @@ from evolution.core.config import Config
 from evolution.core.gworld import GWorld
 from evolution.state.game_state import GameState
 
-from .ui_element import UIElement, Window, Lines
+from .ui_element import Window, Lines
 
 
 class CellStatusWindow(Window):
@@ -18,24 +18,24 @@ class CellStatusWindow(Window):
         self.y_pos = 0
         self.main_text = Lines()
         self.delta_text = Lines()
-        
+
     def render(self):
         # Set the position dynamically based on collapsing header state
         cell = self.state.selected_cell
         if not cell:   # if its not visible, don't show anything
             return
         window_width, window_height = self.wnd.size
-        
+
         height = self.height
         if not cell.update_state_available:
             height -= self.delta_text.height
-        
+
         pos = (window_width - self.width, self.y_pos)
         imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)
 
         sz = (self.width, height)
         imgui.set_next_window_size(sz, cond=imgui.Cond_.always)
-        
+
         # Begin a new ImGui window
         with self.begin(imgui.WindowFlags_.no_move | imgui.WindowFlags_.no_saved_settings |
                     imgui.WindowFlags_.no_resize):

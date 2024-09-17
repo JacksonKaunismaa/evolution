@@ -1,13 +1,11 @@
-from typing import Set
-from OpenGL.GL import *
-from contextlib import contextmanager
+import os.path as osp
 import moderngl_window as mglw
 from moderngl_window import settings
 import moderngl as mgl
-import os.path as osp
-from cuda import cuda
-import torch
-torch.set_grad_enabled(False)
+
+from evolution.core import config
+from evolution.core import gworld
+from evolution.utils import loading, event_handler
 
 from .interactive.controller import Controller
 from .interactive.camera import Camera
@@ -20,27 +18,19 @@ from .gui.ui_manager import UIManager
 from .fps import FPSTracker
 
 
-from evolution.state.game_state import GameState
-from evolution.core import config
-from evolution.core import gworld
-from evolution.cuda.cu_algorithms import checkCudaErrors
-from evolution.utils import loading, event_handler
-from evolution.utils.subscribe import Publisher
-
-
-class Game:    
+class Game:
+    """Main class for the game. Contains all the visual components and the game state."""
     def __init__(self, window: mglw.BaseWindow, cfg: config.Config, shader_path='./shaders', load_path=None):
-        # super().__init__(**kwargs)
         other_state_dicts = {}
         if load_path is not None and osp.exists(load_path):
             self.world, other_state_dicts = gworld.GWorld.from_checkpoint(load_path)
             cfg = self.world.cfg
         else:
             self.world = gworld.GWorld(cfg)
-            
+
         self.wnd: mglw.BaseWindow = window
         self.state = self.world.state
-        
+
         self.cfg = cfg
         self.ctx: mgl.Context = window.ctx
         self.ctx.enable(mgl.BLEND)
@@ -53,25 +43,25 @@ class Game:
         self.thoughts_visual = ThoughtsVisualizer(cfg, self.ctx, self.world, window, self.state, self.shaders)
         self.controller = Controller(self.world, window, self.camera, self.state)
         self.fps_tracker = FPSTracker()
-        
+
         if 'camera' in other_state_dicts:
             self.camera.load_state_dict(other_state_dicts['camera'])
-        
+
         self.ui_manager = UIManager(cfg, self.world, window, self.state)
 
         self.state.init_publish()
         self.setup_events()
 
     def setup_events(self):
+        """Setup event handlers for the window by forwarding them to the controller and ui manager."""
         def create_func(evt_func):
             is_mouse_evt = 'mouse' in evt_func
             def func(*args, **kwargs):
-                if hasattr(self.ui_manager, evt_func):  # call the ui function if its supported/exists
-                    getattr(self.ui_manager, evt_func)(*args, **kwargs)
-                if hasattr(self.controller, evt_func) and (not self.ui_manager.is_hovered() or not is_mouse_evt):
+                getattr(self.ui_manager, evt_func)(*args, **kwargs)
+                if not self.ui_manager.is_hovered() or not is_mouse_evt:
                     getattr(self.controller, evt_func)(*args, **kwargs)
             return func
-        
+
         for func_name in event_handler.EventHandler.__abstractmethods__:
             if hasattr(self.wnd, func_name):
                 setattr(self.wnd, func_name, create_func(func_name))
@@ -79,6 +69,7 @@ class Game:
                 raise AttributeError(f'Event function "{func_name}" not supported by window')
 
     def step(self, n=None) -> bool:
+        """Step the game world based on current settings and return whether the game is still populated."""
         if self.state.game_paused:
             return True
         if n is None:
@@ -92,7 +83,7 @@ class Game:
 
     def render(self):
         self.ctx.clear(0.0, 0.0, 0.0)
-                
+
         self.camera.update()
 
         self.heatmap.render()
@@ -100,14 +91,14 @@ class Game:
         self.rays.render()
         self.brain_visual.render()
         self.thoughts_visual.render()
-        
+
         self.ui_manager.render()
-        
+
         self.fps_tracker.tick()
 
         self.wnd.title = f'CUDA-Evolution - FPS: {self.fps_tracker.fps:.2f}'
         # self.controller.tick()
-        
+
 
 def main(cfg=None):
     settings.WINDOW['class'] = 'moderngl_window.context.glfw.Window'
@@ -118,23 +109,20 @@ def main(cfg=None):
     settings.WINDOW['vsync'] = True
     settings.WINDOW['resizable'] = True
     # settings.WINDOW['fullscreen'] = True
+
     window = mglw.create_window_from_settings()
     if cfg is None:
         cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0, immortal=False)
-        print(cfg.food_cover_decr)
-    # cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
-    #                     init_size_range=(0.2, 0.2), num_rays=32, immortal=True)
+
     game = Game(window, cfg, load_path='game.ckpt')
-    game.state.toggle_pause()
-    game.world.compute_decisions()
+    game.state.game_paused = True
 
     populated = True
-   
+
     while not window.is_closing and populated:
         window.clear()
+        populated = game.step()
         game.render()
 
         window.swap_buffers()
         game.ctx.viewport = (0, 0, window.width, window.height)
-
-        populated = game.step()

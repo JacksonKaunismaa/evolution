@@ -1,5 +1,4 @@
 from typing import Dict
-import moderngl as mgl
 from moderngl import Context
 import numpy as np
 
@@ -14,7 +13,7 @@ class InstancedCreatures(Subscriber):
     def __init__(self, cfg: Config, ctx: Context, world: GWorld, state: GameState, shaders: Dict[str, str]):
         super().__init__()
         world.state.game_publisher.subscribe(self)
-        
+
         self.cfg = cfg
         self.ctx = ctx
         self.world = world

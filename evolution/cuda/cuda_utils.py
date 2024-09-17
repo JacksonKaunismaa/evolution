@@ -1,12 +1,11 @@
-import torch
-torch.set_grad_enabled(False)
-from cuda import cuda, nvrtc
-from contextlib import contextmanager
-import moderngl as mgl
-from OpenGL.GL import *
-from functools import wraps
-from collections import defaultdict
 import gc
+from functools import wraps
+from contextlib import contextmanager
+from collections import defaultdict
+import torch
+from cuda import cuda, nvrtc
+import moderngl as mgl
+from OpenGL.GL import GL_TEXTURE_2D
 
 BENCHMARK = False
 times = defaultdict(float)
@@ -19,9 +18,9 @@ def cuda_profile(func):
     def wrapper(*args, **kwargs):
         if not BENCHMARK:
             return func(*args, **kwargs)
-        start.record()
+        start.record()  # type: ignore
         res = func(*args, **kwargs)
-        end.record()
+        end.record()   # type: ignore
         torch.cuda.synchronize()
         times[func.__name__] += start.elapsed_time(end)
         n_times[func.__name__] += 1
@@ -40,7 +39,7 @@ def _cudaGetErrorEnum(error):
         return nvrtc.nvrtcGetErrorString(error)[1]
     else:
         return error
-    
+
 
 def checkCudaErrors(result):
     if result[0].value:
@@ -117,7 +116,7 @@ def activate_buffer(cuda_buffer):
 
 
 def copy_to_buffer(tensor, cuda_buffer):
-    with activate_buffer(cuda_buffer) as (ptr,size):
+    with activate_buffer(cuda_buffer) as (ptr,size):  # type: ignore
         if tensor.dim() == 1:
             memcopy_1d(tensor, ptr)
         elif tensor.dim() == 2:
@@ -126,7 +125,7 @@ def copy_to_buffer(tensor, cuda_buffer):
             memcopy_3d(tensor, ptr)
         else:
             raise ValueError(f'Invalid tensor dim {tensor.dim()}')
-        
+
 def register_cuda_buffer(buffer: mgl.Buffer):
     return checkCudaErrors(cuda.cuGraphicsGLRegisterBuffer(
         int(buffer.glo),

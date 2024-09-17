@@ -20,7 +20,7 @@ class CreatureStatusWindow(Window):
         self.y_pos = 0
         self.main_text = Lines()
         self.mutation_element = CollapseableHeader('Mutation Rates')
-        
+
         self.delta_text = Lines()
         self.rotate_element = CollapseableHeader('Rotation')
         self.move_element = CollapseableHeader('Movement')
@@ -31,24 +31,24 @@ class CreatureStatusWindow(Window):
                                                 self.move_element,
                                                 self.attack_element,
                                                 self.eating_element]
-        
+
     def render(self):
         # Set the position dynamically based on collapsing header state
         creat = self.state.selected_creature
         if not creat:   # if its not visible, don't show anything
             return
         window_width, window_height = self.wnd.size
-        
+
         height = self.height
         if not creat.update_state_available:
-            height -= sum([p.height for p in self.dynamic_elements])
-        
+            height -= sum(p.height for p in self.dynamic_elements)
+
         pos = (window_width - self.width, self.y_pos)
         imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)
 
         sz = (self.width, height)
         imgui.set_next_window_size(sz, cond=imgui.Cond_.always)
-        
+
         # Begin a new ImGui window
         with self.begin(imgui.WindowFlags_.no_move | imgui.WindowFlags_.no_saved_settings |
                     imgui.WindowFlags_.no_resize):
@@ -65,29 +65,29 @@ class CreatureStatusWindow(Window):
                 f"Eat pct: {100.*float(creat.eat_pct):.4f}",
                 f"ID: {creat._selected_creature}"
             ])
-            
+
             if creat.update_state_available:
                 self.delta_text.render([f"Net Energy Delta: {creat.net_energy_delta:.6f}"])
-            
+
             self.mutation_element.render([
-                f"{name.replace('_', ' ').title()}: {creat.mutation_rate[param.init.mut_idx]:.6f}" 
-                for name,param in self.world.creatures.variables.items() 
+                f"{name.replace('_', ' ').title()}: {creat.mutation_rate[param.init.mut_idx]:.6f}"
+                for name,param in self.world.creatures.variables.items()
                     if param.init.style == InitializerStyle.MUTABLE  # => has a mutation rate
             ])
-            
+
             if creat.update_state_available:
                 self.rotate_element.render([
                     f"Rotate Logit: {creat.rotate_logit:.2f}",
                     f"Rotate Angle: {creat.rotate_angle:.2f}°",
                     f"Rotate Energy: {creat.rotate_energy:.6f}"
                 ])
-                
+
                 self.move_element.render([
                     f"Move Logit: {creat.move_logit:.2f}",
                     f"Move Amount: {creat.move_amt:.2f}",
                     f"Move Energy: {creat.move_energy:.6f}"
                 ])
-                
+
                 self.attack_element.render([
                     f"Num Attacking: {creat.n_attacking}",
                     f"Attack Damage Taken: {creat.dmg_taken:.5f}",

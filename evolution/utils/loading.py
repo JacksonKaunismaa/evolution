@@ -18,5 +18,5 @@ def load_shaders(shader_path) -> Dict[str, str]:
 def load_image_as_texture(ctx: mgl.Context, path: str) -> mgl.Texture:
     img = PIL.Image.open(path)
     np_img = np.array(img)
-    texture = ctx.texture(np_img.shape[:2], np_img.shape[2], np_img.tobytes())
+    texture = ctx.texture(np_img.shape[:2], np_img.shape[2], np_img.tobytes()) # type: ignore
     return texture
