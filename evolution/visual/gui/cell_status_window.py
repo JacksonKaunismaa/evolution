@@ -24,7 +24,7 @@ class CellStatusWindow(Window):
         cell = self.state.selected_cell
         if not cell:   # if its not visible, don't show anything
             return
-        window_width, window_height = self.wnd.size
+        window_width, window_height = self.wnd.size   # pylint: disable=unused-variable
 
         height = self.height
         if not cell.update_state_available:
@@ -41,7 +41,7 @@ class CellStatusWindow(Window):
                     imgui.WindowFlags_.no_resize):
             self.main_text.render([
                 f"Food: {cell.food:.3f}",
-                f"Position: {cell._selected_cell[0]}, {cell._selected_cell[1]}"
+                f"Position: {cell._selected_cell[0]}, {cell._selected_cell[1]}"  # pylint: disable=protected-access
             ])
             if cell.update_state_available:
                 self.delta_text.render([

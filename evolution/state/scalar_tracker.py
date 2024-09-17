@@ -70,7 +70,3 @@ class ScalarTracker(Subscriber):
         self.min_val = state_dict['min_val']
         self.max_val = state_dict['max_val']
         self.length = state_dict['length']
-
-
-
-

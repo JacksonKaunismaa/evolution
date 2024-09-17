@@ -37,7 +37,7 @@ class CreatureStatusWindow(Window):
         creat = self.state.selected_creature
         if not creat:   # if its not visible, don't show anything
             return
-        window_width, window_height = self.wnd.size
+        window_width, window_height = self.wnd.size  # pylint: disable=unused-variable
 
         height = self.height
         if not creat.update_state_available:
@@ -63,7 +63,7 @@ class CreatureStatusWindow(Window):
                 f"Position: {creat.position[0]:.2f}, {creat.position[1]:.2f}",
                 f"Color: {int(creat.color[0])}, {int(creat.color[1])}, {int(creat.color[2])}",
                 f"Eat pct: {100.*float(creat.eat_pct):.4f}",
-                f"ID: {creat._selected_creature}"
+                f"ID: {creat._selected_creature}"  # pylint: disable=protected-access
             ])
 
             if creat.update_state_available:

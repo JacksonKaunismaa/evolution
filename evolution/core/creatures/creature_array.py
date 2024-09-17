@@ -62,8 +62,8 @@ class CreatureArray:
                                                   Initializer.mutable('uniform_', *self.cfg.init_size_range),
                                                   partial(clamp, bounds=self.cfg.size_range),
                                                   self.device)
-
-        self.colors: CreatureTrait = CreatureTrait((3,),
+        color_channels = 3
+        self.colors: CreatureTrait = CreatureTrait((color_channels,),
                                                    Initializer.mutable('uniform_', 1, 255),
                                                    partial(clamp, bounds=(1,255)), self.device)
 
@@ -122,7 +122,7 @@ class CreatureArray:
         #         head_dir (2) + age_mult (1) + color (color_dims) + size (1)
         # output: move (1) + rotate (1) + memory (mem_size)
         layer_sizes = [
-            self.cfg.num_rays*self.colors._shape[0] + self.cfg.mem_size + self.num_food + 1 + 1 + 2 + 1 + self.colors._shape[0] + 1,
+            self.cfg.num_rays*color_channels + self.cfg.mem_size + self.num_food + 1 + 1 + 2 + 1 + color_channels + 1,
             *self.cfg.brain_size,
             self.cfg.mem_size + 2
         ]

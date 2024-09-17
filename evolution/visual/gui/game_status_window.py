@@ -23,7 +23,7 @@ class GameStatusWindow(Window):
 
     def render(self):
         # Set the position dynamically based on collapsing header state
-        window_width, window_height = self.wnd.size
+        window_width, window_height = self.wnd.size  # pylint: disable=unused-variable
 
         pos = (self.x_pos, window_height - self.height)
         imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)

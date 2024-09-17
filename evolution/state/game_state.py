@@ -96,8 +96,8 @@ class GameState:
 
     def state_dict(self):
         return {
-            'selected_creature': self.selected_creature._selected_creature,
-            'selected_cell': self.selected_cell._selected_cell,
+            'selected_creature': self.selected_creature._selected_creature, # pylint: disable=protected-access
+            'selected_cell': self.selected_cell._selected_cell,  # pylint: disable=protected-access
             'game_speed': self.game_speed,
             # 'game_paused': self.game_paused,  # we'd rather always start the game paused
             'creatures_visible': self.creatures_visible,

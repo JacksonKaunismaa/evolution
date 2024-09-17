@@ -4,9 +4,9 @@
 import torch
 torch.set_grad_enabled(False)
 
-import evolution.core.gworld
-import evolution.visual.main
-from evolution.core import config
+import evolution.core.gworld       # pylint: disable=wrong-import-position
+import evolution.visual.main       # pylint: disable=wrong-import-position
+from evolution.core import config  # pylint: disable=wrong-import-position
 
 
 torch.random.manual_seed(0)

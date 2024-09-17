@@ -322,7 +322,7 @@ class CreatureTrait:
 
 
     @classmethod
-    def __torch_function__(cls, func, types, args=(), kwargs=None):
+    def __torch_function__(cls, func, types, args=(), kwargs=None): # pylint: disable=unused-argument
         if kwargs is None:
             kwargs = {}
         if isinstance(args[0], list):

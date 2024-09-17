@@ -1,6 +1,5 @@
-from typing import List, Tuple, Union
+from typing import Tuple
 import torch
-torch.set_grad_enabled(False)
 from torch import Size, Tensor
 
 TensorWithShape = Tuple[Tensor, Size]
@@ -18,8 +17,8 @@ class QuantizedData:
 
 
 def _quantize(x: Tensor, map_location) -> TensorWithShape:
-    maxs = torch.amax(x, dim=(0))
-    mins = torch.amin(x, dim=(0))
+    maxs = torch.amax(x, dim=0)
+    mins = torch.amin(x, dim=0)
     qmin = -128
     qmax = 127
 
