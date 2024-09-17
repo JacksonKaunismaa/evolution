@@ -70,10 +70,11 @@ class Initializer:
     def __call__(self, arg) -> Tensor:
         if self.style == InitializerStyle.OTHER_DEPENDENT:
             return self.func(arg)
-        elif self.style in [InitializerStyle.FILLABLE, InitializerStyle.FORCE_MUTABLE, InitializerStyle.MUTABLE]:
+
+        if self.style in [InitializerStyle.FILLABLE, InitializerStyle.FORCE_MUTABLE, InitializerStyle.MUTABLE]:
             return getattr(arg, self.name)(*self.args)
-        else:
-            raise ValueError(f"Invalid initializer style: {self.style}")
+
+        raise ValueError(f"Invalid initializer style: {self.style}")
 
 
 class CreatureTrait:
@@ -194,8 +195,11 @@ class CreatureTrait:
         """
         if self.init.style == InitializerStyle.FILLABLE:
             return self.reproduce_fillable(name, rng, num_reproducers)
-        elif self.init.style == InitializerStyle.MUTABLE:
+
+        if self.init.style == InitializerStyle.MUTABLE:
             return self.reproduce_mutable(name, rng, reproducers, mut)
+
+        return None
 
     @cuda_profile
     def normalize(self):  # technically we should add support for list-type CreatureTraits, but we don't use that

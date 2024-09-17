@@ -44,7 +44,8 @@ class CUDAKernelManager:
             value = getattr(self.cfg, variable, None)
             if value is None:
                 raise ValueError(f'Unknown attribute of config: {variable}')
-            elif isinstance(value, config.FunctionExpression):
+
+            if isinstance(value, config.FunctionExpression):
                 macros.add(f'--define-macro={match.group(0)}({", ".join(value.symbols)})={value.expr}'.encode(self.encoding))
             elif isinstance(value, tuple):
                 macro = f"{match.group(0)}(n)=("  # function definition

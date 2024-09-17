@@ -35,10 +35,11 @@ def _cuda_get_error_enum(error):
     if isinstance(error, cuda.CUresult):
         err, name = cuda.cuGetErrorName(error)
         return name if err == cuda.CUresult.CUDA_SUCCESS else "<unknown>"
-    elif isinstance(error, nvrtc.nvrtcResult):
+
+    if isinstance(error, nvrtc.nvrtcResult):
         return nvrtc.nvrtcGetErrorString(error)[1]
-    else:
-        return error
+
+    return error
 
 
 def cuda_check_errors(result):
@@ -46,12 +47,12 @@ def cuda_check_errors(result):
         # print(result[0], type(result[0]))
         print(result[0], _cuda_get_error_enum(result[0]))
         raise RuntimeError(f"CUDA error code={result[0].value}({str(_cuda_get_error_enum(result[0]))})")
+
     if len(result) == 1:
         return None
-    elif len(result) == 2:
+    if len(result) == 2:
         return result[1]
-    else:
-        return result[1:]
+    return result[1:]
 
 
 def memcopy_1d(tensor, ptr):

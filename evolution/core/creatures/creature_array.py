@@ -30,7 +30,7 @@ def _eat_amt(sizes: CreatureTrait, cfg: Config) -> Tensor:
     else:
         raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[0]}")
 
-    if cfg.eat_pct_scaling[1] == 'linear':
+    if cfg.eat_pct_scaling[1] == 'linear':  # pylint: disable=no-else-return
         return cfg.eat_pct[0] + size_pct * (cfg.eat_pct[1] - cfg.eat_pct[0])
     elif cfg.eat_pct_scaling[1] == 'log':
         return cfg.eat_pct[0] * torch.exp(size_pct * np.log(cfg.eat_pct[1] / cfg.eat_pct[0]))
@@ -126,11 +126,9 @@ class CreatureArray:
             *self.cfg.brain_size,
             self.cfg.mem_size + 2
         ]
-        weight_sizes = [(prev_layer, next_layer) for prev_layer, next_layer in zip(layer_sizes[:-1], layer_sizes[1:])]
-        # bias_sizes = [(1, next_layer) for next_layer in layer_sizes[1:]]
         weights = []
         biases = []
-        for prev_layer, next_layer in weight_sizes:
+        for prev_layer, next_layer in zip(layer_sizes[:-1], layer_sizes[1:]):
             w_norm = 0.5 * np.sqrt(15. / prev_layer)
             b_norm = 0.5 / np.sqrt(next_layer)
             weights.append(CreatureTrait((prev_layer, next_layer),
@@ -324,7 +322,7 @@ class CreatureArray:
         if state.selected_creature and selected_creature_update is not None:
             state.selected_creature = selected_creature_update
 
-    def add_with_deaths_max_array(self, dead: Tensor, other: Union[None, 'CreatureArray']):
+    def add_with_deaths_max_array(self, dead: Tensor, other: Union[None, 'CreatureArray']): # pylint: disable=useless-return
         """If the number of creatures after death and reproduction will fill the entire buffer,
         we can simply put new creatures in the dead creatures spots, and set start_idx to 0.
 
