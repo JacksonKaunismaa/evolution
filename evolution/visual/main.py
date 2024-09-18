@@ -116,6 +116,8 @@ def main(cfg=None):
 
     game = Game(window, cfg, load_path='game.ckpt')
     game.state.game_paused = True
+    # we do one initial step to force compute_decisions to be called (so visualizers can be populated)
+    game.world.step()
 
     populated = True
 

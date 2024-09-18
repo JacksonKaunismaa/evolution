@@ -22,7 +22,7 @@ class CreatureArray:
     when creatures die or reproduce."""
     def __init__(self, cfg: Config, device: torch.device):
         self.cfg = cfg
-        self.posn_bounds = (0, cfg.size-1e-3)
+        self.posn_bounds = (0., cfg.size-1e-3)
         self.num_food = (cfg.food_sight*2+1)**2
         self.device = device
         self.variables: Dict[str, CreatureTrait] = {}
@@ -33,13 +33,16 @@ class CreatureArray:
         the root CreatureArray, that represents all the creatures in the world."""
         self.sizes: CreatureTrait = CreatureTrait(tuple(),
                                                   Initializer.mutable('uniform_', *self.cfg.init_size_range),
-                                                  Normalizer(utils.clamp, self.cfg.size_range),
+                                                  Normalizer(utils.clamp, *self.cfg.size_range),
                                                   self.device)
+        color_channels = 1
+        self.colors: CreatureTrait = CreatureTrait(tuple(),
+                                            Initializer.mutable('uniform_', 1, 255),
+                                            Normalizer(utils.clamp, 1, 255), self.device)
 
-        color_channels = 3
-        self.colors: CreatureTrait = CreatureTrait((color_channels,),
-                                                   Initializer.mutable('uniform_', 1,255),
-                                                   Normalizer(utils.clamp, (1,255)), self.device)
+        self.visual_colors: CreatureTrait = CreatureTrait((3,),
+                                                          Initializer.other_dependent('colors', utils.hsv_spiral),
+                                                          None, self.device)
 
         # the initializer here isn't fully correct, as it should be normal(0, 1) for the first 2 dimensions and
         # uniform on the last dimension, but I guess that's what you get for combining 2 traits that really should have been separate
@@ -50,17 +53,17 @@ class CreatureArray:
 
 
         self.positions: CreatureTrait = CreatureTrait((2,),
-                                                      Initializer.force_mutable('uniform_', *self.posn_bounds),
-                                                      Normalizer(utils.clamp, self.posn_bounds),
-                                                      self.device)
+                                Initializer.force_mutable('uniform_', self.cfg.reproduce_dist, *self.posn_bounds),
+                                Normalizer(utils.clamp, *self.posn_bounds),
+                                self.device)
 
         self.energies: CreatureTrait = CreatureTrait(tuple(),
                                                      Initializer.other_dependent('sizes', self.cfg.init_energy),
                                                      None, self.device)
 
         self.reproduce_energies: CreatureTrait = CreatureTrait(tuple(),
-                                                               Initializer.other_dependent('sizes', self.cfg.reproduce_thresh),
-                                                               None, self.device)
+                                                    Initializer.other_dependent('sizes', self.cfg.reproduce_thresh),
+                                                    None, self.device)
 
         self.healths: CreatureTrait = CreatureTrait(tuple(),
                                                     Initializer.other_dependent('sizes', self.cfg.init_health),
@@ -126,7 +129,7 @@ class CreatureArray:
         for k, v in self.variables.items():
             try:
                 v.init_base(self.cfg)
-            except TypeError:
+            except:
                 print(k)
                 raise
 
@@ -138,7 +141,6 @@ class CreatureArray:
                 except KeyError as exc:
                     raise KeyError(f"CreatureTrait '{k}' depends on trait '{v.init.name}'"
                                          ", but it has not been registered.") from exc
-        # normalize_rays(self.rays, self.sizes, self.cfg)
 
         self.start_idx: int = 0
         self.alive = torch.zeros(self.cfg.max_creatures, dtype=torch.float32, device=self.device)

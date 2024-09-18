@@ -170,7 +170,9 @@ class Config:
     # func(num_attacks, size) to determine attack cost
     attack_cost: ConfigFunction = ConfigFunction('bilinear', 0.05)
     # func(size) to determine the amount of damage done in an attack
-    attack_dmg: FunctionExpression = FunctionExpression(['x'], 'x*x*x * 0.1f')
+    attack_dmg: FunctionExpression = FunctionExpression(['x'], 'x*x*x*0.1f')
+    # func(color_diff) to determine the fraction of damage done in an attack
+    attack_color_frac: FunctionExpression = FunctionExpression(['d'], '1. - 1. / (4.*d + 1.)')
     attack_ignore_color_dist: float = 3.0 # if sum(abs(color1-color2)) < this, they don't hurt each other
     attack_dist_bonus: float = 0.0  # if creatures are within the dist_bonus, they can attack each other
     dead_drop_food: ConfigFunction = ConfigFunction('linear', 1.)  # func(size) to determine how much food a creature drops when it dies

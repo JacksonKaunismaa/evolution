@@ -87,7 +87,7 @@ class InstancedCreatures(Subscriber):
         cuda_utils.copy_to_buffer(self.world.creatures.positions, self.cuda_positions)
         cuda_utils.copy_to_buffer(self.world.creatures.sizes, self.cuda_sizes)
         cuda_utils.copy_to_buffer(self.world.creatures.head_dirs, self.cuda_head_dirs)
-        cuda_utils.copy_to_buffer(self.world.creatures.colors, self.cuda_colors)
+        cuda_utils.copy_to_buffer(self.world.creatures.visual_colors, self.cuda_colors)
 
     def render(self):
         if not self.state.creatures_visible:

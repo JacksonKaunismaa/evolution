@@ -5,6 +5,7 @@ from evolution.core.config import Config
 from evolution.core.gworld import GWorld
 from evolution.cuda import cuda_utils
 from evolution.utils.subscribe import Subscriber
+from evolution.core.creatures.creature_utils import hsv_spiral
 
 
 class CreatureRays(Subscriber):
@@ -81,8 +82,9 @@ class CreatureRays(Subscriber):
             self.visible = False
             return
         self.visible = True
+        collision_colors = hsv_spiral(self.world.collisions[creature_id])
         cuda_utils.copy_to_buffer(self.world.creatures.rays[creature_id], self.cuda_rays)
-        cuda_utils.copy_to_buffer(self.world.collisions[creature_id], self.cuda_ray_colors)
+        cuda_utils.copy_to_buffer(collision_colors, self.cuda_ray_colors)
         cuda_utils.copy_to_buffer(self.world.creatures.head_dirs[creature_id], self.cuda_head_dir)
 
         self.ray_prog['position'] = self.world.creatures.positions[creature_id]

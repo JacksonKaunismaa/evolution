@@ -61,7 +61,8 @@ class CreatureStatusWindow(Window):
                 f"Num Children: {int(creat.n_children)}",
                 f"Size: {creat.size:.4f}",
                 f"Position: {creat.position[0]:.2f}, {creat.position[1]:.2f}",
-                f"Color: {int(creat.color[0])}, {int(creat.color[1])}, {int(creat.color[2])}",
+                f"Scalar Color: {creat.color:.4f}",
+                f"Color: {int(creat.visual_color[0])}, {int(creat.visual_color[1])}, {int(creat.visual_color[2])}",
                 f"Eat pct: {100.*float(creat.eat_pct):.4f}",
                 f"ID: {creat._selected_creature}"  # pylint: disable=protected-access
             ])

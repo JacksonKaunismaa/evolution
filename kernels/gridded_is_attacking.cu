@@ -27,9 +27,9 @@ void gridded_is_attacking(float* positions, float* sizes, float* colors, float* 
     /*
     Positions is [N, 2], where the 2 coordinates are the location.
     Sizes is [N, 1] where the coordinate is the radius.
-    Colors is [N, 3], 3 coordinates for RGB values.
+    Colors is [N], coordinate is scalar color value.
     Head_dirs is [N, 2], where the two coordinates are the direction of the head (unit vector).
-    
+
     cells is [S, S, M], where S is the # cells, and M is the maximum number of creatures in a given cell.
     cell_counts is [S, S], where the coordinate is the number of creatures in a given cell.
 
@@ -50,7 +50,8 @@ void gridded_is_attacking(float* positions, float* sizes, float* colors, float* 
     float center_y = positions[organism_idx + 1];
     float size = sizes[organism];
     // locally store the color of the organism
-    float color[3] = {colors[organism * 3 + 0], colors[organism * 3 + 1], colors[organism * 3 + 2]};
+    // float color[3] = {colors[organism * 3 + 0], colors[organism * 3 + 1], colors[organism * 3 + 2]};
+    float color = colors[organism];
 
     // get head coordinate of organism in real space
     float head_x = head_dirs[organism_idx + 0];
@@ -84,7 +85,7 @@ void gridded_is_attacking(float* positions, float* sizes, float* colors, float* 
     // this implementation allows multi attacks if the attack ray crosses a cell boundary
     while (!found_intersect){
         if (x < 0 || x >= num_cells || y < 0 || y >= num_cells) break;  // if outside the grid
-        
+
         int cell_idx = y * num_cells + x;
         int cell_count = min(cell_counts[cell_idx], CFG_max_per_cell-1);
         // check all creatures that share the cell of the head
@@ -101,16 +102,18 @@ void gridded_is_attacking(float* positions, float* sizes, float* colors, float* 
                     continue;
                 }
             }
-            
+
             // do_attack: {
-            float other_color[3] = {colors[other * 3 + 0], colors[other * 3 + 1], colors[other * 3 + 2]};
-            float color_diff = 0.0f;
-            float cdif = 0.0f;
-            for (int c = 0; c < 3; c++) {
-                cdif = fabs(color[c] - other_color[c]);
-                color_diff += min(cdif, 255.0f - cdif);
-            }
-            float color_diff_frac = color_diff / (255.0f*3.0f / 2.0f);
+            // float other_color[3] = {colors[other * 3 + 0], colors[other * 3 + 1], colors[other * 3 + 2]};
+            // float color_diff = 0.0f;
+            // float cdif = 0.0f;
+            // for (int c = 0; c < 3; c++) {
+            //     cdif = fabs(color[c] - other_color[c]);
+            //     color_diff += min(cdif, 255.0f - cdif);
+            // }
+            // float color_diff_frac = color_diff / (255.0f*3.0f / 2.0f);
+            float other_color = colors[other];
+            float color_diff_frac = CFG_attack_color_frac(fabs(color - other_color));
             //fallacious to use organism/other idx here for same reason as above
             atomicAdd(&results[organism_idx + 0], 1);  // damage is a function of size
             atomicAdd(&results[other_idx + 1], color_diff_frac * CFG_attack_dmg(size));

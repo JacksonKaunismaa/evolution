@@ -1,4 +1,3 @@
-from typing import Tuple
 import numpy as np
 import torch
 from torch import Tensor
@@ -33,8 +32,7 @@ def eat_amt(sizes: CreatureTrait, cfg: Config) -> Tensor:
     else:
         raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[1]}")
 
-def clamp(x: Tensor, bounds: Tuple[float, float]):
-    min_, max_ = bounds
+def clamp(x: Tensor, min_: float, max_: float):
     x[:] = torch.clamp(x, min=min_, max=max_)
 
 @cuda_profile
@@ -59,9 +57,10 @@ def vectorized_hsl_to_rgb(h,l):
 
 
 def hsv_spiral(t: Tensor) -> Tensor:
-    """Given a Tensor t of shape (N) with values between 0 and 255, return an RGB color.
-    This parametric curve goes through HSL space to cover a wide range of distinct colors."""
+    """Given a Tensor t of shape (N) with values between 1 and 255, return an RGB color.
+    This parametric curve goes through HSL space to cover a wide range of distinct colors.
+    0 must map to (0, 0, 0)"""
     h = t / 255
     # s = 1.0
-    l = 0.35 + 0.3*(1+torch.cos(t*0.2)) / 2
+    l = torch.where(t > 0, 0.5 + 0.15*(t*0.2).cos(), 0.0)
     return vectorized_hsl_to_rgb(h,l)

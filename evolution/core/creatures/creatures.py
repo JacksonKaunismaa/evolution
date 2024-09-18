@@ -170,14 +170,14 @@ class Creatures(CreatureArray):
 
 
     def collect_stimuli(self, collisions, food_grid):
-        """Collisions: [N, 3], food_grid: [N, 3, 3] -> [N, F] where F is the number of features
-        that get passed in to the creatures' brains."""
+        """Collisions: [N, R], food_grid: [W, W] (W = world size) -> [N, F],
+        where F is the number of features that get passed in to the creatures' brains."""
         # get the food in the creature's vicinity
         # we must add self.pad, because positions are stored in central_food_grid coordinates,
         # but we need to index into food_grid with food_grid coordinates (which includes padding)
         posn = self.positions.long() + self.pad
         food = self.extract_food_windows(posn, food_grid)  # [N, 9]
-        rays_results = collisions.view(self.population, -1)  # [N, 3*num_rays]
+        rays_results = collisions
 
         return torch.cat([rays_results,  # type: ignore
                           self.memories,
@@ -186,7 +186,7 @@ class Creatures(CreatureArray):
                           self.energies.unsqueeze(1),
                           self.head_dirs,
                           self.age_mults.unsqueeze(1),
-                          self.colors,
+                          self.colors.unsqueeze(1),
                           self.sizes.unsqueeze(1),
                         ],
                         dim=1)

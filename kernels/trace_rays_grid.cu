@@ -1,14 +1,13 @@
-__device__ inline void write_ray_intersection(float* results, int ray_idx, float* colors, int other_organism) {
-    for (int c = 0; c < 3; c++) {
-        // using ray_idx here is a bit fallacious, since technically the '3' in indexing (c.f. x,y,len)
-        // rays is different from the '3' in indexing results (c.f. colors)
-        results[ray_idx + c] = colors[other_organism * 3 + c];
-    }
-}
+// __device__ inline void write_ray_intersection(float* results, int ray_idx, float colors, int other_organism) {
+//     for (int c = 0; c < 3; c++) {
+//         // using ray_idx here is a bit fallacious, since technically the '3' in indexing (c.f. x,y,len)
+//         // rays is different from the '3' in indexing results (c.f. colors)
+//         results[ray_idx + c] = colors[other_organism * 3 + c];
+//     }
 
 
 extern "C" __global__
-void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors, 
+void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
                      int* cells, int* cell_counts, float* results,
                      int num_organisms, int num_cells
                     //  int* cells_hit, int* orgs_checked, int* cache_hits
@@ -18,23 +17,24 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     Sizes is [N, 1] where the coordinate is the radius.
     Rays is [N, R, 3], where N = organisms, R = rays per organism, and the first two coordinates are the direction (unit vector),
     and the last coordinate is the max length of the ray.
-    
+
     Cells is [S, S, M], where S is the # cells, and M is the maximum number of creatures in a given cell.
     cell_counts is [S, S], where the coordinate is the number of creatures in a given cell.
 
-    Results is [N, R, 3], where the 3 coordinates are the color of the creature that the ray intersects with (0 if nothing
+    Results is [N, R], where the coordinate is the color of the creature that the ray intersects with (0 if nothing
     */
     int organism = blockIdx.x;
     int ray = threadIdx.x;
 
-    // N ~ 10_000, R ~ 32 
+    // N ~ 10_000, R ~ 32
     // N*R * N intersections to check
 
 
     if (organism >= num_organisms || ray >= CFG_num_rays) {  // check that we are in bounds
         return;
     }
-    int ray_idx = (organism * CFG_num_rays + ray) * 3;
+    int result_idx = (organism * CFG_num_rays + ray);
+    int ray_idx = result_idx * 3;
     float ray_dir_x = rays[ray_idx + 0];  // extract ray information
     float ray_dir_y = rays[ray_idx + 1];
     float size = sizes[organism];
@@ -45,6 +45,7 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     float center_y = positions[organism_idx + 1];
 
     float t_best = ray_len+1.0f;  // initialize the best t value to the max length of the ray
+    float best_color = 0.0f;
 
     #if CFG_use_cache
         // set up cache for checking (so we don't double check objects)
@@ -79,7 +80,7 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
     while (!found_intersect) {
         // num objects in current cell of line
         if (x < 0 || x >= num_cells || y < 0 || y >= num_cells) break;  // if outside the grid
-        
+
         int cell_idx = y * num_cells + x;
         int cell_count = min(cell_counts[cell_idx], CFG_max_per_cell-1);
         for (int i = 0; i < cell_count; i++) {  // for each object in the cell
@@ -113,7 +114,7 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
 
             // if we are inside, we are done immediately
             if (sq_center_dist < sq_other_rad){
-                write_ray_intersection(results, ray_idx, colors, other_organism);
+                results[result_idx] = colors[other_organism];
                 return;
             }
 
@@ -134,7 +135,7 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
             found_intersect = true;
 
             if (t_intersect < t_best) {  // closer than previous object
-                write_ray_intersection(results, ray_idx, colors, other_organism);
+                best_color = colors[other_organism];
                 t_best = t_intersect;
             }
         }
@@ -151,4 +152,6 @@ void trace_rays_grid(float* rays, float* positions, float* sizes, float* colors,
         }
         // cells_hit[organism * CFG_num_rays + ray] += 1;
     }
+    if (found_intersect)
+        results[result_idx] = best_color;
 }

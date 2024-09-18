@@ -28,7 +28,7 @@ class Initializer:
             setattr(self, k, v)
 
     @classmethod
-    def mutable(cls, name: str, *args) -> 'Initializer':
+    def mutable(cls, name: str, *args: Optional[Tuple]) -> 'Initializer':
         """Create an Initializer object for a mutable trait. mut_idx, which is required for this
         type of initializer, will be set later, by the CreatureArray class, as this avoids needing
         to provide a manual index for each trait.
