@@ -5,7 +5,7 @@ from moderngl_window import BaseWindow
 from evolution.core.config import Config
 from evolution.core.gworld import GWorld
 from evolution.state.game_state import GameState
-from evolution.core.creatures.creature_trait import InitializerStyle
+from evolution.core.creatures.trait_initializer import InitializerStyle
 
 from .ui_element import CollapseableHeader, Window, Lines, UIElement
 

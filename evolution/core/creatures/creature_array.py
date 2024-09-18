@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Dict, List, Tuple, Union
+from typing import Dict, List, Union
 import numpy as np
 import torch
 from torch import Tensor
@@ -10,36 +10,9 @@ from evolution.core.config import Config
 from evolution.cuda.cuda_utils import cuda_profile
 from evolution.state.game_state import GameState
 
-from .creature_trait import CreatureTrait, Initializer, InitializerStyle
-
-
-def _normalize_rays(rays: 'CreatureTrait', cfg: Config):
-    rays[..., :2] /= torch.norm(rays[..., :2], dim=2, keepdim=True)
-    rays[..., 2] = torch.clamp(torch.abs(rays[..., 2]),
-                cfg.ray_dist_range[0],
-                cfg.ray_dist_range[1])
-
-def normalize_head_dirs(head_dirs: 'CreatureTrait'):
-    head_dirs /= torch.norm(head_dirs, dim=1, keepdim=True)
-
-def _eat_amt(sizes: CreatureTrait, cfg: Config) -> Tensor:
-    if cfg.eat_pct_scaling[0] == 'linear':
-        size_pct = (sizes - cfg.size_range[0]) / (cfg.size_range[1] - cfg.size_range[0])
-    elif cfg.eat_pct_scaling[0] == 'log':
-        size_pct = torch.log(sizes / cfg.size_range[0]) / np.log(cfg.size_range[1] / cfg.size_range[0])
-    else:
-        raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[0]}")
-
-    if cfg.eat_pct_scaling[1] == 'linear':  # pylint: disable=no-else-return
-        return cfg.eat_pct[0] + size_pct * (cfg.eat_pct[1] - cfg.eat_pct[0])
-    elif cfg.eat_pct_scaling[1] == 'log':
-        return cfg.eat_pct[0] * torch.exp(size_pct * np.log(cfg.eat_pct[1] / cfg.eat_pct[0]))
-    else:
-        raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[1]}")
-
-def clamp(x: Tensor, bounds: Tuple[float, float]):
-    min_, max_ = bounds
-    x[:] = torch.clamp(x, min=min_, max=max_)
+from .trait_initializer import Initializer, InitializerStyle, Normalizer
+from .creature_trait import CreatureTrait
+from . import creature_utils as utils
 
 
 class CreatureArray:
@@ -60,24 +33,26 @@ class CreatureArray:
         the root CreatureArray, that represents all the creatures in the world."""
         self.sizes: CreatureTrait = CreatureTrait(tuple(),
                                                   Initializer.mutable('uniform_', *self.cfg.init_size_range),
-                                                  partial(clamp, bounds=self.cfg.size_range),
+                                                  Normalizer(utils.clamp, self.cfg.size_range),
                                                   self.device)
+
         color_channels = 3
         self.colors: CreatureTrait = CreatureTrait((color_channels,),
-                                                   Initializer.mutable('uniform_', 1, 255),
-                                                   partial(clamp, bounds=(1,255)), self.device)
+                                                   Initializer.mutable('uniform_', 1,255),
+                                                   Normalizer(utils.clamp, (1,255)), self.device)
 
-        normalize_rays = partial(_normalize_rays, cfg=self.cfg)
         # the initializer here isn't fully correct, as it should be normal(0, 1) for the first 2 dimensions and
         # uniform on the last dimension, but I guess that's what you get for combining 2 traits that really should have been separate
         self.rays: CreatureTrait = CreatureTrait((self.cfg.num_rays, 3),
                                                  Initializer.mutable('normal_', 0, self.cfg.ray_dist_range[1]),
-                                                 normalize_rays, self.device)
+                                                 Normalizer(utils.normalize_rays, self.cfg),
+                                                 self.device)
 
 
         self.positions: CreatureTrait = CreatureTrait((2,),
                                                       Initializer.force_mutable('uniform_', *self.posn_bounds),
-                                                      partial(clamp, bounds=self.posn_bounds), self.device)
+                                                      Normalizer(utils.clamp, self.posn_bounds),
+                                                      self.device)
 
         self.energies: CreatureTrait = CreatureTrait(tuple(),
                                                      Initializer.other_dependent('sizes', self.cfg.init_energy),
@@ -90,7 +65,7 @@ class CreatureArray:
         self.healths: CreatureTrait = CreatureTrait(tuple(),
                                                     Initializer.other_dependent('sizes', self.cfg.init_health),
                                                     None, self.device)
-        eat_amt = partial(_eat_amt, cfg=self.cfg)
+        eat_amt = partial(utils.eat_amt, cfg=self.cfg)
         self.eat_pcts: CreatureTrait = CreatureTrait(tuple(),
                                                      Initializer.other_dependent('sizes', eat_amt),
                                                      None, self.device)
@@ -116,7 +91,7 @@ class CreatureArray:
 
         self.head_dirs: CreatureTrait = CreatureTrait((2,),
                                        Initializer.fillable('normal_', 0, 1),
-                                       normalize_head_dirs, self.device)
+                                       Normalizer(utils.normalize_head_dirs), self.device)
 
         # input: rays (num_rays*color_dims) + memory (mem_size) + num_food ((2*food_sight+1)**2) + health (1) + energy (1) +
         #         head_dir (2) + age_mult (1) + color (color_dims) + size (1)
@@ -203,11 +178,8 @@ class CreatureArray:
                 setattr(children, name, child_trait)
 
     @cuda_profile
-    def reproduce_extra(self, reproducers: Tensor, children: 'CreatureArray'):
+    def reproduce_extra(self, children: 'CreatureArray'):
         """Reproduce all traits that are not mutable."""
-        children.positions = \
-            self.positions.reproduce_mutable('positions', self.rng, reproducers,
-                                             self.cfg.reproduce_dist)
         for name, v in self.variables.items():
             if v.init.style == InitializerStyle.OTHER_DEPENDENT:
                 try:
@@ -231,7 +203,7 @@ class CreatureArray:
         children = CreatureArray(self.cfg, self.device)
         self.reproduce_most(reproducers, num_reproducers, children, mut)
         # we can pretend position is a mutable parameter since it is a random deviation from the parent
-        self.reproduce_extra(reproducers, children)
+        self.reproduce_extra(children)
         return children
 
     @property

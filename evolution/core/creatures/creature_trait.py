@@ -1,80 +1,13 @@
-from enum import Enum
-from typing import Callable, Tuple, TYPE_CHECKING
+from typing import Tuple, TYPE_CHECKING
 import torch
 from torch import Size, Tensor
 
 from evolution.core.config import Config
+from evolution.core.creatures.trait_initializer import Initializer, InitializerStyle, Normalizer
 from evolution.cuda.cuda_utils import cuda_profile
 
 if TYPE_CHECKING:
     from evolution.utils.batched_random import BatchedRandom
-
-
-class InitializerStyle(Enum):
-    """Enum for the different types of initializers that can be used for a CreatureTrait."""
-    OTHER_DEPENDENT = 'other_dependent'
-    FILLABLE = 'fillable'
-    MUTABLE = 'mutable'
-    FORCE_MUTABLE = 'force_mutable'
-
-
-class Initializer:
-    """Class for managing the different ways we initialize CreatureTraits."""
-    def __init__(self, **kwargs):
-        self.style: InitializerStyle
-        self.mut_idx: int = None
-        self.func: Callable
-        self.name: str
-        self.args: Tuple
-        for k,v in kwargs.items():
-            setattr(self, k, v)
-
-    @classmethod
-    def mutable(cls, name: str, *args) -> 'Initializer':
-        """Create an Initializer object for a mutable trait. mut_idx, which is required for this
-        type of initializer, will be set later, by the CreatureArray class, as this avoids needing
-        to provide a manual index for each trait.
-        Args:
-            name: Torch name of the intializer function when first seeding the world (non-reproductive).
-            args: Arguments to pass to the initializer function."""
-        return cls(style=InitializerStyle.MUTABLE, name=name, args=args)
-
-
-    @classmethod
-    def fillable(cls, name: str, *args) -> 'Initializer':
-        """Create an Initializer object for a fillable trait.
-        Args:
-            name: Torch name of the intializer function (e.g. ('zeros_', 'normal_')).
-            args: Arguments to pass to the initializer function"""
-        return cls(style=InitializerStyle.FILLABLE, name=name, args=args)
-
-    @classmethod
-    def other_dependent(cls, name: str, func: Callable) -> 'Initializer':
-        """Create an Initializer object for a trait that depends on another trait. (e.g. energy and health
-        are always initialized as functions of size).
-
-        Args:
-            name: Name of the trait that this trait depends on.
-            func: Function that takes the other trait as an argument and returns the initialized trait."""
-        return cls(style=InitializerStyle.OTHER_DEPENDENT, name=name, func=func)
-
-    @classmethod
-    def force_mutable(cls, name: str, *args) -> 'Initializer':
-        """Create an Initializer object for a trait that is treated as mutable even if it isn't (e.g. position).
-
-        Args:
-            name: Torch name of the intializer function when first seeding the world (non-reproductive).
-            args: Arguments to pass to the initializer function."""
-        return cls(style=InitializerStyle.FORCE_MUTABLE, name=name, args=args)
-
-    def __call__(self, arg) -> Tensor:
-        if self.style == InitializerStyle.OTHER_DEPENDENT:
-            return self.func(arg)
-
-        if self.style in [InitializerStyle.FILLABLE, InitializerStyle.FORCE_MUTABLE, InitializerStyle.MUTABLE]:
-            return getattr(arg, self.name)(*self.args)
-
-        raise ValueError(f"Invalid initializer style: {self.style}")
 
 
 class CreatureTrait:
@@ -89,7 +22,7 @@ class CreatureTrait:
     generation of child traits from parent traits, and the reindexing of traits when the
     population changes."""
     def __init__(self, shape: Tuple[int, ...], init: Initializer,
-                 normalize_func: Callable | None, device: torch.device):
+                 normalize_func: Normalizer | None, device: torch.device):
         self._shape = shape
         self.init = init
         self.normalize_func = normalize_func
@@ -176,7 +109,7 @@ class CreatureTrait:
             force_mutable: If True, treat the trait as mutable even if it isn't.
         """
         if isinstance(mut, Tensor):
-            mut = mut[:, self.init.mut_idx].view(-1, *([1]*(self.dim()-1)))
+            mut = mut[:, self.init.mut_idx].view(-1, *([1]*(self.data.dim()-1)))
         child = CreatureTrait(self._shape, self.init, self.normalize_func, self.device)
         perturb = rng.fetch_params(name) * mut
         child.data = self[reproducers] + perturb
@@ -198,6 +131,9 @@ class CreatureTrait:
 
         if self.init.style == InitializerStyle.MUTABLE:
             return self.reproduce_mutable(name, rng, reproducers, mut)
+
+        if self.init.style == InitializerStyle.FORCE_MUTABLE:
+            return self.reproduce_mutable(name, rng, reproducers, self.init.mut)
 
         return None
 
@@ -255,41 +191,12 @@ class CreatureTrait:
     def __repr__(self):
         return f"CreatureTrait(data={self.data})"
 
-    def long(self) -> Tensor:
-        return self.data.long()
-
-    def int(self) -> Tensor:
-        return self.data.int()
-
-    def max(self, *args, **kwargs) -> Tensor:
-        return self.data.max(*args, **kwargs)
-
-    def min(self, *args, **kwargs) -> Tensor:
-        return self.data.min(*args, **kwargs)
-
-    def argmax(self, *args, **kwargs) -> Tensor:
-        return self.data.argmax(*args, **kwargs)
-
-    def argmin(self, *args, **kwargs) -> Tensor:
-        return self.data.argmin(*args, **kwargs)
-
-    def unsqueeze(self, *args, **kwargs) -> Tensor:
-        return self.data.unsqueeze(*args, **kwargs)
-
-    def dim(self):
-        return self.data.dim()
-
-    def data_ptr(self):
-        return self.data.data_ptr()
-
-    def stride(self, *args, **kwargs):
-        return self.data.stride(*args, **kwargs)
-
-    def element_size(self):
-        return self.data.element_size()
-
-    def size(self, *args, **kwargs):
-        return self.data.size(*args, **kwargs)
+    def __getattr__(self, name):
+        """Delegate attribute access to the underlying Tensor. This is only called if the attribute
+        doesn't already exist in CreatureTrait.__dict__, so no need to check that here."""
+        if self.data is not None and hasattr(self.data, name):
+            return getattr(self.data, name)
+        raise AttributeError(f"'CreatureTrait' object has no attribute '{name}'")
 
     def __mul__(self, other) -> Tensor:
         return self.data * other

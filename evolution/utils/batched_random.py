@@ -3,7 +3,8 @@ from functools import reduce
 from typing import Dict
 import torch
 
-from evolution.core.creatures.creature_trait import CreatureTrait, InitializerStyle
+from evolution.core.creatures.trait_initializer import InitializerStyle
+from evolution.core.creatures.creature_trait import CreatureTrait
 from evolution.cuda.cuda_utils import cuda_profile
 
 class BatchedRandom:
