@@ -132,7 +132,14 @@ class Config:
     food_sight: int = 2 # how many squares (grid) away creatures can see food (1 => a 3x3 window centered on them)
     num_rays: int = 32 # number of rays creatures can see with
     ray_dist_range: Tuple[float, float] = (1.5, 5.0) # minimum distance of rays (as multiple of size)
-    rays_rotate: bool = False  # if False, when creatures rotate, their rays don't rotate
+    # if False, when creatures rotate, their rays don't rotate. Theoretically, the creatures can reason
+    # with either. If we assume they need the delta of rays to their head_dir (since they want to know
+    # where the other creature is relative to them), then this works either way. If True, then they store
+    # fixed deltas from head_dir to each ray in their weights. If False, then they can store the actual
+    # angles of each ray and then compute the delta instead. So probably True => easier to learn how to
+    # make sense of rays, False => harder to learn, but you save ~15% of the compute per step by not
+    # having to rotate the rays.
+    rays_rotate: bool = False
 
     # vitality
     init_size_range: Tuple[float, float] = (0.5, 4.5)  # (min, max) size of creatures at the beginning

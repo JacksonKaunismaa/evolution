@@ -36,7 +36,7 @@ class GWorld():
         self.outputs: Tensor = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions: Tensor = None   # the set of ray collisions for each creature
 
-    @cuda_profile
+    #@cuda_profile
     def compute_grid_setup(self):
         """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
         (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
@@ -61,7 +61,7 @@ class GWorld():
         return cells, cell_counts  # argument return order should match trace_rays_grid
 
 
-    @cuda_profile
+    #@cuda_profile
     def trace_rays_grid(self, cells, cell_counts):
         """ Returns [N, R] array of the results of ray collisions for all creatures.
         Where the coordinate is the scalar color of the ray intersection.
@@ -107,22 +107,22 @@ class GWorld():
         creatures and the energy of the positive areas of the food grid."""
         return np.log10(F.relu(self.food_grid).sum().item() + self.creatures.total_energy())
 
-    @cuda_profile
+    #@cuda_profile
     def collect_stimuli(self, collisions):
         """Returns [N, F] array for all creature stimuli."""
         return self.creatures.collect_stimuli(collisions, self.food_grid)
 
-    @cuda_profile
+    #@cuda_profile
     def think(self, stimuli):
         """Return [N, O] array of outputs of the creatures' neural networks.."""
         return self.creatures.forward(stimuli.unsqueeze(1))
 
-    @cuda_profile
+    #@cuda_profile
     def rotate_creatures(self, outputs):
         """Rotate all creatures based on their outputs."""
         self.creatures.rotate_creatures(outputs, self.state)
 
-    @cuda_profile
+    #@cuda_profile
     def only_move_creatures(self, outputs):
         """Rotate and move all creatures"""
         self.creatures.move_creatures(outputs, self.state)
@@ -132,7 +132,7 @@ class GWorld():
         self.rotate_creatures(outputs)
         self.only_move_creatures(outputs)
 
-    @cuda_profile
+    #@cuda_profile
     def compute_gridded_attacks(self, cells, cell_counts):
         """Compute which creatures are attacking which creatures are then based on that, update
         health and energy of creatures."""
@@ -153,12 +153,12 @@ class GWorld():
                      self.population, cells.shape[0])
         return tr_results
 
-    @cuda_profile
+    #@cuda_profile
     def do_attacks(self, tr_results):
         """Update health and energy of creatures based on the results of the attacks."""
         self.creatures.do_attacks(tr_results, self.state)
 
-    @cuda_profile
+    #@cuda_profile
     def creatures_eat_grow(self):
         """Grow food_grid and give creatures energy for being in a square"""
         self.creatures.eat_grow(self.food_grid, self.state)
@@ -225,7 +225,7 @@ class GWorld():
 
         return instance, checkpoint.get('others', {})
 
-    @cuda_profile
+    #@cuda_profile
     def fused_kill_reproduce(self):
         """Kill creatures that have no energy, and reproduce creatures that have enough energy."""
         self.creatures.fused_kill_reproduce(self.central_food_grid, self.state)

@@ -161,7 +161,7 @@ class Creatures(CreatureArray):
         if new_creatures or num_dead > 0:   # rearrange memory and update current data
             self.add_with_deaths(dead, alive, num_dead, new_creatures, state)
 
-    @cuda_profile
+    #@cuda_profile
     def _kill_dead(self, central_food_grid: Tensor) -> Tuple[Tensor, int]:
         """If any creature drops below 0 health or energy, kill it. Update the food grid by depositing an amount of food
         that depends on the creature's size at death."""
@@ -180,7 +180,7 @@ class Creatures(CreatureArray):
                                 accumulate=True)
         return self.dead, num_dead
 
-    @cuda_profile
+    #@cuda_profile
     def _get_reproducers(self, alive: Union[None, Tensor]) -> Tensor:
         # 1 + so that really small creatures don't get unfairly benefitted
         reproducers = (self.ages >= self.age_speeds*self.cfg.age_mature_mul) & (self.energies >= self.reproduce_energies)  # current mem boolean tensor
@@ -188,7 +188,7 @@ class Creatures(CreatureArray):
             reproducers &= alive
         return reproducers
 
-    @cuda_profile
+    #@cuda_profile
     def _reduce_reproducers(self, reproducers: Tensor, num_reproducers: int,
                             max_reproducers: int) -> Tuple[Tensor, int]:
         if num_reproducers > max_reproducers:  # this benefits older creatures because they
@@ -199,7 +199,7 @@ class Creatures(CreatureArray):
             reproducers[non_reproducers] = False
         return reproducers, num_reproducers
 
-    @cuda_profile
+    #@cuda_profile
     def _reproduce(self, alive: Tensor, num_dead: int) -> Union[None, 'CreatureArray']:
         """For sufficiently high energy creatures, create a new creature with mutated genes. Returns the set
         of new creatures in a CreatureArray object."""

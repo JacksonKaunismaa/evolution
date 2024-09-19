@@ -74,7 +74,7 @@ class CreatureArray:
             v.init.mut_idx = self.num_mutable
             self.num_mutable += 1
 
-    @cuda_profile
+    #@cuda_profile
     def reproduce_most(self, reproducers: Tensor, num_reproducers: int,
                        children: 'CreatureArray', mut: Tensor):
         """Reproduce all traits that are mutable, force mutable, or fillable."""
@@ -83,7 +83,7 @@ class CreatureArray:
             if child_trait is not None:
                 setattr(children, name, child_trait)
 
-    @cuda_profile
+    #@cuda_profile
     def reproduce_extra(self, children: 'CreatureArray'):
         """Reproduce all traits that are other dependent."""
         for name, v in self.variables.items():
@@ -95,7 +95,7 @@ class CreatureArray:
                                          ", but it does not been set by child.") from exc
 
 
-    @cuda_profile
+    #@cuda_profile
     def reproduce_traits(self, mut: CreatureTrait, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
         """Generate descendant traits from the set of indices in reproducers and store it in
         a new CreatureArray.

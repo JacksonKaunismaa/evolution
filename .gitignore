@@ -5,3 +5,4 @@
 **/*.ncu-rep
 **/.vscode
 imgui.ini
+log/

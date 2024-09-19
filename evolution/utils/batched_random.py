@@ -32,13 +32,13 @@ class BatchedRandom:
         self.buffer: torch.Tensor = None
         self.idx = 0
 
-    @cuda_profile
+    #@cuda_profile
     def generate(self, num):
         """Generate a new block of random numbers."""
         self.buffer = torch.randn(num, self.gen_size, device=self.device)
         self.idx = 0
 
-    @cuda_profile
+    #@cuda_profile
     def fetch_params(self, param):
         """Fetch the next block of random numbers for the given parameter name."""
         acc_size = self.param_elems[param]
