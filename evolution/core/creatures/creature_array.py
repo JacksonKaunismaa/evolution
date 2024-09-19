@@ -1,6 +1,4 @@
-from functools import partial
-from typing import Dict, List, Union
-import numpy as np
+from typing import Dict, Union
 import torch
 from torch import Tensor
 
@@ -10,9 +8,8 @@ from evolution.core.config import Config
 from evolution.cuda.cuda_utils import cuda_profile
 from evolution.state.game_state import GameState
 
-from .trait_initializer import Initializer, InitializerStyle, Normalizer
+from .trait_initializer import InitializerStyle
 from .creature_trait import CreatureTrait
-from . import creature_utils as utils
 
 
 class CreatureArray:
@@ -30,102 +27,9 @@ class CreatureArray:
 
     def generate_from_cfg(self):
         """Generate a new set of creatures from the configuration. This should only be called for
-        the root CreatureArray, that represents all the creatures in the world."""
-        self.sizes: CreatureTrait = CreatureTrait(tuple(),
-                                                  Initializer.mutable('uniform_', *self.cfg.init_size_range),
-                                                  Normalizer(utils.clamp, *self.cfg.size_range),
-                                                  self.device)
-        color_channels = 1
-        self.colors: CreatureTrait = CreatureTrait(tuple(),
-                                            Initializer.mutable('uniform_', 1, 255),
-                                            Normalizer(utils.clamp, 1, 255), self.device)
-
-        self.visual_colors: CreatureTrait = CreatureTrait((3,),
-                                                          Initializer.other_dependent('colors', utils.hsv_spiral),
-                                                          None, self.device)
-
-        # the initializer here isn't fully correct, as it should be normal(0, 1) for the first 2 dimensions and
-        # uniform on the last dimension, but I guess that's what you get for combining 2 traits that really should have been separate
-        self.rays: CreatureTrait = CreatureTrait((self.cfg.num_rays, 3),
-                                                 Initializer.mutable('normal_', 0, self.cfg.ray_dist_range[1]),
-                                                 Normalizer(utils.normalize_rays, self.cfg),
-                                                 self.device)
-
-
-        self.positions: CreatureTrait = CreatureTrait((2,),
-                                Initializer.force_mutable('uniform_', self.cfg.reproduce_dist, *self.posn_bounds),
-                                Normalizer(utils.clamp, *self.posn_bounds),
-                                self.device)
-
-        self.energies: CreatureTrait = CreatureTrait(tuple(),
-                                                     Initializer.other_dependent('sizes', self.cfg.init_energy),
-                                                     None, self.device)
-
-        self.reproduce_energies: CreatureTrait = CreatureTrait(tuple(),
-                                                    Initializer.other_dependent('sizes', self.cfg.reproduce_thresh),
-                                                    None, self.device)
-
-        self.healths: CreatureTrait = CreatureTrait(tuple(),
-                                                    Initializer.other_dependent('sizes', self.cfg.init_health),
-                                                    None, self.device)
-        eat_amt = partial(utils.eat_amt, cfg=self.cfg)
-        self.eat_pcts: CreatureTrait = CreatureTrait(tuple(),
-                                                     Initializer.other_dependent('sizes', eat_amt),
-                                                     None, self.device)
-
-        self.age_speeds: CreatureTrait = CreatureTrait(tuple(),
-                                                       Initializer.other_dependent('sizes', self.cfg.age_speed_size),
-                                                       None, self.device)
-        self.age_mults: CreatureTrait = CreatureTrait(tuple(),
-                                                      Initializer.fillable('fill_', 1.0),
-                                                      None, self.device)
-
-        self.memories: CreatureTrait = CreatureTrait((self.cfg.mem_size,),
-                                                     Initializer.fillable('zero_'),
-                                                     None, self.device)
-
-        self.ages: CreatureTrait = CreatureTrait(tuple(),
-                                                 Initializer.fillable('zero_'),
-                                                 None, self.device)
-
-        self.n_children: CreatureTrait = CreatureTrait(tuple(),
-                                                    Initializer.fillable('zero_'),
-                                                    None, self.device)
-
-        self.head_dirs: CreatureTrait = CreatureTrait((2,),
-                                       Initializer.fillable('normal_', 0, 1),
-                                       Normalizer(utils.normalize_head_dirs), self.device)
-
-        # input: rays (num_rays*color_dims) + memory (mem_size) + num_food ((2*food_sight+1)**2) + health (1) + energy (1) +
-        #         head_dir (2) + age_mult (1) + color (color_dims) + size (1)
-        # output: move (1) + rotate (1) + memory (mem_size)
-        layer_sizes = [
-            self.cfg.num_rays*color_channels + self.cfg.mem_size + self.num_food + 1 + 1 + 2 + 1 + color_channels + 1,
-            *self.cfg.brain_size,
-            self.cfg.mem_size + 2
-        ]
-        weights = []
-        biases = []
-        for prev_layer, next_layer in zip(layer_sizes[:-1], layer_sizes[1:]):
-            w_norm = 0.5 * np.sqrt(15. / prev_layer)
-            b_norm = 0.5 / np.sqrt(next_layer)
-            weights.append(CreatureTrait((prev_layer, next_layer),
-                                         Initializer.mutable('uniform_', -w_norm, w_norm),
-                                            None, self.device))
-            biases.append(CreatureTrait((1, next_layer),
-                                        Initializer.mutable('uniform_', -b_norm, b_norm),
-                                        None, self.device))
-
-        self.weights: List[CreatureTrait] = weights
-        self.biases: List[CreatureTrait] = biases
-
-        # this must be defined last, so that the right number of mutable parameters are set
-        self.mutation_rates: CreatureTrait = CreatureTrait((self.num_mutable+1,),
-                                                  Initializer.mutable('uniform_', *self.cfg.init_mut_rate_range),
-                                                  None, self.device)
-
-
-        # set position, size, color, etc. as samples from their respective init methods
+        the root Creatures object, that represents all the creatures in the world. It should also
+        be called after all relevant CreatureTraits have already been set (and therefore added to
+        self.variables)."""
         for k, v in self.variables.items():
             try:
                 v.init_base(self.cfg)
@@ -192,15 +96,15 @@ class CreatureArray:
 
 
     @cuda_profile
-    def reproduce_traits(self, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
+    def reproduce_traits(self, mut: CreatureTrait, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
         """Generate descendant traits from the set of indices in reproducers and store it in
         a new CreatureArray.
 
         Args:
+            mut: CreatureTrait corresponding to mutation rates for each mutable trait.
             reproducers: A boolean tensor of creatures (size of current memory) that are reproducing.
             num_reproducers: The number of creatures that are reproducing.
         """
-        mut = self.mutation_rates[reproducers]
         self.rng.generate(num_reproducers)
         children = CreatureArray(self.cfg, self.device)
         self.reproduce_most(reproducers, num_reproducers, children, mut)
@@ -210,7 +114,7 @@ class CreatureArray:
 
     @property
     def population(self) -> int:
-        return self.positions.population
+        return next(iter(self.variables.values())).population
 
     def write_new_data(self, idxs: Tensor, other: Union[None, 'CreatureArray']):
         """Write the data of the creatures in `other` at the indices `idxs` into the current block

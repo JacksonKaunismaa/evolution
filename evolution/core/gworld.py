@@ -27,7 +27,6 @@ class GWorld():
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
         self.kernels = cu_algorithms.CUDAKernelManager(cfg)
         self.creatures: Creatures = Creatures(cfg, self.kernels, self.device)
-        self.creatures.generate_from_cfg()
         self.n_maxxed = 0
 
         self.state = GameState(cfg, self)

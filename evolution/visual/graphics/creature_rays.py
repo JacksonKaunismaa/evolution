@@ -5,7 +5,7 @@ from evolution.core.config import Config
 from evolution.core.gworld import GWorld
 from evolution.cuda import cuda_utils
 from evolution.utils.subscribe import Subscriber
-from evolution.core.creatures.creature_utils import hsv_spiral
+from evolution.core.creatures.trait_initializer import hsv_spiral
 
 
 class CreatureRays(Subscriber):

@@ -31,7 +31,7 @@ def clear_mem():
     gc.collect()
     torch.cuda.empty_cache()
 
-def _cuda_get_error_enum(error):
+def _cudaGetErrorEnum(error):  # pylint: disable=invalid-name
     if isinstance(error, cuda.CUresult):
         err, name = cuda.cuGetErrorName(error)
         return name if err == cuda.CUresult.CUDA_SUCCESS else "<unknown>"
@@ -42,11 +42,11 @@ def _cuda_get_error_enum(error):
     return error
 
 
-def cuda_check_errors(result):
+def cudaCheckErrors(result):  # pylint: disable=invalid-name
     if result[0].value:
         # print(result[0], type(result[0]))
-        print(result[0], _cuda_get_error_enum(result[0]))
-        raise RuntimeError(f"CUDA error code={result[0].value}({str(_cuda_get_error_enum(result[0]))})")
+        print(result[0], _cudaGetErrorEnum(result[0]))
+        raise RuntimeError(f"CUDA error code={result[0].value}({str(_cudaGetErrorEnum(result[0]))})")
 
     if len(result) == 1:
         return None
@@ -56,7 +56,7 @@ def cuda_check_errors(result):
 
 
 def memcopy_1d(tensor, ptr):
-    cuda_check_errors(cuda.cuMemcpy(ptr, tensor.data_ptr(), tensor.size(0) * tensor.element_size()))
+    cudaCheckErrors(cuda.cuMemcpy(ptr, tensor.data_ptr(), tensor.size(0) * tensor.element_size()))
 
 # needs to handle both device and array
 def memcopy_2d(tensor, ptr, dst_type='device'):
@@ -76,7 +76,7 @@ def memcopy_2d(tensor, ptr, dst_type='device'):
     cpy.WidthInBytes = tensor.size(1) * tensor.element_size()
     cpy.Height = tensor.size(0)
 
-    cuda_check_errors(cuda.cuMemcpy2DUnaligned(cpy))
+    cudaCheckErrors(cuda.cuMemcpy2DUnaligned(cpy))
 
 def memcopy_3d(tensor, ptr):
     cpy = cuda.CUDA_MEMCPY3D()
@@ -94,15 +94,15 @@ def memcopy_3d(tensor, ptr):
     cpy.Height = tensor.size(1)
     cpy.Depth = tensor.size(0)
 
-    cuda_check_errors(cuda.cuMemcpy3D(cpy))
+    cudaCheckErrors(cuda.cuMemcpy3D(cpy))
 
 
 @contextmanager  # helper func to copy from pytorch into a texture
 def activate_texture(img):
     """Context manager simplifying use cuda images"""
-    cuda_check_errors(cuda.cuGraphicsMapResources(1, img, None))
-    yield cuda_check_errors(cuda.cuGraphicsSubResourceGetMappedArray(img, 0, 0))
-    cuda_check_errors(cuda.cuGraphicsUnmapResources(1, img, None))
+    cudaCheckErrors(cuda.cuGraphicsMapResources(1, img, None))
+    yield cudaCheckErrors(cuda.cuGraphicsSubResourceGetMappedArray(img, 0, 0))
+    cudaCheckErrors(cuda.cuGraphicsUnmapResources(1, img, None))
 
 
 def copy_to_texture(tensor, cuda_buffer):
@@ -111,9 +111,9 @@ def copy_to_texture(tensor, cuda_buffer):
 
 @contextmanager
 def activate_buffer(cuda_buffer):
-    cuda_check_errors(cuda.cuGraphicsMapResources(1, cuda_buffer, None))
-    yield cuda_check_errors(cuda.cuGraphicsResourceGetMappedPointer(cuda_buffer))
-    cuda_check_errors(cuda.cuGraphicsUnmapResources(1, cuda_buffer, None))
+    cudaCheckErrors(cuda.cuGraphicsMapResources(1, cuda_buffer, None))
+    yield cudaCheckErrors(cuda.cuGraphicsResourceGetMappedPointer(cuda_buffer))
+    cudaCheckErrors(cuda.cuGraphicsUnmapResources(1, cuda_buffer, None))
 
 
 def copy_to_buffer(tensor, cuda_buffer):
@@ -128,13 +128,13 @@ def copy_to_buffer(tensor, cuda_buffer):
             raise ValueError(f'Invalid tensor dim {tensor.dim()}')
 
 def register_cuda_buffer(buffer: mgl.Buffer):
-    return cuda_check_errors(cuda.cuGraphicsGLRegisterBuffer(
+    return cudaCheckErrors(cuda.cuGraphicsGLRegisterBuffer(
         int(buffer.glo),
         cuda.CUgraphicsRegisterFlags.CU_GRAPHICS_REGISTER_FLAGS_NONE
     ))
 
 def register_cuda_image(image: mgl.Texture):
-    return cuda_check_errors(cuda.cuGraphicsGLRegisterImage(
+    return cudaCheckErrors(cuda.cuGraphicsGLRegisterImage(
                     int(image.glo),
                     GL_TEXTURE_2D,
                     cuda.CUgraphicsRegisterFlags.CU_GRAPHICS_REGISTER_FLAGS_WRITE_DISCARD))

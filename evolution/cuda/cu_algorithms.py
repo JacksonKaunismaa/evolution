@@ -9,7 +9,7 @@ import numpy as np
 from evolution.core import config
 from evolution.core.creatures.creature_trait import CreatureTrait
 
-from .cuda_utils import cuda_check_errors
+from .cuda_utils import cudaCheckErrors
 
 DEBUG = False
 
@@ -17,12 +17,12 @@ class CUDAKernelManager:
     def __init__(self, cfg: config.Config):
         self.cfg = cfg
         self.encoding = 'ascii'
-        cuda_check_errors(cuda.cuInit(0))
-        self.cu_device = cuda_check_errors(cuda.cuDeviceGet(0))
+        cudaCheckErrors(cuda.cuInit(0))
+        self.cu_device = cudaCheckErrors(cuda.cuDeviceGet(0))
 
-        major = cuda_check_errors(cuda.cuDeviceGetAttribute(cuda.CUdevice_attribute.CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
+        major = cudaCheckErrors(cuda.cuDeviceGetAttribute(cuda.CUdevice_attribute.CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
                                                           self.cu_device))
-        minor = cuda_check_errors(cuda.cuDeviceGetAttribute(cuda.CUdevice_attribute.CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
+        minor = cudaCheckErrors(cuda.cuDeviceGetAttribute(cuda.CUdevice_attribute.CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MINOR,
                                                           self.cu_device))
         arch_arg = f'--gpu-architecture=compute_{major}{minor}'.encode(self.encoding)
         debug_args =  [b'--device-debug', b'--generate-line-info']
@@ -30,7 +30,7 @@ class CUDAKernelManager:
         if DEBUG:
             self.compile_args += debug_args
         self.kernels = self.compile_kernels()
-        self.stream = cuda_check_errors(cuda.cuStreamCreate(0))
+        self.stream = cudaCheckErrors(cuda.cuStreamCreate(0))
 
 
     def get_macros(self, code: str) -> List[bytes]:
@@ -76,21 +76,21 @@ class CUDAKernelManager:
             # print("macros are", macros)
             args = self.compile_args + macros
             # print(args)
-            nvrtc_prog = cuda_check_errors(nvrtc.nvrtcCreateProgram(code.encode(self.encoding),
+            nvrtc_prog = cudaCheckErrors(nvrtc.nvrtcCreateProgram(code.encode(self.encoding),
                                                                   cu_file.encode(self.encoding), 0, [], []))
             try:
-                cuda_check_errors(nvrtc.nvrtcCompileProgram(nvrtc_prog, len(args), args))
+                cudaCheckErrors(nvrtc.nvrtcCompileProgram(nvrtc_prog, len(args), args))
             except RuntimeError:
                 print("Failed to compile kernel: ", cu_file, "with args", args)
                 raise
-            ptx_size = cuda_check_errors(nvrtc.nvrtcGetPTXSize(nvrtc_prog))
+            ptx_size = cudaCheckErrors(nvrtc.nvrtcGetPTXSize(nvrtc_prog))
             ptx = b" " * ptx_size  # type: ignore
             # print(ptx_size)
-            cuda_check_errors(nvrtc.nvrtcGetPTX(nvrtc_prog, ptx))
+            cudaCheckErrors(nvrtc.nvrtcGetPTX(nvrtc_prog, ptx))
             ptx = np.char.array(ptx)
 
-            module = cuda_check_errors(cuda.cuModuleLoadData(ptx.ctypes.data))
-            cuda_func = cuda_check_errors(cuda.cuModuleGetFunction(module, name.encode(self.encoding)))
+            module = cudaCheckErrors(cuda.cuModuleLoadData(ptx.ctypes.data))
+            cuda_func = cudaCheckErrors(cuda.cuModuleGetFunction(module, name.encode(self.encoding)))
 
             kernels[name] = cuda_func
         return kernels
@@ -162,7 +162,7 @@ class CUDAKernelManager:
         # to a local variable here or it doesn't work
         kernel_args = self.KernelArgs(*args)
         cuda_args = kernel_args.get_args()
-        cuda_check_errors(cuda.cuLaunchKernel(func,
+        cudaCheckErrors(cuda.cuLaunchKernel(func,
                                             *blocks_per_grid,
                                             *threads_per_block,
                                             0,   # dynamic shared mem
@@ -172,4 +172,4 @@ class CUDAKernelManager:
 
 
     def shutdown(self):
-        cuda_check_errors(cuda.cuStreamDestroy(self.stream))
+        cudaCheckErrors(cuda.cuStreamDestroy(self.stream))

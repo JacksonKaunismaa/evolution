@@ -3,7 +3,8 @@ import torch
 from torch import Size, Tensor
 
 from evolution.core.config import Config
-from evolution.core.creatures.trait_initializer import Initializer, InitializerStyle, Normalizer
+from evolution.core.creatures.trait_initializer import Initializer, InitializerStyle
+from evolution.core.creatures.trait_normalizer import Normalizer
 from evolution.cuda.cuda_utils import cuda_profile
 
 if TYPE_CHECKING:
