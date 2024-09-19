@@ -77,7 +77,7 @@ class CreatureArray:
     @cuda_profile
     def reproduce_most(self, reproducers: Tensor, num_reproducers: int,
                        children: 'CreatureArray', mut: Tensor):
-        """Reproduce all traits that are mutable or fillable."""
+        """Reproduce all traits that are mutable, force mutable, or fillable."""
         for name, v in self.variables.items():   # handle mutable parameters
             child_trait = v.reproduce(name, self.rng, reproducers, num_reproducers, mut)
             if child_trait is not None:
@@ -85,7 +85,7 @@ class CreatureArray:
 
     @cuda_profile
     def reproduce_extra(self, children: 'CreatureArray'):
-        """Reproduce all traits that are not mutable."""
+        """Reproduce all traits that are other dependent."""
         for name, v in self.variables.items():
             if v.init.style == InitializerStyle.OTHER_DEPENDENT:
                 try:

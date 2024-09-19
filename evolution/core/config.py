@@ -132,6 +132,7 @@ class Config:
     food_sight: int = 2 # how many squares (grid) away creatures can see food (1 => a 3x3 window centered on them)
     num_rays: int = 32 # number of rays creatures can see with
     ray_dist_range: Tuple[float, float] = (1.5, 5.0) # minimum distance of rays (as multiple of size)
+    rays_rotate: bool = False  # if False, when creatures rotate, their rays don't rotate
 
     # vitality
     init_size_range: Tuple[float, float] = (0.5, 4.5)  # (min, max) size of creatures at the beginning

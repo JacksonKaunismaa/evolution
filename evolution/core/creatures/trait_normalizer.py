@@ -1,6 +1,5 @@
 from typing import TYPE_CHECKING, Callable, Optional, Tuple
 import torch
-from torch import Tensor
 
 from evolution.core.config import Config
 

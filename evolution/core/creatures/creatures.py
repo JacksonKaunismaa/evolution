@@ -291,7 +291,7 @@ class Creatures(CreatureArray):
         # we must add self.pad, because positions are stored in central_food_grid coordinates,
         # but we need to index into food_grid with food_grid coordinates (which includes padding)
         posn = self.positions.long() + self.pad
-        food = self.extract_food_windows(posn, food_grid)  # [N, 9]
+        food = self.extract_food_windows(posn, food_grid)  # [N, (2*sight+1)**2]
         rays_results = collisions
 
         return torch.cat([rays_results,  # type: ignore
@@ -340,7 +340,8 @@ class Creatures(CreatureArray):
                      rotation_matrix)
 
         # rotate the rays and head directions
-        self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
+        if self.cfg.rays_rotate:
+            self.rays[..., :2] = self.rays[..., :2] @ rotation_matrix  # [N, 32, 2] @ [N, 2, 2]
         self.head_dirs[:] = (self.head_dirs.unsqueeze(1) @ rotation_matrix).squeeze(1)  # [N, 1, 2] @ [N, 2, 2]
 
         state.selected_creature.extract_post_rotate_state(outputs[:,1], rotation_matrix)
