@@ -9,7 +9,7 @@ from evolution.core import config  # pylint: disable=wrong-import-position
 from evolution.core import benchmarking  # pylint: disable=wrong-import-position
 
 
-torch.random.manual_seed(0)
+# torch.random.manual_seed(0)
 cfg = config.Config(start_creatures=8192, max_creatures=262144, size=5000, food_cover_decr=0.2,
                     cell_size=16.0, cache_size=128, max_per_cell=20, use_cache=0,
                     food_sight=4, size_range=(0.1, 5.0),
@@ -19,7 +19,9 @@ cfg = config.Config(start_creatures=8192, max_creatures=262144, size=5000, food_
 
 # main(cfg)
 
-benchmarking.multi_benchmark(cfg, max_steps=16000, num_simulations=4)
+torch.random.manual_seed(0)
+benchmarking.torch_profile(cfg, init_steps=8000, steps=300)
+# benchmarking.multi_benchmark(cfg, max_steps=16000, num_simulations=4)
 
 # benchmarking.hyperparameter_search(cfg, {'cell_size': [15.0, 16.0, 17.0],
 #                                                   'max_per_cell': [20, 40, 60, 80, 90, 100]},

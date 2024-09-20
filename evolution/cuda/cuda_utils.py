@@ -117,7 +117,7 @@ def activate_buffer(cuda_buffer):
 
 
 def copy_to_buffer(tensor, cuda_buffer):
-    with activate_buffer(cuda_buffer) as (ptr,size):  # pylint: disable=unused-variable
+    with activate_buffer(cuda_buffer) as (ptr,size):  # type: ignore pylint: disable=unused-variable
         if tensor.dim() == 1:
             memcopy_1d(tensor, ptr)
         elif tensor.dim() == 2:

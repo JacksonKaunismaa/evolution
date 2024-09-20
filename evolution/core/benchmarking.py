@@ -3,6 +3,8 @@ from typing import Dict, List
 import itertools
 import os.path as osp
 import pickle
+import torch
+from torch.profiler import profile, record_function, ProfilerActivity, schedule
 from tqdm import trange
 import numpy as np
 
@@ -103,3 +105,23 @@ def hyperparameter_search(cfg: Config, hyperparameters: Dict[str, List], max_ste
             with open(path, 'wb') as f:
                 pickle.dump(results, f)
     return results
+
+
+def torch_profile(cfg: Config, init_steps=8000, steps=300, log_dir='./log'):
+    world = GWorld(cfg)
+    for _ in trange(init_steps):
+        world.step()
+
+    my_schedule = schedule(skip_first=2, wait=3, warmup=1, active=20, repeat=0)
+
+    with profile(activities=[
+            ProfilerActivity.CPU, ProfilerActivity.CUDA],
+                record_shapes=True, schedule=my_schedule,
+                on_trace_ready=torch.profiler.tensorboard_trace_handler(log_dir),
+                with_stack=True,
+                experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True)  # pylint: disable=protected-access
+                ) as prof:
+        with record_function("evolution_test"):
+            for _ in trange(steps):
+                prof.step()
+                world.step()

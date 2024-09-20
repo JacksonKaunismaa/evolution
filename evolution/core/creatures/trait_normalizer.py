@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable
 import torch
 
 from evolution.core.config import Config
@@ -17,11 +17,11 @@ def normalize_head_dirs(head_dirs: 'CreatureTrait'):
     head_dirs /= torch.norm(head_dirs, dim=1, keepdim=True)
 
 def clamp(x: 'CreatureTrait', min_: float, max_: float):
-    x[:] = torch.clamp(x, min=min_, max=max_)
+    x[:] = torch.clamp(x, min=min_, max=max_)  # type: ignore
 
 
 class Normalizer:
-    def __init__(self, func: Callable, *args: Optional[Tuple], **kwargs: Optional[dict]):
+    def __init__(self, func: Callable, *args: Any, **kwargs: Any):
         self.func = func
         self.args = args
         self.kwargs = kwargs

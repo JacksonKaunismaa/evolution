@@ -96,12 +96,12 @@ class CreatureArray:
 
 
     @cuda_profile
-    def reproduce_traits(self, mut: CreatureTrait, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
+    def reproduce_traits(self, mut: Tensor, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
         """Generate descendant traits from the set of indices in reproducers and store it in
         a new CreatureArray.
 
         Args:
-            mut: CreatureTrait corresponding to mutation rates for each mutable trait.
+            mut: mutation rates for each mutable trait.
             reproducers: An index tensor (into current memory) of creatures that are reproducing.
             num_reproducers: The number of creatures that are reproducing.
         """

@@ -162,7 +162,7 @@ class Creatures(CreatureArray):
             self.add_with_deaths(dead_idxs, alive, num_dead, new_creatures, state)
 
     @cuda_profile
-    def _kill_dead(self, central_food_grid: Tensor) -> Tuple[Tensor, int]:
+    def _kill_dead(self, central_food_grid: Tensor) -> Tuple[Tensor, int, Tensor]:
         """If any creature drops below 0 health or energy, kill it. Update the food grid by depositing an amount of food
         that depends on the creature's size at death.
 

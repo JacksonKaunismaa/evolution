@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
 from enum import Enum
 import numpy as np
 import torch
@@ -44,7 +44,7 @@ def vectorized_hsl_to_rgb(h: Tensor, l: Tensor) -> Tensor:
     r = 255 * hue2rgb( var_1, var_2, h + ( 1.0 / 3.0 ) )
     g = 255 * hue2rgb( var_1, var_2, h )
     b = 255 * hue2rgb( var_1, var_2, h - ( 1.0 / 3.0 ) )
-    return torch.stack((r, g, b), axis=-1)
+    return torch.stack((r, g, b), dim=-1)
 
 
 def hsv_spiral(scalar_color: Tensor) -> Tensor:
@@ -96,7 +96,7 @@ class Initializer:
             setattr(self, k, v)
 
     @classmethod
-    def mutable(cls, name: str, *args: Optional[Tuple]) -> 'Initializer':
+    def mutable(cls, name: str, *args: Any) -> 'Initializer':
         """Create an Initializer object for a mutable trait. mut_idx, which is required for this
         type of initializer, will be set later, by the CreatureArray class, as this avoids needing
         to provide a manual index for each trait.
@@ -107,7 +107,7 @@ class Initializer:
 
 
     @classmethod
-    def fillable(cls, name: str, *args: Optional[Tuple]) -> 'Initializer':
+    def fillable(cls, name: str, *args: Any) -> 'Initializer':
         """Create an Initializer object for a fillable trait.
         Args:
             name: Torch name of the intializer function (e.g. ('zeros_', 'normal_')).
@@ -115,7 +115,7 @@ class Initializer:
         return cls(style=InitializerStyle.FILLABLE, name=name, args=args)
 
     @classmethod
-    def other_dependent(cls, name: str, func: Callable, *args: Optional[Tuple]) -> 'Initializer':
+    def other_dependent(cls, name: str, func: Callable, *args: Any) -> 'Initializer':
         """Create an Initializer object for a trait that depends on another trait. (e.g. energy and health
         are always initialized as functions of size).
 
@@ -127,7 +127,7 @@ class Initializer:
         return cls(style=InitializerStyle.OTHER_DEPENDENT, name=name, func=func, args=args)
 
     @classmethod
-    def force_mutable(cls, name: str, mut: float, *args) -> 'Initializer':
+    def force_mutable(cls, name: str, mut: float, *args: Any) -> 'Initializer':
         """Create an Initializer object for a trait that is treated as mutable even if it isn't (e.g. position).
 
         Args:
