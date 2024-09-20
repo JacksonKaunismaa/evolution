@@ -74,7 +74,7 @@ class CreatureArray:
             v.init.mut_idx = self.num_mutable
             self.num_mutable += 1
 
-    #@cuda_profile
+    @cuda_profile
     def reproduce_most(self, reproducers: Tensor, num_reproducers: int,
                        children: 'CreatureArray', mut: Tensor):
         """Reproduce all traits that are mutable, force mutable, or fillable."""
@@ -83,7 +83,7 @@ class CreatureArray:
             if child_trait is not None:
                 setattr(children, name, child_trait)
 
-    #@cuda_profile
+    @cuda_profile
     def reproduce_extra(self, children: 'CreatureArray'):
         """Reproduce all traits that are other dependent."""
         for name, v in self.variables.items():
@@ -95,14 +95,14 @@ class CreatureArray:
                                          ", but it does not been set by child.") from exc
 
 
-    #@cuda_profile
+    @cuda_profile
     def reproduce_traits(self, mut: CreatureTrait, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
         """Generate descendant traits from the set of indices in reproducers and store it in
         a new CreatureArray.
 
         Args:
             mut: CreatureTrait corresponding to mutation rates for each mutable trait.
-            reproducers: A boolean tensor of creatures (size of current memory) that are reproducing.
+            reproducers: An index tensor (into current memory) of creatures that are reproducing.
             num_reproducers: The number of creatures that are reproducing.
         """
         self.rng.generate(num_reproducers)
@@ -152,7 +152,7 @@ class CreatureArray:
         for v in self.variables.values():
             v.rearrange_old_data(outer_idxs, inner_idxs)
 
-    def add_with_deaths(self, dead: Tensor, alive: Tensor,
+    def add_with_deaths(self, dead_idxs: Tensor, alive: Tensor,
                         num_dead: int, other: Union[None, 'CreatureArray'],
                         state: GameState) -> None:
         """Once we have determined which creatures are reproducing and which are dying, we need
@@ -164,7 +164,7 @@ class CreatureArray:
         move around in an arbitrary manner now.
 
         Args:
-            dead: A boolean tensor (size of current memory) of creatures that are dead.
+            dead_idxs: The indices (into current memory) of the dead creatures.
             alive: A boolean tensor (size of current memory) of creatures that are alive.
             num_dead: The number of creatures that are dead.
             other: The CreatureArray that contains the new creatures (if any).
@@ -176,17 +176,16 @@ class CreatureArray:
         sl = slice(self.start_idx, self.start_idx + self.population)  # current block
         self.alive[sl] = alive.float()  # update which creatures are alive
         if state.selected_creature:  # if selected_creature is dead, then we can set it to None
-            if dead[state.selected_creature]:
-                # print("select is dead")
+            if not alive[state.selected_creature]:
                 state.selected_creature = None
         num_reproducers = other.population if other is not None else 0  # how many new creatures we are adding
         n_after = self.population - num_dead + num_reproducers  # how many creatures are alive after this step
 
         # select and apply block repair strategy
         if n_after == self.cfg.max_creatures:
-            selected_creature_update = self.add_with_deaths_max_array(dead, other)
+            selected_creature_update = self.add_with_deaths_max_array(dead_idxs, other, sl)
         elif num_reproducers >= num_dead:
-            selected_creature_update = self.add_with_deaths_fill_gaps(dead, other, num_dead, num_reproducers, sl, state)
+            selected_creature_update = self.add_with_deaths_fill_gaps(dead_idxs, other, num_dead, num_reproducers, sl, state)
         else:
             selected_creature_update = self.add_with_deaths_move_block(other, n_after, num_reproducers, sl, state)
 
@@ -200,28 +199,30 @@ class CreatureArray:
         if state.selected_creature and selected_creature_update is not None:
             state.selected_creature = selected_creature_update
 
-    def add_with_deaths_max_array(self, dead: Tensor, other: Union[None, 'CreatureArray']): # pylint: disable=useless-return
+    def add_with_deaths_max_array(self, dead_idxs: Tensor, other: Union[None, 'CreatureArray'],  # pylint: disable=useless-return
+                                  sl: slice):
         """If the number of creatures after death and reproduction will fill the entire buffer,
         we can simply put new creatures in the dead creatures spots, and set start_idx to 0.
 
         Args:
-            dead: A boolean tensor (size of current memory) of creatures that are dead.
+            dead_idxs: The indices (into current memory) of the dead creatures.
             other: The CreatureArray that contains the new creatures (if any).
+            sl: The slice corresponding to the current block of creatures.
         Returns:
             None, since the selected creature doesn't get updated with this strategy
         """
         self.algos['max'] += 1
-        self.start_idx = 0  # case where we just have to fill in the gaps
-        if dead.shape[0] == self.cfg.max_creatures:
-                # if prev epoch was also maxxed, then we can just use dead
-            missing = dead.nonzero().squeeze(1)
-        else:
-                # otherwise, we need to look at the full indices of self.alive
-            missing = (1-self.alive).nonzero().squeeze(1)
+          # if we were already at max capacity, then we can just use dead
+        if self.population == self.cfg.max_creatures:
+            missing = dead_idxs
+        else: # otherwise, we need to fill in the gaps with new creatures
+            missing = torch.cat([dead_idxs + self.start_idx,
+                                 torch.arange(sl.stop, self.cfg.max_creatures, device=self.device, dtype=torch.int32)])
+        self.start_idx = 0
         self.write_new_data(missing, other)
         return None
 
-    def add_with_deaths_fill_gaps(self, dead: Tensor, other: Union[None, 'CreatureArray'],  num_dead: int,
+    def add_with_deaths_fill_gaps(self, dead_idxs: Tensor, other: Union[None, 'CreatureArray'],  num_dead: int,
                                   num_reproducers: int, sl: slice, state: GameState) -> int | None:
         """If we add more creatures than we kill in this step, then we will be able to fill in all the
         gaps created in the block created by the dead creatures. Then, we put the remaining creatures on
@@ -229,7 +230,7 @@ class CreatureArray:
         left as we can, so that things stay relatively consistent throughout the generations.
 
         Args:
-            dead: A boolean tensor (size of current memory) of creatures that are dead.
+            dead_idxs: The indices (into current memory) of the dead creatures.
             other: The CreatureArray that contains the new creatures (if any).
             num_dead: The number of creatures that are dead.
             num_reproducers: The number of creatures that are reproducing.
@@ -240,7 +241,7 @@ class CreatureArray:
             The updated index of the selected creature (if any). This must be deferred until after the reindex step.
         """
         self.algos['fill_gaps'] += 1
-        missing = dead.nonzero().squeeze(1) + self.start_idx   # missing spots in current block
+        missing = dead_idxs + self.start_idx   # missing spots in current block
         num_added = num_reproducers - num_dead   # how many we need to add to the sides
         before_avail = self.start_idx   # how much we can add to the left gap
 

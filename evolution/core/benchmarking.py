@@ -47,7 +47,7 @@ def _benchmark(cfg=None, max_steps=512):
 
 def multi_benchmark(cfg, max_steps=2500, num_simulations=20, skip_first=False):
     """Run the simulation with `cfg` `num_simulations` times for `max_steps steps` each and then
-    compute mean and standard deviation of benchmark times for each `#@cuda_profile`'d function."""
+    compute mean and standard deviation of benchmark times for each `@cuda_profile`'d function."""
     total_times = defaultdict(list)
     for i in range(num_simulations):
         times, n_times = _benchmark(cfg, max_steps=max_steps)
