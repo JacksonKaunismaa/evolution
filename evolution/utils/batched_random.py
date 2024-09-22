@@ -5,7 +5,7 @@ import torch
 
 from evolution.core.creatures.trait_initializer import InitializerStyle
 from evolution.core.creatures.creature_trait import CreatureTrait
-from evolution.cuda.cuda_utils import cuda_profile
+from evolution.core.benchmarking import Profile
 
 class BatchedRandom:
     """Class to manage batched random generation of parameters for creatures.
@@ -32,13 +32,13 @@ class BatchedRandom:
         self.buffer: torch.Tensor = None
         self.idx = 0
 
-    @cuda_profile
+    @Profile.cuda_profile
     def generate(self, num):
         """Generate a new block of random numbers."""
         self.buffer = torch.randn(num, self.gen_size, device=self.device)
         self.idx = 0
 
-    @cuda_profile
+    @Profile.cuda_profile
     def fetch_params(self, param):
         """Fetch the next block of random numbers for the given parameter name."""
         acc_size = self.param_elems[param]

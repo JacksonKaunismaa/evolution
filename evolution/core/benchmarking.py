@@ -1,24 +1,85 @@
 from collections import defaultdict
+from enum import Enum
+from functools import wraps
 from typing import Dict, List
 import itertools
 import os.path as osp
+import os
 import pickle
 import torch
-from torch.profiler import profile, record_function, ProfilerActivity, schedule
+from torch.profiler import profile, ProfilerActivity, schedule
 from tqdm import trange
 import numpy as np
 
 from evolution.core.config import Config, simple_cfg
-from evolution.core.gworld import GWorld
 from evolution.cuda import cuda_utils
 
-def _benchmark(cfg=None, max_steps=512):
+
+class BenchmarkMethods(Enum):
+    """
+    Enum for the different benchmark methods
+    """
+    CUDA_EVENTS = 'cuda_events'
+    NONE = 'none'
+    NSYS = 'nsys'
+
+
+class Profile:
+    """Static class for managing how/whether the application is being profiled."""
+    BENCHMARK = BenchmarkMethods.NONE  # method of benchmarking to use
+    times: Dict[str, float] = defaultdict(float)
+    n_times: Dict[str, float] = defaultdict(int)
+
+    @staticmethod
+    def reset():
+        Profile.times.clear()
+        Profile.n_times.clear()
+
+    @staticmethod
+    def cuda_profile(func):
+        start = torch.cuda.Event(enable_timing=True)
+        end = torch.cuda.Event(enable_timing=True)
+        @wraps(func)
+        def wrapper(*args, nsys_extra=None, **kwargs):
+            match (Profile.BENCHMARK):
+                case BenchmarkMethods.NONE:
+                    return func(*args, **kwargs)
+
+                case BenchmarkMethods.NSYS:
+                    # nsys_extra: optional argument to allow annotating nsys timeline even further
+                    # is ignored if a benchmark method other than NSYS is used
+                    name = func.__name__
+                    if nsys_extra is not None:
+                        name = f"{func.__name__}_{nsys_extra}"
+
+                    torch.cuda.nvtx.range_push(name)
+                    retval = func(*args, **kwargs)
+                    torch.cuda.nvtx.range_pop()
+                    return retval
+
+                case BenchmarkMethods.CUDA_EVENTS:
+                    start.record()  # type: ignore
+                    res = func(*args, **kwargs)
+                    end.record()   # type: ignore
+                    torch.cuda.synchronize()
+                    Profile.times[func.__name__] += start.elapsed_time(end)
+                    Profile.n_times[func.__name__] += 1
+                    return res
+
+        return wrapper
+
+
+
+def _benchmark(cfg=None, init_steps=8000, steps=500, method=BenchmarkMethods.CUDA_EVENTS):
+    # need to define the import here to avoid circular imports
+    from evolution.core.gworld import GWorld  # pylint: disable=import-outside-toplevel
+
     # import cProfile
     # from pstats import SortKey
     # import io, pstats
-    cuda_utils.BENCHMARK = True
-    cuda_utils.times.clear()
-    cuda_utils.n_times.clear()
+    Profile.BENCHMARK = BenchmarkMethods.NONE
+    Profile.times.clear()
+    Profile.n_times.clear()
 
     # torch.manual_seed(1)
     if cfg is None:
@@ -26,15 +87,24 @@ def _benchmark(cfg=None, max_steps=512):
     game = GWorld(cfg)
 
     # pr = cProfile.Profile()
-    # pr.enable()
-    for _ in trange(max_steps):
-        if not game.step():   # we did mass extinction before finishing
-            break
+    for _ in trange(init_steps):
+        game.step()
 
-    cuda_utils.times['n_maxxed'] = game.n_maxxed / game.state.time
-    cuda_utils.times['algo_max'] = game.creatures.algos['max']
-    cuda_utils.times['algo_fill'] = game.creatures.algos['fill_gaps']
-    cuda_utils.times['algo_move'] = game.creatures.algos['move_block']
+    # pr.enable()
+    Profile.BENCHMARK = method
+    if method == BenchmarkMethods.NSYS:
+        torch.cuda.cudart().cudaProfilerStart() # type: ignore
+
+    for _ in trange(steps):
+        game.step()
+
+    if method == BenchmarkMethods.NSYS:
+        torch.cuda.cudart().cudaProfilerStop()  # type: ignore
+
+    Profile.times['n_maxxed'] = game.n_maxxed / steps
+    Profile.times['algo_max'] = game.creatures.algos['max']
+    Profile.times['algo_fill'] = game.creatures.algos['fill_gaps']
+    Profile.times['algo_move'] = game.creatures.algos['move_block']
 
     del game
     cuda_utils.clear_mem()
@@ -45,14 +115,18 @@ def _benchmark(cfg=None, max_steps=512):
     # ps = pstats.Stats(pr, stream=s).sort_stats(sortby)
     # ps.print_stats()
     # print(s.getvalue())
-    return cuda_utils.times, cuda_utils.n_times
+    return Profile.times, Profile.n_times
 
-def multi_benchmark(cfg, max_steps=2500, num_simulations=20, skip_first=False):
+def multi_benchmark(cfg, init_steps=8000, steps=500, num_simulations=20, skip_first=False, method=BenchmarkMethods.CUDA_EVENTS):
     """Run the simulation with `cfg` `num_simulations` times for `max_steps steps` each and then
-    compute mean and standard deviation of benchmark times for each `@cuda_profile`'d function."""
+    compute mean and standard deviation of benchmark times for each `@Profile.cuda_profile`'d function."""
+
+    if method == BenchmarkMethods.NSYS and num_simulations > 1:
+        raise ValueError("Cannot run multiple simulations with NSYS method")
+
     total_times = defaultdict(list)
     for i in range(num_simulations):
-        times, n_times = _benchmark(cfg, max_steps=max_steps)
+        times, n_times = _benchmark(cfg, init_steps=init_steps, steps=steps, method=method)
         if i == 0 and skip_first:  # skip first iteration for compilation weirdness
             continue
         for k, v in times.items():
@@ -95,7 +169,7 @@ def hyperparameter_search(cfg: Config, hyperparameters: Dict[str, List], max_ste
         cfg.update_in_place(dict(zip(hyp_keys, choice)))
         print(f"Testing {dict(zip(hyp_keys, choice))}")
         try:
-            results[choice] = multi_benchmark(cfg, max_steps=max_steps,
+            results[choice] = multi_benchmark(cfg, init_steps=max_steps//2, steps=max_steps//2,
                                               num_simulations=num_simulations)
         except Exception as e:
             if skip_errors:
@@ -107,12 +181,15 @@ def hyperparameter_search(cfg: Config, hyperparameters: Dict[str, List], max_ste
     return results
 
 
-def torch_profile(cfg: Config, init_steps=8000, steps=300, log_dir='./log'):
-    world = GWorld(cfg)
-    for _ in trange(init_steps):
-        world.step()
+def torch_profile(cfg: Config, init_steps=8000, steps=500, log_dir='./log'):
+    """Generate a torch profiler trace for the simulation with `cfg`."""
+    # need to define the import here to avoid circular imports
+    from evolution.core.gworld import GWorld # pylint: disable=import-outside-toplevel
 
-    my_schedule = schedule(skip_first=2, wait=3, warmup=1, active=20, repeat=0)
+    os.makedirs(log_dir, exist_ok=True)
+    world = GWorld(cfg)
+
+    my_schedule = schedule(skip_first=init_steps, wait=1, warmup=1, active=23, repeat=0)
 
     with profile(activities=[
             ProfilerActivity.CPU, ProfilerActivity.CUDA],
@@ -121,7 +198,6 @@ def torch_profile(cfg: Config, init_steps=8000, steps=300, log_dir='./log'):
                 with_stack=True,
                 experimental_config=torch._C._profiler._ExperimentalConfig(verbose=True)  # pylint: disable=protected-access
                 ) as prof:
-        with record_function("evolution_test"):
-            for _ in trange(steps):
-                prof.step()
-                world.step()
+        for _ in range(init_steps + steps):
+            prof.step()
+            world.step()

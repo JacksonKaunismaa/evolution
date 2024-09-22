@@ -5,7 +5,7 @@ from torch import Size, Tensor
 from evolution.core.config import Config
 from evolution.core.creatures.trait_initializer import Initializer, InitializerStyle
 from evolution.core.creatures.trait_normalizer import Normalizer
-from evolution.cuda.cuda_utils import cuda_profile
+from evolution.core.benchmarking import Profile
 
 if TYPE_CHECKING:
     from evolution.utils.batched_random import BatchedRandom
@@ -77,6 +77,7 @@ class CreatureTrait:
         self._data[:data.shape[0]] = data  # copy the data in to the appropriate spot
         self.data = self._data[:data.shape[0]] # set the view to the underlying data
 
+    @Profile.cuda_profile
     def reproduce_from_other(self, other: 'CreatureTrait'):
         """Deal with initialization that depends on another CreatureTrait. This is used for e.g.
         energy and health, which are initialized as a function of the size."""
@@ -84,6 +85,7 @@ class CreatureTrait:
         child.data = self.init(other.data)
         return child
 
+    @Profile.cuda_profile
     def reproduce_fillable(self, name: str, rng: 'BatchedRandom', num_reproducers: int):
         """Generate child traits from the current CreatureTrait by either sampling from random normal, or
         using some default Pytorch initialization function. The child traits are then normalized."""
@@ -95,7 +97,7 @@ class CreatureTrait:
             child.data = self.init(torch.empty(num_reproducers, *self._shape, device=self.device))
         return child
 
-    @cuda_profile
+    @Profile.cuda_profile
     def reproduce_mutable(self, name: str, rng: 'BatchedRandom', reproducers: Tensor, mut: Tensor | float):
         """Generate child traits from the current CreatureTrait by adding random noise to the
         parent's traits, and then normalizing. The noise is scaled by the mut Tensor, which is
@@ -117,6 +119,7 @@ class CreatureTrait:
         child.normalize()
         return child
 
+    @Profile.cuda_profile
     def reproduce(self, name: str, rng: 'BatchedRandom', reproducers: Tensor,  num_reproducers: int, mut: Tensor):
         """Select the appropriate reproduction method based on the reproduce_type attribute to
         generate the child traits.
@@ -138,12 +141,13 @@ class CreatureTrait:
 
         return None
 
-    @cuda_profile
+    @Profile.cuda_profile
     def normalize(self):  # technically we should add support for list-type CreatureTraits, but we don't use that
         """Apply normalization function to the trait."""
         if self.normalize_func is not None:
             self.normalize_func(self)
 
+    @Profile.cuda_profile
     def write_new(self, idxs: Tensor, other: 'CreatureTrait'):
         """Write data from child CreatureTrait (other) to the parent CreatureTrait (self). We write
         to the underlying memory here, and then update the current memory later when we call self.reindex.
@@ -158,6 +162,7 @@ class CreatureTrait:
             print(self._data.shape, idxs.shape, other.data.shape)
             raise
 
+    @Profile.cuda_profile
     def rearrange_old_data(self, outer_idxs: Tensor, inner_idxs: Tensor):
         """Move creatures that are outside the best window to the inside of the best window.
         We write to the underlying memory here, and then update the current memory later
@@ -170,6 +175,7 @@ class CreatureTrait:
         """
         self._data[inner_idxs] = self._data[outer_idxs]
 
+    @Profile.cuda_profile
     def reindex(self, start, new_size):
         """Slice underlying memory to set current memory to the current set of active creatures.
 
@@ -188,6 +194,9 @@ class CreatureTrait:
 
     def __setitem__(self, idxs, val: Tensor):
         self.data[idxs] = val
+
+    # def in_place(self, op: Callable, *args, **kwargs):
+    #     op(self.data, *args, **kwargs, out=self.data)
 
     def __repr__(self):
         return f"CreatureTrait(data={self.data})"

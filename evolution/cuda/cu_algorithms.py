@@ -17,7 +17,7 @@ class CUDAKernelManager:
     def __init__(self, cfg: config.Config):
         self.cfg = cfg
         self.encoding = 'ascii'
-        cudaCheckErrors(cuda.cuInit(0))
+        # cudaCheckErrors(cuda.cuInit(0))
         self.cu_device = cudaCheckErrors(cuda.cuDeviceGet(0))
 
         major = cudaCheckErrors(cuda.cuDeviceGetAttribute(cuda.CUdevice_attribute.CU_DEVICE_ATTRIBUTE_COMPUTE_CAPABILITY_MAJOR,
@@ -30,7 +30,8 @@ class CUDAKernelManager:
         if DEBUG:
             self.compile_args += debug_args
         self.kernels = self.compile_kernels()
-        self.stream = cudaCheckErrors(cuda.cuStreamCreate(0))
+        # self.stream = cudaCheckErrors(cuda.cuStreamCreate(0))
+        self.stream = cuda.CUstream(torch.cuda.current_stream().cuda_stream)
 
 
     def get_macros(self, code: str) -> List[bytes]:

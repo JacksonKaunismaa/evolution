@@ -1,31 +1,10 @@
 import gc
-from functools import wraps
 from contextlib import contextmanager
-from collections import defaultdict
 import torch
 from cuda import cuda, nvrtc
 import moderngl as mgl
 from OpenGL.GL import GL_TEXTURE_2D
 
-BENCHMARK = False
-times = defaultdict(float)
-n_times = defaultdict(int)
-
-def cuda_profile(func):
-    start = torch.cuda.Event(enable_timing=True)
-    end = torch.cuda.Event(enable_timing=True)
-    @wraps(func)
-    def wrapper(*args, **kwargs):
-        if not BENCHMARK:
-            return func(*args, **kwargs)
-        start.record()  # type: ignore
-        res = func(*args, **kwargs)
-        end.record()   # type: ignore
-        torch.cuda.synchronize()
-        times[func.__name__] += start.elapsed_time(end)
-        n_times[func.__name__] += 1
-        return res
-    return wrapper
 
 def clear_mem():
     gc.collect()

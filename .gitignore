@@ -4,5 +4,6 @@
 **/*.pkl
 **/*.ncu-rep
 **/.vscode
+**/*.nsys-rep
 imgui.ini
 log/

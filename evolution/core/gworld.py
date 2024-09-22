@@ -6,8 +6,7 @@ from torch.nn import functional as F
 import numpy as np
 
 from evolution.cuda import cu_algorithms
-from evolution.cuda import cuda_utils
-from evolution.cuda.cuda_utils import cuda_profile
+from evolution.core.benchmarking import Profile, BenchmarkMethods
 from evolution.utils.quantize import quantize, QuantizedData
 from evolution.state.game_state import GameState
 from evolution.visual.interactive.camera import Camera
@@ -36,7 +35,7 @@ class GWorld():
         self.outputs: Tensor = None   # the set of neural outputs that decide what the creatures want to do
         self.collisions: Tensor = None   # the set of ray collisions for each creature
 
-    @cuda_profile
+    @Profile.cuda_profile
     def compute_grid_setup(self):
         """Returns [G, G, M] array of the grid setup for all creatures. Where G is the number of grid cells,
         (G = world_size // cell_size + 1), and M is the maximum number of objects per cell (M = max_per_cell),
@@ -61,7 +60,7 @@ class GWorld():
         return cells, cell_counts  # argument return order should match trace_rays_grid
 
 
-    @cuda_profile
+    @Profile.cuda_profile
     def trace_rays_grid(self, cells, cell_counts):
         """ Returns [N, R] array of the results of ray collisions for all creatures.
         Where the coordinate is the scalar color of the ray intersection.
@@ -107,22 +106,22 @@ class GWorld():
         creatures and the energy of the positive areas of the food grid."""
         return np.log10(F.relu(self.food_grid).sum().item() + self.creatures.total_energy())
 
-    @cuda_profile
+    @Profile.cuda_profile
     def collect_stimuli(self, collisions):
         """Returns [N, F] array for all creature stimuli."""
         return self.creatures.collect_stimuli(collisions, self.food_grid)
 
-    @cuda_profile
+    @Profile.cuda_profile
     def think(self, stimuli):
         """Return [N, O] array of outputs of the creatures' neural networks.."""
         return self.creatures.forward(stimuli.unsqueeze(1))
 
-    @cuda_profile
+    @Profile.cuda_profile
     def rotate_creatures(self, outputs):
         """Rotate all creatures based on their outputs."""
         self.creatures.rotate_creatures(outputs, self.state)
 
-    @cuda_profile
+    @Profile.cuda_profile
     def only_move_creatures(self, outputs):
         """Rotate and move all creatures"""
         self.creatures.move_creatures(outputs, self.state)
@@ -132,7 +131,7 @@ class GWorld():
         self.rotate_creatures(outputs)
         self.only_move_creatures(outputs)
 
-    @cuda_profile
+    @Profile.cuda_profile
     def compute_gridded_attacks(self, cells, cell_counts):
         """Compute which creatures are attacking which creatures are then based on that, update
         health and energy of creatures."""
@@ -153,12 +152,12 @@ class GWorld():
                      self.population, cells.shape[0])
         return tr_results
 
-    @cuda_profile
+    @Profile.cuda_profile
     def do_attacks(self, tr_results):
         """Update health and energy of creatures based on the results of the attacks."""
         self.creatures.do_attacks(tr_results, self.state)
 
-    @cuda_profile
+    @Profile.cuda_profile
     def creatures_eat_grow(self):
         """Grow food_grid and give creatures energy for being in a square"""
         self.creatures.eat_grow(self.food_grid, self.state)
@@ -173,6 +172,67 @@ class GWorld():
     def population(self) -> int:
         """"Return the number of creatures in the world."""
         return self.creatures.population
+
+    @Profile.cuda_profile
+    def fused_kill_reproduce(self):
+        """Kill creatures that have no energy, and reproduce creatures that have enough energy."""
+        self.creatures.fused_kill_reproduce(self.central_food_grid, self.state)
+
+    @Profile.cuda_profile
+    def update_creatures(self):
+        """Move creatures, update health and energy, reproduce, eat, grow food. Update all the
+        states of the creatures and the world."""
+        if self.outputs is None:   # skip updating if we haven't computed the outputs yet
+            return
+
+        self.move_creatures(self.outputs, )   # move creatures, update health and energy
+
+        celled_world = self.compute_grid_setup()
+        attacks2 = self.compute_gridded_attacks(*celled_world)
+
+        self.do_attacks(attacks2)  # update health and energy of creatures
+        self.fused_kill_reproduce()
+        self.creatures_eat_grow()   # give energy for being in a square, and then reduce that energy
+
+    @Profile.cuda_profile
+    def compute_decisions(self):
+        """Compute the decisions of all creatures. This includes running the neural networks,
+        computing memories, and running vision ray tracing. Sets `outputs`, `collisions`, and
+        `celled_world`."""
+        self.celled_world = self.compute_grid_setup()
+        self.collisions = self.trace_rays_grid(*self.celled_world)
+        stimuli = self.collect_stimuli(self.collisions)
+        self.outputs = self.think(stimuli)
+
+    @Profile.cuda_profile
+    def step(self) -> bool:
+        """Run one step of the simulation. Returns False if there was a mass extinction."""
+        # we do these steps in this (seemingly backwards) order, because we want vision and brain
+        # information to be up to date when we visualize, which happens after we exit from here
+
+        # move creatures, update health and energy, reproduce, eat, grow food
+        self.update_creatures()
+
+        if self.population == 0:
+            #logging.info("Mass extinction!")
+            print("Mass extinction!")
+            return False
+
+        self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
+        if Profile.BENCHMARK != BenchmarkMethods.NONE:
+            self.n_maxxed += (self.celled_world[1]).topk(20).values.float().mean()
+        self.state.publish_all()
+
+        # if self.state.time % 60 == 0:   # save this generation
+        #     if save:
+        #         self.write_checkpoint('game.ckpt')
+        #     if visualize:
+        #         self.visualize(None, show_rays=False)
+
+        self.state.time += 1
+        if self.state.increasing_food_decr:
+            self.cfg.food_cover_decr += self.cfg.food_cover_decr_incr_amt
+        return True
 
     def write_checkpoint(self, path, quantized=True, camera: Camera | None = None):
         """Write a checkpoint file to `path` that contains the state of the world, including the
@@ -224,62 +284,3 @@ class GWorld():
         instance.state.load_state_dict(checkpoint['state'])
 
         return instance, checkpoint.get('others', {})
-
-    @cuda_profile
-    def fused_kill_reproduce(self):
-        """Kill creatures that have no energy, and reproduce creatures that have enough energy."""
-        self.creatures.fused_kill_reproduce(self.central_food_grid, self.state)
-
-    def update_creatures(self):
-        """Move creatures, update health and energy, reproduce, eat, grow food. Update all the
-        states of the creatures and the world."""
-        if self.outputs is None:   # skip updating if we haven't computed the outputs yet
-            return
-
-        self.move_creatures(self.outputs, )   # move creatures, update health and energy
-
-        celled_world = self.compute_grid_setup()
-        attacks2 = self.compute_gridded_attacks(*celled_world)
-
-        self.do_attacks(attacks2)  # update health and energy of creatures
-        self.fused_kill_reproduce()
-        self.creatures_eat_grow()   # give energy for being in a square, and then reduce that energy
-
-
-    def compute_decisions(self):
-        """Compute the decisions of all creatures. This includes running the neural networks,
-        computing memories, and running vision ray tracing. Sets `outputs`, `collisions`, and
-        `celled_world`."""
-        self.celled_world = self.compute_grid_setup()
-        self.collisions = self.trace_rays_grid(*self.celled_world)
-        stimuli = self.collect_stimuli(self.collisions)
-        self.outputs = self.think(stimuli)
-
-    def step(self) -> bool:
-        """Run one step of the simulation. Returns False if there was a mass extinction."""
-        # we do these steps in this (seemingly backwards) order, because we want vision and brain
-        # information to be up to date when we visualize, which happens after we exit from here
-
-        # move creatures, update health and energy, reproduce, eat, grow food
-        self.update_creatures()
-
-        if self.population == 0:
-            #logging.info("Mass extinction!")
-            print("Mass extinction!")
-            return False
-
-        self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
-        if cuda_utils.BENCHMARK:
-            self.n_maxxed += (self.celled_world[1]).topk(20).values.float().mean()
-        self.state.publish_all()
-
-        # if self.state.time % 60 == 0:   # save this generation
-        #     if save:
-        #         self.write_checkpoint('game.ckpt')
-        #     if visualize:
-        #         self.visualize(None, show_rays=False)
-
-        self.state.time += 1
-        if self.state.increasing_food_decr:
-            self.cfg.food_cover_decr += self.cfg.food_cover_decr_incr_amt
-        return True

@@ -5,7 +5,7 @@ import numpy as np
 # import logging
 # logging.basicConfig(level=logging.ERROR, filename='game.log')
 
-from evolution.cuda.cuda_utils import cuda_profile
+from evolution.core.benchmarking import Profile
 from evolution.cuda.cu_algorithms import CUDAKernelManager
 from evolution.core.config import Config
 from evolution.state.game_state import GameState
@@ -42,7 +42,6 @@ class Creatures(CreatureArray):
         self.offsets = torch.tensor([[i, j] for i in range(-self.pad, self.pad+1)
                                      for j in range(-self.pad, self.pad+1)], device=self.device).unsqueeze(0)
         self.activations = []
-        self.dead: Tensor   # [N] current memory boolean tensor
         self.generate_from_cfg()
 
     def generate_from_cfg(self):
@@ -161,7 +160,7 @@ class Creatures(CreatureArray):
         if new_creatures or num_dead > 0:   # rearrange memory and update current data
             self.add_with_deaths(dead_idxs, alive, num_dead, new_creatures, state)
 
-    @cuda_profile
+    @Profile.cuda_profile
     def _kill_dead(self, central_food_grid: Tensor) -> Tuple[Tensor, int, Tensor]:
         """If any creature drops below 0 health or energy, kill it. Update the food grid by depositing an amount of food
         that depends on the creature's size at death.
@@ -173,24 +172,29 @@ class Creatures(CreatureArray):
         """
         if self.cfg.immortal:
             return (torch.zeros(self.population, dtype=torch.bool, device=self.device),
+                    # torch.tensor(0, device=self.device, dtype=torch.int32),
                     0,
-                    torch.tensor([], device=self.device))
+                    torch.tensor([], device=self.device, dtype=torch.int32))
 
         health_deaths = self.healths <= 0
         energy_deaths = self.energies <= 0
-        self.dead = health_deaths | energy_deaths   # contiguous boolean tensor
-        dead_idxs = self.dead.nonzero().squeeze(1)
+        dead = health_deaths | energy_deaths   # contiguous boolean tensor
 
+        dead_idxs = dead.nonzero().squeeze(1)
         num_dead = dead_idxs.shape[0]
+
         if num_dead > 0:
             dead_posns = self.positions[dead_idxs].long()
             # food_grid[dead_posns[..., 1], dead_posns[..., 0]] += self.cfg.dead_drop_food(self.sizes[self.dead])
             central_food_grid.index_put_((dead_posns[..., 1], dead_posns[..., 0]),
                                 self.cfg.dead_drop_food(self.sizes[dead_idxs]),
                                 accumulate=True)
-        return self.dead, num_dead, dead_idxs
+        else:
+            dead_idxs = torch.tensor([], device=self.device, dtype=torch.int32)
 
-    @cuda_profile
+        return dead, num_dead, dead_idxs
+
+    @Profile.cuda_profile
     def _get_reproducers(self, alive: Union[None, Tensor]) -> Tensor:
         """Return an index tensor (into current memory) indicating which creatures are able to reproduce.
         Creatures must be in the 'mature' aging stage (between adolescent and old), and have enough
@@ -199,7 +203,7 @@ class Creatures(CreatureArray):
         reproducers = alive & (self.ages >= self.age_speeds*self.cfg.age_mature_mul) & (self.energies >= self.reproduce_energies)
         return reproducers.nonzero().squeeze(1)
 
-    @cuda_profile
+    @Profile.cuda_profile
     def _reduce_reproducers(self, reproducers: Tensor, num_reproducers: int,
                             max_reproducers: int) -> Tuple[Tensor, int]:
         if num_reproducers > max_reproducers:  # this benefits older creatures because they
@@ -208,7 +212,7 @@ class Creatures(CreatureArray):
             reproducers = reproducers[perm[:num_reproducers]]
         return reproducers, num_reproducers
 
-    @cuda_profile
+    @Profile.cuda_profile
     def _reproduce(self, alive: Tensor, num_dead: int) -> Union[None, 'CreatureArray']:
         """For sufficiently high energy creatures, create a new creature with mutated genes. Returns the set
         of new creatures in a CreatureArray object."""

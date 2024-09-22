@@ -1,11 +1,11 @@
-from typing import TYPE_CHECKING, Any, Callable, Optional, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Tuple
 from enum import Enum
 import numpy as np
 import torch
 from torch import Tensor
 
 from evolution.core.config import Config
-from evolution.cuda.cuda_utils import cuda_profile
+from evolution.core.benchmarking import Profile
 
 if TYPE_CHECKING:
     from evolution.cuda.cu_algorithms import CUDAKernelManager
@@ -26,7 +26,7 @@ def eat_amt(sizes: Tensor, cfg: Config) -> Tensor:
     else:
         raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[1]}")
 
-@cuda_profile
+@Profile.cuda_profile
 def vectorized_hsl_to_rgb(h: Tensor, l: Tensor) -> Tensor:
     # s is assumed to be 1
     def hue2rgb( v1, v2, vH):
@@ -56,7 +56,7 @@ def hsv_spiral(scalar_color: Tensor) -> Tensor:
     l = torch.where(scalar_color > 0, 0.5 + 0.15*(scalar_color*0.2).cos(), 0.0)
     return vectorized_hsl_to_rgb(h,l)
 
-@cuda_profile
+@Profile.cuda_profile
 def cuda_hsv_spiral(scalar_colors: Tensor, kernels: 'CUDAKernelManager') -> Tensor:
     """Given a Tensor scalar_colors of shape (N) with values between 1 and 255, return an RGB color.
     This parametric curve goes through HSL space to cover a wide range of distinct colors.

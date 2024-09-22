@@ -5,7 +5,7 @@ from torch import Tensor
 from evolution.utils.batched_random import BatchedRandom
 from evolution.utils.quantize import quantize, QuantizedData
 from evolution.core.config import Config
-from evolution.cuda.cuda_utils import cuda_profile
+from evolution.core.benchmarking import Profile
 from evolution.state.game_state import GameState
 
 from .trait_initializer import InitializerStyle
@@ -74,28 +74,30 @@ class CreatureArray:
             v.init.mut_idx = self.num_mutable
             self.num_mutable += 1
 
-    @cuda_profile
+    @Profile.cuda_profile
     def reproduce_most(self, reproducers: Tensor, num_reproducers: int,
                        children: 'CreatureArray', mut: Tensor):
         """Reproduce all traits that are mutable, force mutable, or fillable."""
         for name, v in self.variables.items():   # handle mutable parameters
-            child_trait = v.reproduce(name, self.rng, reproducers, num_reproducers, mut)
+            child_trait = v.reproduce(name, self.rng, reproducers, num_reproducers, mut,
+                                      nsys_extra=name)   # type: ignore
             if child_trait is not None:
                 setattr(children, name, child_trait)
 
-    @cuda_profile
+    @Profile.cuda_profile
     def reproduce_extra(self, children: 'CreatureArray'):
         """Reproduce all traits that are other dependent."""
         for name, v in self.variables.items():
             if v.init.style == InitializerStyle.OTHER_DEPENDENT:
                 try:
-                    children.variables[name] = v.reproduce_from_other(children.variables[v.init.name])
+                    children.variables[name] = v.reproduce_from_other(children.variables[v.init.name],
+                                                                      nsys_extra=name) # type: ignore
                 except KeyError as exc:
                     raise KeyError(f"CreatureTrait '{name}' depends on trait '{v.init.name}' "
                                          ", but it does not been set by child.") from exc
 
 
-    @cuda_profile
+    @Profile.cuda_profile
     def reproduce_traits(self, mut: Tensor, reproducers: Tensor, num_reproducers: int) -> 'CreatureArray':
         """Generate descendant traits from the set of indices in reproducers and store it in
         a new CreatureArray.
@@ -116,6 +118,7 @@ class CreatureArray:
     def population(self) -> int:
         return next(iter(self.variables.values())).population
 
+    @Profile.cuda_profile
     def write_new_data(self, idxs: Tensor, other: Union[None, 'CreatureArray']):
         """Write the data of the creatures in `other` at the indices `idxs` into the current block
         for all CreatureTraits in each.
@@ -128,16 +131,19 @@ class CreatureArray:
             return
         for name, v in self.variables.items():
             try:
-                v.write_new(idxs, other.variables[name])
+                v.write_new(idxs, other.variables[name],
+                            nsys_extra=name)  # type: ignore
             except RuntimeError:
                 print(name)
                 raise
 
+    @Profile.cuda_profile
     def reindex(self, start_idx: int, n_after: int):
         """Slice each CreatureTrait according to the current block so that their `data` attribute
         is set properly for the next generation."""
-        for v in self.variables.values():
-            v.reindex(start_idx, n_after)
+        for name, v in self.variables.items():
+            v.reindex(start_idx, n_after,
+                      nsys_extra=name) # type: ignore
 
     def rearrange_old_data(self, outer_idxs: Tensor, inner_idxs: Tensor):
         """Move creatures that are outside the best window to the inside of the best window.
@@ -149,9 +155,11 @@ class CreatureArray:
             inner_idxs: Tensor of indices (into underlying memory) where we want to move them to, inside
                         the best window
         """
-        for v in self.variables.values():
-            v.rearrange_old_data(outer_idxs, inner_idxs)
+        for name, v in self.variables.items():
+            v.rearrange_old_data(outer_idxs, inner_idxs,
+                                 nsys_extra=name)  # type: ignore
 
+    @Profile.cuda_profile
     def add_with_deaths(self, dead_idxs: Tensor, alive: Tensor,
                         num_dead: int, other: Union[None, 'CreatureArray'],
                         state: GameState) -> None:
@@ -199,6 +207,7 @@ class CreatureArray:
         if state.selected_creature and selected_creature_update is not None:
             state.selected_creature = selected_creature_update
 
+    @Profile.cuda_profile
     def add_with_deaths_max_array(self, dead_idxs: Tensor, other: Union[None, 'CreatureArray'],  # pylint: disable=useless-return
                                   sl: slice):
         """If the number of creatures after death and reproduction will fill the entire buffer,
@@ -222,6 +231,7 @@ class CreatureArray:
         self.write_new_data(missing, other)
         return None
 
+    @Profile.cuda_profile
     def add_with_deaths_fill_gaps(self, dead_idxs: Tensor, other: Union[None, 'CreatureArray'],  num_dead: int,
                                   num_reproducers: int, sl: slice, state: GameState) -> int | None:
         """If we add more creatures than we kill in this step, then we will be able to fill in all the
@@ -264,6 +274,7 @@ class CreatureArray:
             # print("filling gaps selected")
             return state.selected_creature + (sl.start - self.start_idx)
 
+    @Profile.cuda_profile
     def add_with_deaths_move_block(self, other: Union[None, 'CreatureArray'], n_after: int,
                                    num_reproducers: int, sl: slice, state: GameState) -> int | None:
         """If we have more dead creatures than new creatures, then we need to totally restart our
