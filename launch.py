@@ -20,7 +20,7 @@ cfg = config.Config(start_creatures=8192, max_creatures=262144, size=5000, food_
 main(cfg)
 
 # torch.random.manual_seed(0)
-# # benchmarking.torch_profile(cfg, init_steps=8000, steps=500, log_dir='./log/prof1')
+benchmarking.torch_profile(cfg, init_steps=8000, steps=500, log_dir='./log/prof1')
 # benchmarking.multi_benchmark(cfg, init_steps=8000, steps=100, num_simulations=1, method=benchmarking.BenchmarkMethods.NSYS)
 
 # benchmarking.hyperparameter_search(cfg, {'cell_size': [15.0, 16.0, 17.0],

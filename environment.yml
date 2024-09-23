@@ -1,4 +1,4 @@
-name: jack
+name: evol
 channels:
   - pytorch
   - anaconda
@@ -28,6 +28,7 @@ dependencies:
   - cuda-python=12.6.0
   - cuda-runtime=12.4.0
   - cuda-version=12.6
+  - cudnn=9.1.1.17
   - dav1d=1.2.1
   - debugpy=1.8.5
   - decorator=5.1.1
@@ -224,6 +225,7 @@ dependencies:
   - zstandard=0.23.0
   - zstd=1.5.6
   - pip:
+      - annotated-types==0.7.0
       - attrs==24.2.0
       - backcall==0.2.0
       - beautifulsoup4==4.12.3
@@ -236,7 +238,7 @@ dependencies:
       - fonttools==4.53.1
       - glcontext==3.0.0
       - glfw==2.7.0
-      - imgui==2.0.0
+      - imgui-bundle==1.5.2
       - ipython==8.12.3
       - jsonschema==4.23.0
       - jsonschema-specifications==2023.12.1
@@ -247,11 +249,14 @@ dependencies:
       - moderngl==5.11.1
       - moderngl-window==2.4.6
       - multipledispatch==1.0.0
+      - munch==4.0.0
       - nbclient==0.10.0
       - nbconvert==7.16.4
       - nbformat==5.10.4
       - numpy==1.26.4
       - pandocfilters==1.5.1
+      - pydantic==2.9.2
+      - pydantic-core==2.23.4
       - pyglet==2.0.17
       - pyglm==2.7.1
       - pyparsing==3.1.4
@@ -263,4 +268,4 @@ dependencies:
       - tqdm==4.66.5
       - webencodings==0.5.1
       - yarg==0.1.9
-prefix: /home/rob/anaconda3/envs/jack
+prefix: /home/rob/anaconda3/envs/evol
