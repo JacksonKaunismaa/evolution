@@ -6,7 +6,7 @@ from evolution.core.config import Config
 
 from .creature_state import CreatureState
 from .cell_state import CellState
-from .scalar_tracker import ScalarTracker
+from .metric_tracker import MetricTracker
 
 if TYPE_CHECKING:
     from evolution.core.gworld import GWorld
@@ -31,11 +31,12 @@ class GameState:
         self.hitboxes_enabled = False
         self.time = 0
 
-        self.trackers: Dict[str, ScalarTracker] = {}
-        self.energy_tracker = ScalarTracker(self, world.log_total_energy, 25)
+        self.trackers: Dict[str, MetricTracker] = {}
+        self.energy_tracker = MetricTracker(self, world.log_total_energy, 25)
+        self.histogram_tracker = MetricTracker(self, world.creature_histogram, 100, n_bins=255)
 
     def __setattr__(self, name, value):
-        if isinstance(value, ScalarTracker):
+        if isinstance(value, MetricTracker):
             self.trackers[name] = value
         super().__setattr__(name, value)
 

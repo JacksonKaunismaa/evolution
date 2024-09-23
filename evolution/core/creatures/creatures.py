@@ -393,3 +393,13 @@ class Creatures(CreatureArray):
     def total_energy(self):
         """Return the sum of energies of all creatures"""
         return torch.sum(self.energies).item() # type: ignore
+
+    def compute_hist_cmap(self, n_bins: int) -> np.ndarray:
+        """Return a histogram of the sizes of the creatures"""
+        midpoints = torch.linspace(1, 255, n_bins, device=self.device)
+        cmap = init.cuda_hsv_spiral(midpoints.unsqueeze(1), self.kernels)
+        return cmap.cpu().numpy()
+
+    def histogram(self, n_bins: int) -> np.ndarray:
+        """Return a histogram of the sizes of the creatures"""
+        return torch.cumsum(torch.histc(self.colors, bins=n_bins, min=1, max=255), dim=0).cpu().numpy()  # type: ignore

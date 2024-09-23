@@ -14,6 +14,7 @@ from .creature_status_window import CreatureStatusWindow
 from .cell_status_window import CellStatusWindow
 from .ui_element import Window
 from .plots.energy_plot import EnergyPlot
+from .plots.histogram_plot import HistogramPlot
 
 
 class UIManager(EventHandler):
@@ -34,6 +35,8 @@ class UIManager(EventHandler):
         self.creature_info = CreatureStatusWindow(cfg, world, window, state)
         self.cell_info = CellStatusWindow(cfg, world, window, state)
         self.energy_plot = EnergyPlot(cfg, world, window, state)
+        self.hist_plot = HistogramPlot(cfg, world, window, state)
+
 
     def __setattr__(self, name, value):
         if isinstance(value, Window):

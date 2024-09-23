@@ -1,4 +1,4 @@
-from typing import Callable, TYPE_CHECKING
+from typing import Callable, TYPE_CHECKING, Tuple
 import numpy as np
 
 from evolution.utils.subscribe import Subscriber
@@ -7,21 +7,23 @@ if TYPE_CHECKING:
     from  .game_state import GameState
 
 
-class ScalarTracker(Subscriber):
-    def __init__(self, state: 'GameState', func: Callable, poll_rate: int):
+class MetricTracker(Subscriber):
+    def __init__(self, state: 'GameState', func: Callable, poll_rate: int, **kwargs):
         super().__init__(poll_rate)
         state.game_step_publisher.subscribe(self)
 
         self._updated = False
         self.state = state
         self.func = func
-        self._times = np.array([])
-        self._values = np.array([])
         self.length = 0
-        self.add_amt = 10_000
+        self.add_amt = 1000
         self.min_val = None
         self.max_val = None
+        self.kwargs = kwargs
 
+        self._times = np.array([])
+        self._values = np.array([])
+        self._shape: Tuple[int] = None
 
     @property
     def times(self):
@@ -29,23 +31,34 @@ class ScalarTracker(Subscriber):
 
     @property
     def values(self):
-        return self._values[:self.length]
+        return self._values[..., :self.length]  # make time be the last dimension so that indexing gives a contiguous array
 
     def _update(self):
         self._updated = True
-        next_val = float(self.func())
+        next_val = self.func(**self.kwargs)
 
-        if self.min_val is None or next_val < self.min_val:
-            self.min_val = next_val
-        if self.max_val is None or next_val > self.max_val:
-            self.max_val = next_val
+        if isinstance(next_val, np.ndarray):  # infer shape from first value
+            self._shape = next_val.shape
+            next_min = np.min(next_val)
+            next_max = np.max(next_val)
+        else:
+            self._shape = tuple()
+            next_min = next_max = next_val
+
+        if self.min_val is None or next_min < self.min_val:
+            self.min_val = next_min
+        if self.max_val is None or next_max > self.max_val:
+            self.max_val = next_max
 
         if self.length >= self._times.shape[0]:
             self._times = np.append(self._times, np.empty(self.add_amt))
-            self._values = np.append(self._values, np.empty(self.add_amt))
+            if self._values.ndim == 1 and self._shape:
+                self._values = np.empty((*self._shape, self.add_amt))
+            else:
+                self._values = np.append(self._values, np.empty((*self._shape, self.add_amt)), axis=-1)
 
         self._times[self.length] = float(self.state.time)
-        self._values[self.length] = next_val
+        self._values[..., self.length] = next_val
         self.length += 1
 
     def has_updates(self) -> bool:

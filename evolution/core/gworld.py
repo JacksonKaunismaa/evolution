@@ -104,7 +104,11 @@ class GWorld():
     def log_total_energy(self) -> float:
         """Return the log10 of the total energy of the world, which is the sum of the energy of all
         creatures and the energy of the positive areas of the food grid."""
-        return np.log10(F.relu(self.food_grid).sum().item() + self.creatures.total_energy())
+        return float(np.log10(F.relu(self.food_grid).sum().item() + self.creatures.total_energy()))
+
+    def creature_histogram(self, n_bins: int = 255) -> np.ndarray:
+        """Return a histogram of the energy of all creatures."""
+        return self.creatures.histogram(n_bins)
 
     @Profile.cuda_profile
     def collect_stimuli(self, collisions):

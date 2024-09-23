@@ -1,7 +1,6 @@
 
 from imgui_bundle import imgui, implot
 from moderngl_window import BaseWindow
-import numpy as np
 
 from evolution.visual.gui.ui_element import Window, PlotElement
 from evolution.core.config import Config
@@ -11,7 +10,7 @@ from evolution.state.game_state import GameState
 
 class EnergyPlot(Window):
     def __init__(self, cfg: Config, world: GWorld, window: BaseWindow, state: GameState):
-        super().__init__('Energy Over Time', 450/13)
+        super().__init__('Energy Over Time', self.PLOT_WIDTH)
         self.cfg = cfg
         self.world = world
         self.state = state
@@ -25,27 +24,26 @@ class EnergyPlot(Window):
         window_width, window_height = self.wnd.size
 
         pos = (window_width - self.width, window_height - self.height)
-        imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)
+        imgui.set_next_window_pos(pos, cond=imgui.Cond_.always)  # type: ignore
         sz = (self.width, self.height)
-        imgui.set_next_window_size(sz, cond=imgui.Cond_.always)
+        imgui.set_next_window_size(sz, cond=imgui.Cond_.always)  # type: ignore
 
         updated = self.energy_tracker.has_updates()
 
         # Begin a new ImGui window
-        with self.begin(imgui.WindowFlags_.no_move | imgui.WindowFlags_.no_saved_settings |
+        with self.begin(imgui.WindowFlags_.no_move | imgui.WindowFlags_.no_saved_settings |  # type: ignore
                     imgui.WindowFlags_.no_resize):
-            if implot.begin_plot("Energy Over Time", (self.width, self.energy_plotter.plot_height),
-                                 flags=implot.Flags_.no_legend | implot.Flags_.no_title):
+            if implot.begin_plot("Energy Over Time", (self.width, self.energy_plotter.plot_height),  # type: ignore
+                                 flags=implot.Flags_.no_legend | implot.Flags_.no_title):  # type: ignore
                 # implot.setup_axis_scale(implot.ImAxis_.x1, implot.Scale_.log10)
                 implot.setup_axes('Time', 'log10(Energy)')
-                implot.setup_axis_limits(implot.ImAxis_.y1, self.energy_tracker.min_val,
-                                         self.energy_tracker.max_val, cond=imgui.Cond_.always)
+                implot.setup_axis_limits(implot.ImAxis_.y1, self.energy_tracker.min_val,  # type: ignore
+                                         self.energy_tracker.max_val, cond=imgui.Cond_.always)  # type: ignore
 
-                implot.setup_axis_limits(implot.ImAxis_.x1, 0, self.energy_tracker.times[-1],
-                                            cond=imgui.Cond_.always if updated else imgui.Cond_.once)
-                np_values = np.asarray(self.energy_tracker.values)
-                np_times = np.asarray(self.energy_tracker.times)
+                implot.setup_axis_limits(implot.ImAxis_.x1, 0, self.energy_tracker.times[-1],  # type: ignore
+                                            cond=imgui.Cond_.always if updated else imgui.Cond_.once)  # type: ignore
+
                 implot.plot_line("Energy Over Time Plot",
-                                np_times, np_values)#, flags=implot.LineFlags_.segments)
+                                self.energy_tracker.times, self.energy_tracker.values)#, flags=implot.LineFlags_.segments)
                                 # flags=implot.Flags_.no_legend)
                 implot.end_plot()

@@ -13,6 +13,7 @@ class UIElement(ABC):
     PADDING = 6/13  # padding between the top header and the start of the first line (and the last line -> bottom of window)
     PLOT_HEIGHT = 220/13  # height of the plot in pixels
     HEADER_WIDTH_PAD = 55/13  # padding between the header and the right side of the window
+    PLOT_WIDTH = 350/13   # max width of plots (unless overridden)
 
     @abstractmethod
     def render(self): ...
