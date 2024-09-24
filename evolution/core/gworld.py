@@ -1,5 +1,5 @@
 import os.path as osp
-from typing import Dict, Tuple
+from typing import Dict, Optional, Tuple
 import torch
 from torch import Tensor
 from torch.nn import functional as F
@@ -18,9 +18,10 @@ class GWorld():
     """The main class that holds the state the world, including the food grid, the creatures,
     and the game state. It also contains the methods to run the simulation, including updating the
     creatures, computing the decisions of the creatures, and running one step of the simulation."""
-    def __init__(self, cfg: Config, device=torch.device('cuda')):
+    def __init__(self, cfg: Config, device=torch.device('cuda'), path: Optional[str] = None):
         self.cfg: Config = cfg
         self.device = device
+        self.path = path
         self.food_grid = torch.rand((cfg.size, cfg.size), device=self.device) * cfg.init_food_scale
         # pad with zeros on all sides
         self.food_grid = F.pad(self.food_grid, (cfg.food_sight,)*4, mode='constant', value=0)
@@ -238,13 +239,19 @@ class GWorld():
             self.cfg.food_cover_decr += self.cfg.food_cover_decr_incr_amt
         return True
 
-    def write_checkpoint(self, path, quantized=True, camera: Camera | None = None):
+    def write_checkpoint(self, path=None, quantized=True, camera: Camera | None = None):
         """Write a checkpoint file to `path` that contains the state of the world, including the
         food grid, the creatures, the configuration, the time, the seed, current game settings in
         the `self.state` object, and the camera state if `camera` is not None. If `quantized` is
         True, then most of the data associated with creatures and the food grid will be quantized
         to reduce the size of the checkpoint file.
         """
+        if path is None:
+            path = self.path
+
+        if path is None:
+            raise ValueError("No path provided to write checkpoint to.")
+
         seed = self.state.time
         fgrid = quantize(self.food_grid, map_location=torch.device('cpu')) if quantized else self.food_grid
         torch.save({'food_grid': fgrid,
@@ -270,9 +277,9 @@ class GWorld():
         print(f"Loading checkpoint '{path}'...")
 
         checkpoint = torch.load(path)
-        # we nede to recreate the GWorld object so that it has the right config from the get go
+        # we nede to create the GWorld object so that it has the right config from the get go
         # since (eg.) Creatures objects are created based on config when Creatures is created
-        instance = cls(checkpoint['cfg'], device=checkpoint['device'])
+        instance = cls(checkpoint['cfg'], device=checkpoint['device'], path=path)
 
         instance.creatures.unset_data()
         del instance.food_grid

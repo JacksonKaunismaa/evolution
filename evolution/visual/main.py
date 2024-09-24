@@ -26,7 +26,7 @@ class Game:
             self.world, other_state_dicts = gworld.GWorld.from_checkpoint(load_path)
             cfg = self.world.cfg
         else:
-            self.world = gworld.GWorld(cfg)
+            self.world = gworld.GWorld(cfg, path=load_path)
 
         self.wnd: mglw.BaseWindow = window
         self.state = self.world.state
@@ -100,7 +100,7 @@ class Game:
         # self.controller.tick()
 
 
-def main(cfg=None):
+def main(cfg, load_path=None):
     settings.WINDOW['class'] = 'moderngl_window.context.glfw.Window'
     settings.WINDOW['gl_version'] = (4, 5)
     settings.WINDOW['title'] = 'Evolution'
@@ -111,10 +111,8 @@ def main(cfg=None):
     # settings.WINDOW['fullscreen'] = True
 
     window = mglw.create_window_from_settings()
-    if cfg is None:
-        cfg = config.Config(start_creatures=256, max_creatures=16384, size=500, food_cover_decr=0.0, immortal=False)
 
-    game = Game(window, cfg, load_path='game.ckpt')
+    game = Game(window, cfg, load_path=load_path)
     game.state.game_paused = True
     # we do one initial step to force compute_decisions to be called (so visualizers can be populated)
     game.world.step()

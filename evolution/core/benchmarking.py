@@ -146,7 +146,7 @@ def multi_benchmark(cfg, init_steps=8000, steps=500, num_simulations=20, skip_fi
         print(k, mean, '+-', std)
     return results
 
-def hyperparameter_search(cfg: Config, hyperparameters: Dict[str, List], max_steps, num_simulations,
+def hyperparameter_search(cfg: Config, hyperparameters: Dict[str, List], init_steps, steps, num_simulations,
                           force_restart=False, path='hyper.pkl', skip_errors=False):
     """Run the simulation with all combinations of hyperparameters in `hyperparameters`
     and save the results to `path`. If `skip_errors` is True, then when the simulation crashes, we
@@ -169,7 +169,7 @@ def hyperparameter_search(cfg: Config, hyperparameters: Dict[str, List], max_ste
         cfg.update_in_place(dict(zip(hyp_keys, choice)))
         print(f"Testing {dict(zip(hyp_keys, choice))}")
         try:
-            results[choice] = multi_benchmark(cfg, init_steps=max_steps//2, steps=max_steps//2,
+            results[choice] = multi_benchmark(cfg, init_steps=init_steps, steps=steps,
                                               num_simulations=num_simulations)
         except Exception as e:
             if skip_errors:
