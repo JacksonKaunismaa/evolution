@@ -226,7 +226,7 @@ class GWorld():
         self.compute_decisions()   # run neural networks, compute memories, do vision ray tracing
         if Profile.BENCHMARK != BenchmarkMethods.NONE:
             k = min(20, self.celled_world[1].numel())
-            self.n_maxxed += (self.celled_world[1]).topk(k).values.float().mean()
+            self.n_maxxed += (self.celled_world[1]).flatten().topk(k).values.float().mean()
         self.state.publish_all()
 
         # if self.state.time % 60 == 0:   # save this generation

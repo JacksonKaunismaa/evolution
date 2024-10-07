@@ -14,8 +14,8 @@ from evolution.core import benchmarking  # pylint: disable=wrong-import-position
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Evolution simulator')
     parser.add_argument('--seed', type=int, default=-1, help='Random seed')
-    parser.add_argument('--debug_cfg', action='store_true',
-                        help='If set, will use a much simpler/smaller config for debugging purposes')
+    parser.add_argument('--config', choices=['small', 'medium', 'large'], default='large',
+                        help='Choose a predefined configuration')
     parser.add_argument('--load_path', type=str, default='game.ckpt',
                         help='Load path for simulation state (ignored if --style is set)')
 
@@ -28,14 +28,19 @@ if __name__ == '__main__':
     benchmark_opts.add_argument('--steps', type=int, default=100, help='Steps to run simulation for during benchmarking')
     args = parser.parse_args()
 
-    if args.debug_cfg:
-        cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
-                init_size_range=(0.2, 0.2), num_rays=3, immortal=True, init_food_scale=15.)
-    else:
-        cfg = config.Config(start_creatures=8192, max_creatures=262144, size=5000, food_cover_decr=0.2,
-                            cell_size=16.0, cache_size=128, max_per_cell=20, use_cache=0,
-                            food_sight=4, size_range=(0.1, 5.0),
-                            brain_size=(50, 40))
+    match args.config:
+        case 'small':
+            cfg = config.Config(start_creatures=3, max_creatures=100, size=5, food_cover_decr=0.0,
+                    init_size_range=(0.2, 0.2), num_rays=3, immortal=True, init_food_scale=15.)
+
+        case 'medium':
+            cfg = config.Config()
+
+        case 'large':
+            cfg = config.Config(start_creatures=8192, max_creatures=262144, size=5000, food_cover_decr=0.2,
+                                cell_size=16.0, max_per_cell=40,
+                                food_sight=4, size_range=(0.1, 5.0),
+                                brain_size=(50, 40))
 
     if args.seed >= 0:
         torch.random.manual_seed(args.seed)

@@ -4,7 +4,7 @@ import numpy as np
 import torch
 from torch import Tensor
 
-from evolution.core.config import Config
+from evolution.core.config import Config, Scaling
 from evolution.core.benchmarking import Profile
 
 if TYPE_CHECKING:
@@ -12,16 +12,16 @@ if TYPE_CHECKING:
 
 
 def eat_amt(sizes: Tensor, cfg: Config) -> Tensor:
-    if cfg.eat_pct_scaling[0] == 'linear':
+    if cfg.eat_pct_scaling[0] == Scaling.LINEAR:
         size_pct = (sizes - cfg.size_range[0]) / (cfg.size_range[1] - cfg.size_range[0])
-    elif cfg.eat_pct_scaling[0] == 'log':
+    elif cfg.eat_pct_scaling[0] == Scaling.LOG:
         size_pct = torch.log(sizes / cfg.size_range[0]) / np.log(cfg.size_range[1] / cfg.size_range[0])
     else:
         raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[0]}")
 
-    if cfg.eat_pct_scaling[1] == 'linear':  # pylint: disable=no-else-return
+    if cfg.eat_pct_scaling[1] == Scaling.LINEAR:  # pylint: disable=no-else-return
         return cfg.eat_pct[0] + size_pct * (cfg.eat_pct[1] - cfg.eat_pct[0])
-    elif cfg.eat_pct_scaling[1] == 'log':
+    elif cfg.eat_pct_scaling[1] == Scaling.LOG:
         return cfg.eat_pct[0] * torch.exp(size_pct * np.log(cfg.eat_pct[1] / cfg.eat_pct[0]))
     else:
         raise ValueError(f"Unrecognized eat_pct_scaling: {cfg.eat_pct_scaling[1]}")

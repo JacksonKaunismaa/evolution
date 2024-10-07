@@ -11,7 +11,7 @@ from torch.profiler import profile, ProfilerActivity, schedule
 from tqdm import trange
 import numpy as np
 
-from evolution.core.config import Config, simple_cfg
+from evolution.core.config import Config
 from evolution.cuda import cuda_utils
 
 
@@ -70,7 +70,7 @@ class Profile:
 
 
 
-def _benchmark(cfg=None, init_steps=8000, steps=500, method=BenchmarkMethods.CUDA_EVENTS):
+def _benchmark(cfg, init_steps=8000, steps=500, method=BenchmarkMethods.CUDA_EVENTS):
     # need to define the import here to avoid circular imports
     from evolution.core.gworld import GWorld  # pylint: disable=import-outside-toplevel
 
@@ -81,9 +81,6 @@ def _benchmark(cfg=None, init_steps=8000, steps=500, method=BenchmarkMethods.CUD
     Profile.times.clear()
     Profile.n_times.clear()
 
-    # torch.manual_seed(1)
-    if cfg is None:
-        cfg = simple_cfg()
     game = GWorld(cfg)
 
     # pr = cProfile.Profile()
