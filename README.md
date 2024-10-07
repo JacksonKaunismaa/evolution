@@ -2,7 +2,7 @@
 
 A very high-performance simulator engine written in Python that uses custom CUDA kernels, OpenGL, and PyTorch to minimize device-host data transfer. The simulator provides a general framework for users to define custom environments and entities. These entities inhabit the environments and evolve over time via natural selection.
 
-![Visualization of a CUDA-Evolution simulation](https://github.com/JacksonKaunismaa/evolution/blob/master/assets/cuda-evolution.png)
+![Visualization of a CUDA-Evolution simulation](/assets/cuda-evolution.png)
 
 ## Features
 
@@ -84,6 +84,14 @@ python3 ./launch.py
 ```
 
 Simulation parameters can be modified by opening launch.py, and changing the `evolution.core.config.Config` object. Documentation for all supported parameters are outlined in `evolution/core/config.py`.
+
+To do nsys-style benchmarking, use the following command:
+
+```bash
+nsys profile -o <log_name> -w true -t cuda,nvtx,osrt,cudnn,cublas -s none  --capture-range=cudaProfilerApi --capture-range-end=stop -x true ./launch.py --style nsys
+```
+
+Next, open `log_name.nsys-rep` in NVIDIA NSight Compute and look at the CUDA HW row.
 
 
 # Planned Features
