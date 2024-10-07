@@ -13,10 +13,19 @@ from .creature_trait import CreatureTrait
 
 
 class CreatureArray:
-    """A class to manage the underlying memory for a Creatures class. It consists of a set of
-    CreatureTrait objects that represent the different traits of the creatures. It handles
-    their generation, reproduction, and death, as well as the reordering of memory needed
-    when creatures die or reproduce."""
+    """Class to store all relevant creature attributes in CUDA objects to ensure minimal
+    movement between devices. To skip copying read-only parameters, we store 2 copies of the data.
+    The first set, which is generally refered to as "underlying" memory is of size max_creatures
+    and stores (potentially out-of-date) data for all creatures.
+    We store the set of indices into the underlying set that correspond to creatures that are still
+    alive in self.alive.
+    The second set, which is generally referred to as "current" memory, is of size population,
+    and consists of all the attributes of creatures that are alive in Tensors.
+    Kernels and graphics read from and write to the current memory, but we want the underlying memory because
+    it allows us to fuse the kill and reproduce operation into one operation to minimize copies.
+    By forcing traits to remain on the GPU at all times, we can massively increase the speed of the simulation
+    by utilizing massively parallel operations on the GPU."""
+
     def __init__(self, cfg: Config, device: torch.device):
         self.cfg = cfg
         self.posn_bounds = (0., cfg.size-1e-3)
