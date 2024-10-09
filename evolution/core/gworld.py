@@ -256,7 +256,7 @@ class GWorld():
         seed = self.state.time
         fgrid = quantize(self.food_grid, map_location=torch.device('cpu')) if quantized else self.food_grid
         torch.save({'food_grid': fgrid,
-                    'creatures': self.creatures.state_dict(quantized),
+                    'creatures': self.creatures.traits.state_dict(quantized),
                     'cfg': self.cfg,
                     'time': self.state.time,
                     'seed': seed,
@@ -282,7 +282,7 @@ class GWorld():
         # since (eg.) Creatures objects are created based on config when Creatures is created
         instance = cls(checkpoint['cfg'], device=checkpoint['device'], path=path)
 
-        instance.creatures.unset_data()
+        instance.creatures.traits.unset_data()
         del instance.food_grid
 
         fgrid = checkpoint['food_grid']
@@ -290,7 +290,7 @@ class GWorld():
             fgrid = fgrid.dequantize(map_location=instance.device)
         instance.food_grid = fgrid
 
-        instance.creatures.load_state_dict(checkpoint['creatures'], instance.device)
+        instance.creatures.traits.load_state_dict(checkpoint['creatures'], instance.device)
         instance.state.time = checkpoint.get('time', 0)
         torch.random.manual_seed(checkpoint['seed'])
         instance.state.load_state_dict(checkpoint['state'])

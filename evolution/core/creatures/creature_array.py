@@ -13,23 +13,19 @@ from .creature_trait import CreatureTrait
 
 
 class CreatureArray:
-    """Class to store all relevant creature attributes in CUDA objects to ensure minimal
-    movement between devices. To skip copying read-only parameters, we store 2 copies of the data.
-    The first set, which is generally refered to as "underlying" memory is of size max_creatures
-    and stores (potentially out-of-date) data for all creatures.
-    We store the set of indices into the underlying set that correspond to creatures that are still
-    alive in self.alive.
-    The second set, which is generally referred to as "current" memory, is of size population,
-    and consists of all the attributes of creatures that are alive in Tensors.
+    """
+    Class to manage memory for a dictionary of CreatureTraits.
+    We store a binary mask of size max_creatures in self.alive that correspond to the creatures
+    that are alive in the underlying memory (see CreatureTrait for definition of underlying memory
+    and current memory).
+    We manange reproduction, death, and memory reordering in this class.
     Kernels and graphics read from and write to the current memory, but we want the underlying memory because
-    it allows us to fuse the kill and reproduce operation into one operation to minimize copies.
-    By forcing traits to remain on the GPU at all times, we can massively increase the speed of the simulation
-    by utilizing massively parallel operations on the GPU."""
+    it allows us to avoid copying all the data for CreatureTraits that stay alive from generation to generation.
+    Instead, we can simply overwrite the data in underlying memory for creatures that are dead with new creatures.
+    """
 
     def __init__(self, cfg: Config, device: torch.device):
         self.cfg = cfg
-        self.posn_bounds = (0., cfg.size-1e-3)
-        self.num_food = (cfg.food_sight*2+1)**2
         self.device = device
         self.variables: Dict[str, CreatureTrait] = {}
         self.num_mutable = 0
@@ -61,19 +57,7 @@ class CreatureArray:
         self.rng = BatchedRandom(self.variables, self.device)
         self.algos = {'max': 0, 'fill_gaps': 0, 'move_block': 0}
 
-    def __setattr__(self, name, value):
-        """Capture any CreatureTrait objects that are added to the CreatureArray, and store them
-        in the `variables` dictionary, so that we can iterate over CreatureTraits and apply the
-        same methods to each one. Additionally, we also can track how many mutable parametrs
-        have been added so far, so that each one can be assigned a unique mut_idx when reproducing."""
-        if isinstance(value, CreatureTrait):
-            self.register_variable(name, value)
-        elif isinstance(value, list) and all(isinstance(v, CreatureTrait) for v in value):
-            for i, v in enumerate(value):
-                self.register_variable(name + f"_{i}", v)
-        super().__setattr__(name, value)
-
-    def register_variable(self, name: str, v: CreatureTrait):
+    def register_trait(self, name: str, v: CreatureTrait):
         """Register a new CreatureTrait with the CreatureArray. This is useful since we often like
         to iterate over all CreatureTraits in the CreatureArray and apply the same method to each one."""
         # if name in self.variables:
@@ -91,7 +75,7 @@ class CreatureArray:
             child_trait = v.reproduce(name, self.rng, reproducers, num_reproducers, mut,
                                       nsys_extra=name)   # type: ignore
             if child_trait is not None:
-                setattr(children, name, child_trait)
+                children.register_trait(name, child_trait)
 
     @Profile.cuda_profile
     def reproduce_extra(self, children: 'CreatureArray'):
@@ -102,7 +86,7 @@ class CreatureArray:
                     children.variables[name] = v.reproduce_from_other(children.variables[v.init.name],
                                                                       nsys_extra=name) # type: ignore
                 except KeyError as exc:
-                    raise KeyError(f"CreatureTrait '{name}' depends on trait '{v.init.name}' "
+                    raise KeyError(f"CreatureTrait '{name}' depends on trait '{v.init.name}'"
                                          ", but it does not been set by child.") from exc
 
 

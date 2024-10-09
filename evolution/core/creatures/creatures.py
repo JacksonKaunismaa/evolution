@@ -18,21 +18,29 @@ from . import trait_normalizer as norm
 from .trait_normalizer import Normalizer
 
 
-class Creatures(CreatureArray):
-    """Implementation of CreatureArray for this particular environment. This class includes all
-    CreatureTrait definitions, and the logic for determining which creatures are dead, which are
-    reproducing, and how to update the state of the world based on the actions of the creatures."""
+class Creatures:
+    """
+    This class includes all CreatureTrait definitions, and the logic for determining
+    which creatures are dead, which are reproducing, and how to update the state of the
+    world based on the actions of the creatures. It passes references to all its CreatureTraits
+    to a CreatureArray object, which manages the memory of each trait.
+    """
 
     def __init__(self, cfg: Config, kernels: CUDAKernelManager, device: torch.device):
-        super().__init__(cfg, device)
         self.cfg = cfg
         self.kernels = kernels
 
         # how much indexing into the food grid needs to be adjusted to avoid OOB
         self.pad = self.cfg.food_sight
+
+        self.posn_bounds = (0., cfg.size-1e-3)
+        self.num_food = (cfg.food_sight*2+1)**2
+
+        self.device = device
         self.offsets = torch.tensor([[i, j] for i in range(-self.pad, self.pad+1)
                                      for j in range(-self.pad, self.pad+1)], device=self.device).unsqueeze(0)
         self.activations = []
+        self.traits = CreatureArray(cfg, device)
         self.generate_from_cfg()
 
     def generate_from_cfg(self):
@@ -136,12 +144,28 @@ class Creatures(CreatureArray):
         self.biases: List[CreatureTrait] = biases
 
         # this must be defined last, so that the right number of mutable parameters are set
-        self.mutation_rates = CreatureTrait((self.num_mutable+1,),
+        self.mutation_rates = CreatureTrait((self.traits.num_mutable+1,),
                                   Initializer.mutable('uniform_', *self.cfg.init_mut_rate_range),
                                   None, self.device)
 
 
-        super().generate_from_cfg()
+        self.traits.generate_from_cfg()
+
+    @property
+    def population(self) -> int:
+        return self.traits.population
+
+    def __setattr__(self, name, value):
+        """Capture any CreatureTrait objects that are defined, and register them with self.traits,
+        so that CreatureArray can manage their memory. Additionally, we also can track how many
+        mutable parametrs have been added so far, so that each one can be assigned a unique
+        mut_idx when reproducing."""
+        if isinstance(value, CreatureTrait):
+            self.traits.register_trait(name, value)
+        elif isinstance(value, list) and all(isinstance(v, CreatureTrait) for v in value):
+            for i, v in enumerate(value):
+                self.traits.register_trait(name + f"_{i}", v)
+        super().__setattr__(name, value)
 
     def fused_kill_reproduce(self, central_food_grid: Tensor, state: GameState):
         """Kill the dead creatures and reproduce the living ones."""
@@ -149,7 +173,7 @@ class Creatures(CreatureArray):
         alive = ~dead  # type: ignore
         new_creatures = self._reproduce(alive, num_dead)  # determine who is reproducing
         if new_creatures or num_dead > 0:   # rearrange memory and update current data
-            self.add_with_deaths(dead_idxs, alive, num_dead, new_creatures, state)
+            self.traits.add_with_deaths(dead_idxs, alive, num_dead, new_creatures, state)
 
     @Profile.cuda_profile
     def _kill_dead(self, central_food_grid: Tensor) -> Tuple[Tensor, int, Tensor]:
@@ -225,7 +249,7 @@ class Creatures(CreatureArray):
         self.energies[reproducers] -= self.sizes[reproducers]  # subtract off the energy that you've put into the world
         self.energies[reproducers] /= self.cfg.reproduce_energy_loss_frac  # then lose a bit extra because this process is lossy
 
-        new_creatures = self.reproduce_traits(self.mutation_rates[reproducers], reproducers, num_reproducers)
+        new_creatures = self.traits.reproduce_traits(self.mutation_rates[reproducers], reproducers, num_reproducers)
         return new_creatures
 
     def eat_grow(self, food_grid: Tensor, state: GameState):
@@ -394,3 +418,4 @@ class Creatures(CreatureArray):
     def histogram(self, n_bins: int) -> np.ndarray:
         """Return a histogram of the sizes of the creatures"""
         return torch.cumsum(torch.histc(self.colors, bins=n_bins, min=1, max=255), dim=0).cpu().numpy()  # type: ignore
+

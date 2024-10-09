@@ -12,16 +12,16 @@ if TYPE_CHECKING:
 
 
 class CreatureTrait:
-    """A single trait of a CreatureArray, such as size. This class manages two Tensors, one
+    """
+    A single trait of a CreatureArray, such as size. This class manages two Tensors, one
     which is referred to as the 'underlying' memory (_data) and the other which is the
     'current' memory (data). The current memory is a slice of the underlying memory that
-    corresponds to the traits of creatures that are currently alive. We use this schema as it
-    minimizes unnecessary copying of traits when creatures die or are born. The CreatureTrait
+    corresponds to data for creatures that are currently alive. We use this schema as it
+    minimizes unnecessary copying of data when creatures die or are born. The CreatureTrait
     class also manages the initialization of the underlying memory, the normalization of
-    the current memory (although some normalization schemes currently depend on other
-    CreatureTraits, so they can't be managed by a single instance of this class), the
-    generation of child traits from parent traits, and the reindexing of traits when the
-    population changes."""
+    the current memory, the generation of child data from parent data, and the
+    reindexing of data so that current memory is valid when the population changes.
+    """
     def __init__(self, shape: Tuple[int, ...], init: Initializer,
                  normalize_func: Normalizer | None, device: torch.device):
         self._shape = shape

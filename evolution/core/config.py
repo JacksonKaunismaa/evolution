@@ -1,8 +1,7 @@
 import dataclasses
-from dataclasses import field
 from typing import Any, Dict, Tuple
-import torch
 from enum import Enum
+import torch
 
 class ConfigFunction:   # for replacing functions in regular python code
     def __init__(self, name, *args):
