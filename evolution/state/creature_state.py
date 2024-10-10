@@ -50,7 +50,7 @@ class CreatureState:
         singular_name_exceptions = {'n_children': 'n_children',
                                     'energies': 'energy',
                                     'reproduce_energies': 'reproduce_energy'}
-        for k, v in self.world.creatures.variables.items():
+        for k, v in self.world.creatures.traits.variables.items():
             singular_name = singular_name_exceptions.get(k, k[:-1])
             if v.dim() <= 2:
                 setattr(self, singular_name, v[self._selected_creature].cpu().numpy())

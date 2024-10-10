@@ -48,9 +48,9 @@ class Creatures:
         root Creatures object. When reproduction happens, it should create a new CreatureArray object,
         which is mostly just a container, not a Creatures object, which has specifics about how
         what particular traits exist and what they do. Each time a new CreatureTrait attribute is set,
-        it is automatically added to self.variables, which allows for iterating over all traits that
+        it is automatically added to self.traits.variables, which allows for iterating over all traits that
         exist and applying operations to them. For lists of CreatureTraits, each element of the list
-        is also added to self.variables."""
+        is also added to self.traits.variables."""
         self.sizes = CreatureTrait(tuple(),
                         Initializer.mutable('uniform_', *self.cfg.init_size_range),
                         Normalizer(norm.clamp, *self.cfg.size_range),

@@ -72,7 +72,7 @@ class CreatureStatusWindow(Window):
 
             self.mutation_element.render([
                 f"{name.replace('_', ' ').title()}: {creat.mutation_rate[param.init.mut_idx]:.6f}"
-                for name,param in self.world.creatures.variables.items()
+                for name,param in self.world.creatures.traits.variables.items()
                     if param.init.style == InitializerStyle.MUTABLE  # => has a mutation rate
             ])
 
